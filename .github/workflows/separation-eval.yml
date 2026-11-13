@@ -1,0 +1,49 @@
+name: Évaluation séparation voix
+
+# Compare les modèles de séparation voix / accompagnement (qualité, vitesse).
+# Les résultats apparaissent en annotations du job.
+on:
+  push:
+    branches: ['arena/**']
+    paths: ['tools/separation/**', '.github/workflows/separation-eval.yml']
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SEP_DATA: /tmp/sepdata
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Dépendances Python
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install -q onnxruntime numpy scipy soundfile
+
+      - name: Modèles et audio de test
+        run: |
+          set -e
+          mkdir -p $SEP_DATA/models && cd $SEP_DATA
+          B=https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models
+          L=https://raw.githubusercontent.com/librosa/data/main/audio
+          for f in UVR-MDX-NET-Voc_FT.onnx UVR_MDXNET_1_9703.onnx UVR_MDXNET_KARA.onnx; do
+            curl -fsSL -o models/$f $B/$f
+          done
+          for v in sherpa-onnx-spleeter-2stems-fp16 sherpa-onnx-spleeter-2stems-int8; do
+            curl -fsSL $B/$v.tar.bz2 | tar xj -C models
+          done
+          curl -fsSL -o qi-feng-le-zh.wav $B/qi-feng-le-zh.wav
+          curl -fsSL -o piao-yang-guo-hai-lai-kan-ni.wav $B/piao-yang-guo-hai-lai-kan-ni.wav
+          curl -fsSL -o fishin.ogg "$L/Karissa_Hobbs_-_Lets_Go_Fishin.hq.ogg"
+          curl -fsSL -o vibeace.ogg "$L/Kevin_MacLeod_-_Vibe_Ace.hq.ogg"
+          curl -fsSL -o choice.ogg "$L/admiralbob77_-_Choice_-_Drum-bass.hq.ogg"
+          curl -fsSL -o sp1.ogg "$L/198-209-0000.hq.ogg"
+          curl -fsSL -o sp2.ogg "$L/3436-172162-0000.hq.ogg"
+          curl -fsSL -o sp3.ogg "$L/5703-47212-0000.hq.ogg"
+          find models -type f -exec ls -la {} \;
+          lscpu | head -20
+
+      - name: Évaluation
+        run: /tmp/venv/bin/python tools/separation/eval.py
