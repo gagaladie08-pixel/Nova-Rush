@@ -1,4 +1,5 @@
 import { audio } from '../audio/engine';
+import { onVoiceChange, voiceLive } from '../analysis/voiceQueue';
 import { demoSongs } from '../demos/songs';
 import { LEVELS, LEVEL_LABEL, type Level, type SongMeta, type SongRecord } from '../game/types';
 import { db } from '../storage/db';
@@ -9,6 +10,23 @@ import { nav } from './nav';
 import type { Screen } from './router';
 import { uiState } from './state';
 
+
+/** Pastille de l'analyse avancée (voix isolée). */
+export function voiceBadgeText(song: SongMeta): string {
+  const v = voiceLive(song.id);
+  if (v) {
+    if (v.state === 'queued') return '🎤 en attente';
+    if (v.state === 'finishing') return '🎤 finalisation';
+    return `🎤 ${Math.floor(v.progress * 100)} %`;
+  }
+  if (song.voice?.state === 'done' && song.chart.source === 'voice') return '🎤 voix';
+  return '';
+}
+
+function voiceBadge(song: SongMeta): string {
+  const t = voiceBadgeText(song);
+  return t ? `<span class="badge badge-voice" data-voice="${esc(song.id)}">${t}</span>` : '';
+}
 
 export function songCard(song: SongMeta, rec: SongRecord | undefined): string {
   const best = rec?.bestScore ?? 0;
@@ -21,6 +39,7 @@ export function songCard(song: SongMeta, rec: SongRecord | undefined): string {
         <p class="song-artist">${esc(song.artist)}</p>
         <p class="song-meta">
           <span class="badge badge-${song.level}">${LEVEL_LABEL[song.level]}</span>
+          ${voiceBadge(song)}
           ${disabled ? '<span class="muted">Audio supprimé</span>' : `<span class="muted">${best ? `Record ${formatScore(best)}` : formatTime(song.duration)}</span>`}
         </p>
       </div>
@@ -30,6 +49,7 @@ export function songCard(song: SongMeta, rec: SongRecord | undefined): string {
 
 export function libraryScreen(): Screen {
   let offAudio: (() => void) | undefined;
+  let offVoice: (() => void) | undefined;
   let songs: SongMeta[] = [];
   let records = new Map<string, SongRecord>();
   const demos = demoSongs();
@@ -38,6 +58,7 @@ export function libraryScreen(): Screen {
     name: 'library',
     dispose() {
       offAudio?.();
+      offVoice?.();
     },
     render(root) {
       root.innerHTML = `
@@ -140,9 +161,28 @@ export function libraryScreen(): Screen {
       });
 
       const demoList = root.querySelector<HTMLElement>('.demo-list')!;
+      // Analyse avancée : progression mise à jour en place, rechargement quand l'état change.
+      let voiceKey = '';
+      const keyOf = () => songs.map((x) => `${x.id}:${voiceLive(x.id)?.state ?? x.voice?.state ?? ''}`).join('|');
+      offVoice = onVoiceChange(() => {
+        if (keyOf() !== voiceKey) {
+          void db.listSongs().then((s) => {
+            songs = s;
+            voiceKey = keyOf();
+            renderTabs();
+          });
+          return;
+        }
+        for (const song of songs) {
+          const el = panel.querySelector<HTMLElement>(`[data-voice="${CSS.escape(song.id)}"]`);
+          if (el) el.textContent = voiceBadgeText(song);
+        }
+      });
       void Promise.all([db.listSongs(), db.listRecords()])
         .then(([s, r]) => {
+          voiceKey = '';
           songs = s;
+          voiceKey = keyOf();
           records = new Map(r.map((x) => [x.id, x]));
           renderTabs();
           demoList.innerHTML = demos.map((d) => songCard(d, records.get(d.id))).join('');

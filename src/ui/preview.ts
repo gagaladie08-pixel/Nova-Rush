@@ -1,4 +1,5 @@
 import { audio } from '../audio/engine';
+import { cancelVoice, onVoiceChange, voiceLive } from '../analysis/voiceQueue';
 import { LEVEL_LABEL, type SongMeta } from '../game/types';
 import { db } from '../storage/db';
 import { coverFor } from './covers';
@@ -9,6 +10,7 @@ import type { Screen } from './router';
 
 export function previewScreen(song: SongMeta): Screen {
   let offAudio: (() => void) | undefined;
+  let offVoice: (() => void) | undefined;
   return {
     name: 'preview',
     onBack() {
@@ -18,6 +20,7 @@ export function previewScreen(song: SongMeta): Screen {
     },
     dispose() {
       offAudio?.();
+      offVoice?.();
       if (audio.current?.snippet) audio.stop();
     },
     render(root) {
@@ -45,10 +48,13 @@ export function previewScreen(song: SongMeta): Screen {
           <p class="muted preview-mode">${
             song.demo
               ? 'Parcours préparé à la main.'
-              : song.chart.melodic
+              : song.chart.source === 'voice'
+                ? 'Voix isolée par l’IA de l’appareil : les tuiles suivent la mélodie chantée, l’accompagnement remplit les passages instrumentaux.'
+                : song.chart.melodic
                 ? 'Mélodie détectée : les voies suivent les hauteurs relatives des notes.'
                 : 'Mélodie peu nette : le parcours suit les battements et les accents.'
           }</p>
+          <p class="muted preview-voice"></p>
           <div class="preview-records"></div>
           ${
             song.hasAudio
@@ -68,6 +74,36 @@ export function previewScreen(song: SongMeta): Screen {
              <div><span class="stat-value">${r.bestCombo}</span><span class="stat-label">Meilleur combo</span></div>
              <div><span class="stat-value">${Math.round(r.bestProgress * 100)} %</span><span class="stat-label">Progression</span></div></div>`
           : '<p class="muted">Pas encore joué.</p>';
+      });
+
+      // État de l'analyse avancée.
+      const voiceEl = root.querySelector<HTMLElement>('.preview-voice')!;
+      const renderVoice = () => {
+        const v = voiceLive(song.id);
+        if (v) {
+          voiceEl.textContent =
+            v.state === 'queued'
+              ? 'Analyse avancée (voix isolée) en attente — tu peux déjà jouer avec le parcours actuel.'
+              : v.state === 'finishing'
+                ? 'Analyse avancée : finalisation du parcours…'
+                : `Analyse avancée en cours : ${Math.floor(v.progress * 100)} %${v.eta ? ` · environ ${Math.max(1, Math.ceil(v.eta / 60))} min` : ''}. Tu peux déjà jouer avec le parcours actuel.`;
+        } else if (song.voice?.state === 'failed') {
+          voiceEl.textContent =
+            song.voice.reason === 'trop lent'
+              ? 'Analyse avancée trop longue sur cet appareil : parcours classique conservé.'
+              : 'Analyse avancée impossible : parcours classique conservé.';
+        } else voiceEl.textContent = '';
+      };
+      renderVoice();
+      offVoice = onVoiceChange(() => {
+        const was = voiceLive(song.id);
+        renderVoice();
+        // Analyse terminée (ou échouée) : on recharge l'aperçu avec le nouveau parcours.
+        if (!was) {
+          void db.getSong(song.id).then((fresh) => {
+            if (fresh && fresh.voice?.state !== song.voice?.state && fresh.hasAudio) void nav.preview(fresh);
+          });
+        }
       });
 
       const snippetBtn = root.querySelector<HTMLButtonElement>('[data-snippet]');
@@ -106,8 +142,9 @@ export function previewScreen(song: SongMeta): Screen {
         if (!ok) return;
         if (audio.isPlaying(song.id)) audio.stop();
         audio.forget(song.id);
+        await cancelVoice(song.id);
         await db.deleteAudio(song.id);
-        await db.putSong({ ...song, hasAudio: false });
+        await db.putSong({ ...(await db.getSong(song.id)) ?? song, hasAudio: false, voice: undefined });
         toast('Audio supprimé — records conservés');
         void nav.library();
       });

@@ -4,3 +4,4 @@ dist/
 .DS_Store
 .vite/
 coverage/
+android/app/src/main/assets/separation/

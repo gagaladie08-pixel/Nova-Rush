@@ -36,6 +36,8 @@ async function setupAndroid() {
       return;
     }
     if (!screen?.onBack?.()) void nav.library();
+// Analyse avancée (voix isolée) : reprise des analyses en cours, finalisation hors partie.
+void import('./analysis/voiceQueue').then((q) => q.initVoiceQueue(() => currentScreen()?.name === 'play'));
   });
 }
 

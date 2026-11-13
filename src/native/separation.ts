@@ -1,0 +1,59 @@
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
+
+/** Tâche de séparation côté Android (voir SeparationPlugin.java). */
+export interface NativeJob {
+  id: string;
+  title?: string;
+  state: 'uploading' | 'queued' | 'running' | 'done' | 'error';
+  progress: number;
+  /** Secondes restantes estimées. */
+  eta?: number;
+  error?: string;
+  vocals?: string;
+  accomp?: string;
+  sampleRate?: number;
+  seconds?: number;
+}
+
+interface VoiceSeparationPlugin {
+  isAvailable(): Promise<{ available: boolean; cores: number }>;
+  requestNotifications(): Promise<{ granted: boolean }>;
+  createJob(o: { id: string; title: string }): Promise<void>;
+  appendInput(o: { id: string; data: string }): Promise<void>;
+  enqueue(o: { id: string }): Promise<void>;
+  list(): Promise<{ jobs: NativeJob[] }>;
+  resume(): Promise<void>;
+  cancel(o: { id: string }): Promise<void>;
+  remove(o: { id: string }): Promise<void>;
+  setGameActive(o: { active: boolean }): Promise<void>;
+  addListener(event: 'job', fn: (job: NativeJob) => void): Promise<PluginListenerHandle>;
+}
+
+export const VoiceSeparation = registerPlugin<VoiceSeparationPlugin>('VoiceSeparation');
+
+export const nativeSeparationPossible = () =>
+  Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('VoiceSeparation');
+
+/** Lit un fichier float32 produit par le service (servi par le WebView, sans base64). */
+export async function readFloatFile(path: string): Promise<Float32Array> {
+  const url = Capacitor.convertFileSrc(path.startsWith('file://') ? path : `file://${path}`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`lecture impossible (${res.status})`);
+  return new Float32Array(await res.arrayBuffer());
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let s = '';
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) s += String.fromCharCode(...bytes.subarray(i, i + step));
+  return btoa(s);
+}
+
+/** Envoie le fichier audio au service par morceaux (le pont Capacitor ne transporte que du texte). */
+export async function uploadInput(id: string, blob: Blob): Promise<void> {
+  const CHUNK = 768 * 1024;
+  for (let a = 0; a < blob.size; a += CHUNK) {
+    const part = new Uint8Array(await blob.slice(a, a + CHUNK).arrayBuffer());
+    await VoiceSeparation.appendInput({ id, data: toBase64(part) });
+  }
+}

@@ -3,7 +3,7 @@ import { hashString } from './dsp';
 
 export class ImportError extends Error {}
 
-const ANALYSIS_RATE = 22050;
+export const ANALYSIS_RATE = 22050;
 
 /** Décode l'audio en mono 22 050 Hz pour l'analyse. */
 export async function decodeForAnalysis(data: ArrayBuffer): Promise<{ samples: Float32Array; duration: number }> {
@@ -31,6 +31,7 @@ export function runAnalysis(
   seedKey: string,
   onProgress: (p: number, label: string) => void,
   signal?: AbortSignal,
+  stems?: { vocals: Float32Array; accomp: Float32Array },
 ): Promise<Chart> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
@@ -53,6 +54,8 @@ export function runAnalysis(
       worker.terminate();
       reject(new ImportError('L’analyse n’a pas pu démarrer sur cet appareil.'));
     };
-    worker.postMessage({ samples, sampleRate: ANALYSIS_RATE, seed: hashString(seedKey) }, [samples.buffer]);
+    const transfer: Transferable[] = [samples.buffer];
+    if (stems) transfer.push(stems.vocals.buffer, stems.accomp.buffer);
+    worker.postMessage({ samples, sampleRate: ANALYSIS_RATE, seed: hashString(seedKey), ...stems }, transfer);
   });
 }

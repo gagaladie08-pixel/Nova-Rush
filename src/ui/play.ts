@@ -1,4 +1,5 @@
 import { audio } from '../audio/engine';
+import { setGameActive } from '../analysis/voiceQueue';
 import { Game } from '../game/game';
 import type { SongMeta, ThemeId } from '../game/types';
 import { settings } from '../storage/settings';
@@ -21,10 +22,13 @@ export function playScreen(song: SongMeta, replayTheme?: ThemeId): Screen {
     dispose() {
       disposed = true;
       game?.dispose();
+      setGameActive(false);
       document.documentElement.classList.remove('in-game');
     },
     render(root) {
       document.documentElement.classList.add('in-game');
+      // L'analyse avancée en cours se fait discrète pendant la partie.
+      setGameActive(true);
       root.dataset.gameTheme = theme;
       root.innerHTML = `<div class="loading"><div class="spinner"></div><p>Préparation de « ${esc(song.title)} »…</p></div>`;
       // Choisir un morceau arrête la musique précédente.

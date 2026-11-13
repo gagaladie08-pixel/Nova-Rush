@@ -386,6 +386,11 @@ p {
 .badge-expert {
   color: #ff3d7f;
 }
+.badge-voice {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text, #fff);
+  font-variant-numeric: tabular-nums;
+}
 .badge-ghost {
   color: var(--muted);
   margin-left: 6px;

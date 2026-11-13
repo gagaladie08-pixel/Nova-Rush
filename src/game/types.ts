@@ -65,6 +65,18 @@ export interface SongMeta {
   fileName?: string;
   demo?: boolean;
   style?: string;
+  /** Analyse avancée (voix isolée sur l'appareil). */
+  voice?: VoiceAnalysis;
+}
+
+export interface VoiceAnalysis {
+  state: 'queued' | 'running' | 'done' | 'failed';
+  /** Raison de l'échec (le parcours classique est conservé). */
+  reason?: string;
+  /** Durée de la séparation sur l'appareil (s). */
+  seconds?: number;
+  /** Décalage mesuré entre décodeurs (s). */
+  lagSec?: number;
 }
 
 export interface SongRecord {

@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 30
     env:
       APP_VERSION: 0.1.${{ github.run_number }}
+      SEP_MODEL: UVR_MDXNET_1_9703.onnx
     steps:
       - uses: actions/checkout@v7
 
@@ -50,6 +51,24 @@ jobs:
 
       - name: Synchronisation Capacitor
         run: npx cap sync android
+
+      # Modèle de séparation de la voix (open source, Apache 2.0, via sherpa-onnx),
+      # embarqué dans l'APK : l'analyse se fait entièrement sur le téléphone.
+      - name: Modèle de séparation de la voix
+        run: |
+          set -e
+          mkdir -p android/app/src/main/assets/separation
+          curl -fsSL --retry 3 -o android/app/src/main/assets/separation/model.onnx \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/${SEP_MODEL}"
+          size=$(stat -c %s android/app/src/main/assets/separation/model.onnx)
+          echo "modèle ${SEP_MODEL} : ${size} octets"
+          test "$size" -gt 20000000
+
+      - name: Tests Java (FFT, STFT, découpage, rééchantillonnage)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew testReleaseUnitTest --no-daemon --stacktrace
 
       - name: Compilation de l'APK (release signé)
         working-directory: android

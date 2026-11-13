@@ -2,7 +2,7 @@
  * Analyse de vraies chansons séparées par la CI (tools/separation/stems.py).
  * Ignoré hors CI (pas de pistes).
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { analyzeSong, analyzeSongWithVoice, onsetEnvelope, pickOnsets } from '../../src/analysis/analyzer';
@@ -19,7 +19,8 @@ const read = (name: string, s: string) => {
   const b = readFileSync(join(DIR, `${name}.${s}.f32`));
   return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
 };
-const notice = (title: string, msg: string) => console.log(`::notice title=${title}::${msg.replace(/\n/g, '%0A')}`);
+const notice = (title: string, msg: string) =>
+  appendFileSync(join(DIR, 'notices.txt'), `::notice title=${title}::${msg.replace(/\n/g, '%0A')}\n`);
 
 describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
   for (const name of songs) {

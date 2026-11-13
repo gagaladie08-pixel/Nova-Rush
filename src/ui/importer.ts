@@ -3,6 +3,7 @@ import { pictureToDataUrl, readMetadata } from '../audio/metadata';
 import { audio } from '../audio/engine';
 import { LEVEL_LABEL, type SongMeta } from '../game/types';
 import { db } from '../storage/db';
+import { enqueueVoice, isVoiceAvailable } from '../analysis/voiceQueue';
 import { alertDialog, esc, modal } from './dom';
 import { nav } from './nav';
 import { uiState } from './state';
@@ -103,14 +104,20 @@ export async function startImport(): Promise<void> {
       fileName: file.name,
     };
     // L'application conserve sa propre copie du morceau.
-    await db.putAudio(id, new Blob([data], { type: file.type || 'audio/mpeg' }));
+    const blob = new Blob([data], { type: file.type || 'audio/mpeg' });
+    await db.putAudio(id, blob);
     await db.putSong(song);
+    // Analyse avancée (voix isolée) en arrière-plan ; le parcours actuel reste jouable en attendant.
+    const advanced = await isVoiceAvailable();
+    if (advanced) void enqueueVoice(song, blob);
     void db.requestPersistence();
     audio.forget(id);
     m.close();
     uiState.activeTab = song.level;
     await nav.preview(song);
-    const toastMsg = `Analyse terminée : ${LEVEL_LABEL[chart.level]}${chart.melodic ? '' : ' (parcours rythmique)'}`;
+    const toastMsg = advanced
+      ? `Prêt à jouer (${LEVEL_LABEL[chart.level]}). Analyse avancée de la voix en arrière-plan…`
+      : `Analyse terminée : ${LEVEL_LABEL[chart.level]}${chart.melodic ? '' : ' (parcours rythmique)'}`;
     const { toast } = await import('./dom');
     toast(toastMsg);
   } catch (err) {
