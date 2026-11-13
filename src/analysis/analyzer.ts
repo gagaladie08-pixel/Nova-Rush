@@ -553,7 +553,16 @@ interface TemplateNote {
   size: number;
 }
 
-const pitchCompatible = (a?: number, b?: number) => a === undefined || b === undefined || Math.abs(a - b) < 0.5;
+/**
+ * Même note dans deux refrains ? On tolère un demi-ton (petit flottement du
+ * suivi de hauteur) et les erreurs d'octave ; un vrai changement de mélodie
+ * (au-delà) garde ses propres tuiles.
+ */
+const pitchCompatible = (a?: number, b?: number) => {
+  if (a === undefined || b === undefined) return true;
+  const d = Math.abs(a - b);
+  return d < 1.5 || Math.abs(d - 12) < 1.5 || Math.abs(d - 24) < 1.5;
+};
 
 export function buildChart(features: AnalysisFeatures, level: Level, seed: number, withChords = true): Note[] {
   const params = LEVEL_PARAMS[level];
