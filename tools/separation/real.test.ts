@@ -48,9 +48,11 @@ function refrainMotif(c: ReturnType<typeof analyzeSong>): string {
           return `${Number(q) + sh}:${l}`;
         });
         const n = k.filter((x) => first.has(x)).length;
+        const firstPos = new Set([...first].map((x) => x.split(':')[0]));
+        const rhythm = k.filter((x) => firstPos.has(x.split(':')[0])).length;
         if (n > bestN) {
           bestN = n;
-          best = `${n}/${k.length} (décalage ${sh / 4} temps)`;
+          best = `${n}/${k.length} même place et colonne, ${rhythm}/${k.length} même place (1er refrain ${first.size} tuiles, décalage ${sh / 4} temps)`;
         }
       }
       return best;
@@ -98,7 +100,7 @@ describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
           (ai
             ? `voix + Beat This! : ${fmt(ai)}, rythme ${ai.rhythmSource}, ${ai.downbeats?.length} mesures\n` +
               `structure (confiance ${ai.structureConfidence}) : ${(ai.sections ?? [])
-                .map((s) => `${s.kind}[${s.group}] ${s.t.toFixed(0)}–${s.end.toFixed(0)}`)
+                .map((s) => `${s.kind}[${s.group}] ${s.t.toFixed(0)}–${s.end.toFixed(0)} (sim ${s.sim}, énergie ${s.energy})`)
                 .join(' · ')}\n` +
               `refrains : ${refrainMotif(ai)}\n`
             : 'Beat This! : pas de temps\n') +
