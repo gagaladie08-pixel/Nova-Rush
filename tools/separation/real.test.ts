@@ -60,6 +60,29 @@ function refrainMotif(c: ReturnType<typeof analyzeSong>): string {
     .join(', ');
 }
 
+function refrainDump(c: ReturnType<typeof analyzeSong>, vnotes: { t: number; midi: number }[]): string {
+  const refr = (c.sections ?? []).filter((s) => s.kind === 'refrain').slice(0, 2);
+  if (refr.length < 2 || !c.beats?.length) return '-';
+  const beats = c.beats;
+  const pos = (t: number) => {
+    let i = 0;
+    while (i + 2 < beats.length && beats[i + 1] <= t) i++;
+    return i + (t - beats[i]) / (beats[i + 1] - beats[i]);
+  };
+  return refr
+    .map((s) =>
+      c.notes
+        .filter((n) => n.t >= s.t && n.t < s.end)
+        .slice(0, 22)
+        .map((n) => {
+          const v = vnotes.find((x) => Math.abs(x.t - n.t) < 0.08);
+          return `${((pos(n.t) - pos(s.t))).toFixed(2)}:${n.lane}${v ? ':' + v.midi : ''}`;
+        })
+        .join(' '),
+    )
+    .join(' ||| ');
+}
+
 describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
   for (const name of songs) {
     it(name, () => {
@@ -102,7 +125,8 @@ describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
               `structure (confiance ${ai.structureConfidence}) : ${(ai.sections ?? [])
                 .map((s) => `${s.kind}[${s.group}] ${s.t.toFixed(0)}–${s.end.toFixed(0)} (sim ${s.sim}, énergie ${s.energy})`)
                 .join(' · ')}\n` +
-              `refrains : ${refrainMotif(ai)}\n`
+              `refrains : ${refrainMotif(ai)}\n` +
+              `détail : ${refrainDump(ai, vt.notes)}\n`
             : 'Beat This! : pas de temps\n') +
           `premières notes : ${vt.notes
             .slice(0, 16)
