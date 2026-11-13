@@ -123,13 +123,13 @@ describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
       const durs = vt.notes.map((n) => n.dur).sort((a, b) => a - b);
       const midis = vt.notes.map((n) => n.midi).sort((a, b) => a - b);
       // Part des tuiles posées sur une note chantée (±70 ms), pendant le chant.
-      const near = (notes: { t: number }[]) => {
-        const sung = notes.filter((n) => vt.spans.some(([a, b]) => n.t >= a - 0.05 && n.t <= b));
-        const on = sung.filter((n) => vt.notes.some((v) => Math.abs(v.t - n.t) < 0.07));
+      const near = (notes: { t: number }[], ref = vt) => {
+        const sung = notes.filter((n) => ref.spans.some(([a, b]) => n.t >= a - 0.05 && n.t <= b));
+        const on = sung.filter((n) => ref.notes.some((v) => Math.abs(v.t - n.t) < 0.07));
         return `${on.length}/${sung.length}`;
       };
-      const fmt = (c: typeof classic) =>
-        `${c.source} ${c.level} ${c.bpm} bpm, ${c.notes.length} tuiles (${c.notes.filter((n) => n.dur).length} longues), sur la voix ${near(c.notes)}`;
+      const fmt = (c: typeof classic, ref = vt) =>
+        `${c.source} ${c.level} ${c.bpm} bpm, ${c.notes.length} tuiles (${c.notes.filter((n) => n.dur).length} longues), sur la voix ${near(c.notes, ref)}`;
       notice(
         `analyse ${name}`,
         `durée ${(mix.length / SR).toFixed(0)} s | voix : ${vt.notes.length} notes, part chantée ${(vt.ratio * 100).toFixed(0)} %, ` +
@@ -147,7 +147,7 @@ describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
           (vc && ai2
             ? `CREPE : ${vc.notes.length} notes (YIN ${vt.notes.length}), hauteurs ${range(vc.notes)} (YIN ${range(vt.notes)}), ` +
               `sauts d'octave ${jumps(vc.notes)} (YIN ${jumps(vt.notes)}), part chantée ${(vc.ratio * 100).toFixed(0)} %\n` +
-              `voix + Beat This! + CREPE : ${fmt(ai2)}\nrefrains (CREPE) : ${refrainMotif(ai2)}\n`
+              `voix + Beat This! + CREPE : ${fmt(ai2, vc)} (sur les notes YIN : ${near(ai2.notes)})\nrefrains (CREPE) : ${refrainMotif(ai2)}\n`
             : 'CREPE : pas de hauteur\n') +
           `premières notes : ${vt.notes
             .slice(0, 16)
