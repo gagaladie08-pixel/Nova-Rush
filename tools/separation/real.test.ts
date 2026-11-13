@@ -36,11 +36,24 @@ function refrainMotif(c: ReturnType<typeof analyzeSong>): string {
   const keys = (s: (typeof refr)[number]) =>
     c.notes.filter((n) => n.t >= s.t && n.t < s.end).map((n) => `${Math.round((pos(n.t) - pos(s.t)) * 4)}:${n.lane}`);
   const first = new Set(keys(refr[0]));
+  // Meilleur alignement (± 8 temps), comme le générateur.
   return refr
     .slice(1)
     .map((s) => {
-      const k = keys(s);
-      return `${k.filter((x) => first.has(x)).length}/${k.length}`;
+      let best = '';
+      let bestN = -1;
+      for (let sh = -32; sh <= 32; sh += 4) {
+        const k = keys(s).map((x) => {
+          const [q, l] = x.split(':');
+          return `${Number(q) + sh}:${l}`;
+        });
+        const n = k.filter((x) => first.has(x)).length;
+        if (n > bestN) {
+          bestN = n;
+          best = `${n}/${k.length} (décalage ${sh / 4} temps)`;
+        }
+      }
+      return best;
     })
     .join(', ');
 }

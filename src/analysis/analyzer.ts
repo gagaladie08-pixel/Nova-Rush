@@ -586,9 +586,37 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
     const tpl = templateOf.get(sec.group);
     return sec.kind === 'refrain' && tpl !== undefined && tpl !== si && sec.sim >= 0.35;
   };
-  const relOf = (t: number, si: number) => posOf(t) - posOf(secs![si].t);
+  // Décalage (en temps) qui aligne au mieux chaque refrain répété sur le
+  // premier : une frontière détectée une mesure trop tôt ou trop tard ne
+  // doit pas empêcher la reprise du motif.
+  const shiftOf = new Map<number, number>();
+  const relOf = (t: number, si: number) => posOf(t) - posOf(secs![si].t) + (shiftOf.get(si) ?? 0);
 
   let cands = thin(features.candidates, params.minGap);
+  if (copyOk) {
+    const inSec = (si: number) => cands.filter((c) => c.t >= secs![si].t && c.t < secs![si].end);
+    secs!.forEach((sec, si) => {
+      if (!isRepeat(si)) return;
+      const tpl = templateOf.get(sec.group)!;
+      const a = inSec(tpl).map((c) => ({ r: relOf(c.t, tpl), p: c.pitch }));
+      const b = inSec(si).map((c) => ({ r: posOf(c.t) - posOf(sec.t), p: c.pitch }));
+      let best = 0;
+      let bestScore = 0;
+      for (let k = -8; k <= 8; k++) {
+        let score = 0;
+        for (const x of b) {
+          const m = a.find((y) => Math.abs(x.r + k - y.r) < SAME_POS && pitchCompatible(x.p, y.p));
+          if (m) score += m.p !== undefined && x.p !== undefined ? 1 : 0.5;
+        }
+        score -= Math.abs(k) * 0.01;
+        if (score > bestScore) {
+          bestScore = score;
+          best = k;
+        }
+      }
+      shiftOf.set(si, best);
+    });
+  }
   if (copyOk && secs!.some((_, i) => isRepeat(i))) {
     // 2e passage : on favorise, dans les refrains répétés, les attaques
     // placées comme celles retenues dans le premier refrain.
