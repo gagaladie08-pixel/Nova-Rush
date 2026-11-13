@@ -59,6 +59,10 @@ export function settingsScreen(): Screen {
                 <input type="range" min="-200" max="300" step="5" value="${s.audioOffsetMs}" data-offset />
                 <span class="offset-value">${s.audioOffsetMs > 0 ? '+' : ''}${s.audioOffsetMs} ms</span>
               </div>
+              <label class="switch-row auto-cal">
+                <span><strong>Calibration automatique</strong><br><span class="muted">Si tu touches régulièrement un peu en avance ou en retard, le décalage se corrige doucement pendant les parties.</span></span>
+                <input type="checkbox" data-autocal ${s.autoCalibrate ? 'checked' : ''} />
+              </label>
               <div class="row-actions">
                 <button class="btn btn-secondary" data-sync>Lancer le test de synchronisation</button>
                 <button class="btn btn-ghost" data-reset-offset>Réinitialiser</button>
@@ -84,6 +88,9 @@ export function settingsScreen(): Screen {
         );
         root.querySelector<HTMLInputElement>('[data-reduce]')!.addEventListener('change', (e) =>
           settings.update({ reduceMotion: (e.target as HTMLInputElement).checked }),
+        );
+        root.querySelector<HTMLInputElement>('[data-autocal]')!.addEventListener('change', (e) =>
+          settings.update({ autoCalibrate: (e.target as HTMLInputElement).checked }),
         );
         const range = root.querySelector<HTMLInputElement>('[data-offset]')!;
         const out = root.querySelector<HTMLElement>('.offset-value')!;

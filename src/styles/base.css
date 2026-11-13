@@ -609,108 +609,139 @@ p {
 .hud-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  gap: 8px;
+  gap: 10px;
+  padding: 12px 12px 6px;
 }
 
-.hud-score {
-  display: flex;
-  flex-direction: column;
-  min-width: 90px;
+.hud-progress {
+  position: relative;
+  flex: 1;
+  height: 10px;
+  margin: 0 12px 0 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-.hud-label {
-  font-size: 0.7em;
-  color: var(--g-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
+.hud-progress-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--g-combo), var(--g-star));
+  transform-origin: left center;
+  transform: scaleX(0);
 }
 
-.hud-score-value {
-  font-family: var(--g-font-title);
-  font-weight: 800;
-  font-size: 1.35em;
-  color: var(--g-text);
-}
-
-.hud-stars .star,
-.results-stars .star {
-  font-size: 1.15em;
-  color: rgba(255, 255, 255, 0.2);
+.hud-progress .star {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.25em;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.35);
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
   transition:
     color 0.4s ease,
     text-shadow 0.4s ease;
 }
 
-.hud-stars .star.on,
+.hud-progress .star.on,
 .results-stars .star.on {
   color: var(--g-star);
   text-shadow: 0 0 8px var(--g-star);
 }
 
+.results-stars .star {
+  color: rgba(255, 255, 255, 0.2);
+}
+
 .hud-pause {
   pointer-events: auto;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   border-radius: var(--g-radius);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   background: rgba(0, 0, 0, 0.35);
   color: var(--g-text);
-  font-size: 0.9em;
+  font-size: 0.85em;
   cursor: pointer;
 }
 
-.hud-combo {
-  text-align: center;
-  margin-top: 4vh;
+.hud-center {
   display: flex;
   flex-direction: column;
   align-items: center;
+  margin-top: 1.5vh;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.hud-score-value {
+  font-family: var(--g-font-title);
+  font-weight: 800;
+  font-size: 1.9em;
+  color: var(--g-text);
+}
+
+.hud-judge {
+  position: relative;
+  width: 100%;
+  height: 2.6em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--g-font-title);
+  font-weight: 800;
+  font-style: italic;
+  opacity: 0;
+}
+
+.hud-judge::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, transparent, currentColor 30%, #fff 50%, currentColor 70%, transparent);
+  box-shadow: 0 0 14px currentColor;
+  opacity: 0.85;
+  z-index: -1;
+}
+
+.hud-judge.pop {
+  animation: judge-pop 0.7s ease forwards;
+}
+
+.judge-label {
+  font-size: 1.7em;
+  line-height: 1;
+  text-shadow:
+    0 0 10px currentColor,
+    0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.judge-hint {
+  font-size: 0.75em;
+  font-style: normal;
+  color: #fff;
+  opacity: 0.85;
+  margin-top: 2px;
 }
 
 .hud-combo-value {
   font-family: var(--g-font-title);
   font-weight: 800;
-  font-size: 1.6em;
+  font-size: 2.1em;
   color: var(--g-combo);
-  text-shadow: 0 0 10px var(--g-combo);
+  text-shadow: 0 0 12px var(--g-combo);
+  min-height: 1.2em;
 }
 
 .hud-combo-value.bump {
   animation: bump 0.18s ease;
-}
-
-.hud-mult {
-  font-size: 0.8em;
-  color: var(--g-muted);
-}
-
-.hud-judge {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 58%;
-  text-align: center;
-  font-family: var(--g-font-title);
-  font-weight: 800;
-  opacity: 0;
-  text-shadow: 0 0 12px currentColor;
-}
-
-.hud-judge.pop {
-  animation: judge-pop 0.65s ease forwards;
-}
-
-.judge-label {
-  display: block;
-  font-size: 1.8em;
-}
-
-.judge-points {
-  display: block;
-  font-size: 1em;
-  opacity: 0.85;
 }
 
 .hud-countdown {
@@ -1052,11 +1083,11 @@ p {
 @keyframes judge-pop {
   0% {
     opacity: 0;
-    transform: scale(0.7);
+    transform: scale(0.75);
   }
   15% {
     opacity: 1;
-    transform: scale(1.08);
+    transform: scale(1.06);
   }
   30% {
     transform: scale(1);
@@ -1066,7 +1097,6 @@ p {
   }
   100% {
     opacity: 0;
-    transform: translateY(-14px);
   }
 }
 
@@ -1122,4 +1152,8 @@ html[data-reduce-motion='true'] .hud-judge.pop {
   .screen {
     transition: none;
   }
+}
+
+.auto-cal {
+  margin: 4px 0 12px;
 }

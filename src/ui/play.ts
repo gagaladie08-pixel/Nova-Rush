@@ -40,6 +40,8 @@ export function playScreen(song: SongMeta, replayTheme?: ThemeId): Screen {
             theme,
             reduceMotion: s.reduceMotion,
             offsetMs: s.audioOffsetMs,
+            autoCalibrate: s.autoCalibrate,
+            onOffsetChange: (ms) => settings.update({ audioOffsetMs: ms }),
             onEnd: (result) => void nav.results(song, result, theme),
           });
         })

@@ -7,10 +7,12 @@ export interface Settings {
   reduceMotion: boolean;
   /** Décalage audio/tactile en millisecondes (positif = le son arrive plus tard). */
   audioOffsetMs: number;
+  /** Corrige doucement le décalage selon la façon de taper du joueur. */
+  autoCalibrate: boolean;
 }
 
 const KEY = 'nova-rush.settings';
-const DEFAULTS: Settings = { menuTheme: 'cyber', nextGameTheme: null, reduceMotion: false, audioOffsetMs: 0 };
+const DEFAULTS: Settings = { menuTheme: 'cyber', nextGameTheme: null, reduceMotion: false, audioOffsetMs: 0, autoCalibrate: true };
 
 let current: Settings = load();
 const listeners = new Set<(s: Settings) => void>();

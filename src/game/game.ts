@@ -1,5 +1,6 @@
 import { audio } from '../audio/engine';
 import { LEVEL_PARAMS } from '../analysis/difficulty';
+import { AutoCalibrator } from './calibration';
 import { JUDGE_LABEL, ScoreKeeper, WINDOWS, judgeOffset, type Judge, type ScoreEvent } from './scoring';
 import { THEMES, type GameTheme } from './themes';
 import type { Note, SongMeta, ThemeId } from './types';
@@ -21,6 +22,9 @@ export interface GameOptions {
   theme: ThemeId;
   reduceMotion: boolean;
   offsetMs: number;
+  /** Calibration automatique du décalage audio pendant la partie. */
+  autoCalibrate: boolean;
+  onOffsetChange?: (ms: number) => void;
   onEnd: (r: GameResult) => void;
   onPauseChange?: (paused: boolean) => void;
 }
@@ -44,9 +48,24 @@ interface Particle {
   size: number;
 }
 
+interface Fade {
+  lane: number;
+  top: number;
+  bottom: number;
+  t0: number;
+  color: string;
+}
+
 type State = 'countdown' | 'playing' | 'paused' | 'resuming' | 'failed' | 'done';
 
 const COUNTDOWN = 3;
+/** Position de la ligne de jugement (fraction de la hauteur d'écran). */
+const LINE_RATIO = 0.7;
+
+/** Jugement d'un toucher : toute tuile visible est touchable, la ligne ne sert qu'à la précision. */
+export function judgeTap(dt: number): Judge {
+  return judgeOffset(dt) ?? 'great';
+}
 
 export class Game {
   private root: HTMLElement;
@@ -72,21 +91,24 @@ export class Game {
   private lineY = 0;
   private pxPerSec = 0;
   private tileH = 0;
+  /** Délai après l'instant de la tuile au-delà duquel elle a quitté l'écran (s). */
+  private missDelay = 1;
   private travel: number;
   private duration: number;
+  private minLaneGap: number;
   private bg: HTMLCanvasElement | null = null;
   private lineSprite: HTMLCanvasElement | null = null;
-  private sprites = new Map<string, { c: HTMLCanvasElement; pad: number }>();
-  private lanePress = [0, 0, 0, 0];
   private laneFlash = [0, 0, 0, 0];
   private pointerLane = new Map<number, number>();
   private particles: Particle[] = [];
-  private rings: { x: number; y: number; t: number; color: string }[] = [];
+  private fades: Fade[] = [];
   private maxDur = 0;
+  private offsetMs: number;
+  private calibrator: AutoCalibrator | null;
   private hud: {
     score: HTMLElement;
     combo: HTMLElement;
-    mult: HTMLElement;
+    progress: HTMLElement;
     stars: HTMLElement[];
     judge: HTMLElement;
     countdown: HTMLElement;
@@ -96,6 +118,7 @@ export class Game {
   private lastScore = -1;
   private lastCombo = -1;
   private lastStars = -1;
+  private lastProgress = -1;
   private failNote: NoteState | null = null;
   private ended = false;
   private disposers: (() => void)[] = [];
@@ -106,24 +129,32 @@ export class Game {
     this.theme = THEMES[opts.theme];
     this.travel = LEVEL_PARAMS[opts.song.level].travel;
     this.duration = opts.buffer.duration;
+    this.offsetMs = opts.offsetMs;
+    this.calibrator = opts.autoCalibrate ? new AutoCalibrator(opts.offsetMs) : null;
     this.notes = opts.song.chart.notes.map((n, idx) => ({ ...n, idx, judged: false }));
     for (const n of this.notes) {
       this.laneQueues[n.lane].push(n);
       this.maxDur = Math.max(this.maxDur, n.dur ?? 0);
     }
+    this.minLaneGap = this.computeMinLaneGap();
     this.keeper = new ScoreKeeper(this.notes);
 
+    const stars = [1, 2, 3, 4, 5]
+      .map((i) => `<span class="star" style="left:${i * 20}%">★</span>`)
+      .join('');
     root.innerHTML = `
       <div class="game" data-game-theme="${opts.theme}">
         <canvas class="game-canvas"></canvas>
         <div class="game-hud">
           <div class="hud-top">
-            <div class="hud-score"><span class="hud-label">Score</span><span class="hud-score-value">0</span></div>
-            <div class="hud-stars" aria-label="Progression">${'<span class="star">★</span>'.repeat(5)}</div>
+            <div class="hud-progress" aria-label="Progression"><div class="hud-progress-fill"></div>${stars}</div>
             <button class="hud-pause" aria-label="Pause">❚❚</button>
           </div>
-          <div class="hud-combo"><span class="hud-combo-value"></span><span class="hud-mult"></span></div>
-          <div class="hud-judge"></div>
+          <div class="hud-center">
+            <div class="hud-score-value">0</div>
+            <div class="hud-judge"></div>
+            <div class="hud-combo-value"></div>
+          </div>
           <div class="hud-countdown"></div>
         </div>
         <div class="game-overlay hidden"></div>
@@ -133,7 +164,7 @@ export class Game {
     this.hud = {
       score: root.querySelector('.hud-score-value')!,
       combo: root.querySelector('.hud-combo-value')!,
-      mult: root.querySelector('.hud-mult')!,
+      progress: root.querySelector('.hud-progress-fill')!,
       stars: Array.from(root.querySelectorAll('.star')),
       judge: root.querySelector('.hud-judge')!,
       countdown: root.querySelector('.hud-countdown')!,
@@ -167,10 +198,21 @@ export class Game {
     this.start();
   }
 
+  /** Plus petit écart entre la fin d'une tuile et la suivante dans une même voie (s). */
+  private computeMinLaneGap(): number {
+    const gaps: number[] = [];
+    for (const q of this.laneQueues) {
+      for (let i = 1; i < q.length; i++) gaps.push(q[i].t - (q[i - 1].t + (q[i - 1].dur ?? 0)));
+    }
+    if (!gaps.length) return 0.5;
+    gaps.sort((a, b) => a - b);
+    return Math.max(0.08, gaps[Math.floor(gaps.length * 0.03)]);
+  }
+
   /* --------------------------- Horloge --------------------------- */
 
   songTime(perfMs = performance.now()): number {
-    return audio.heardCtxTime(perfMs) - this.startCtx + this.playOffset - this.opts.offsetMs / 1000;
+    return audio.heardCtxTime(perfMs) - this.startCtx + this.playOffset - this.offsetMs / 1000;
   }
 
   private start() {
@@ -192,10 +234,10 @@ export class Game {
     // Une tenue en cours au moment de la pause est validée selon son toucher initial.
     for (const n of this.notes) {
       if (n.holdPointer !== undefined && !n.judged && n.headJudge) {
-        this.applyEvent(n, this.keeper.applyLong(n, n.headJudge, n.headJudge));
         n.judged = true;
         n.result = n.headJudge;
         n.holdPointer = undefined;
+        this.applyEvent(n, this.keeper.applyLong(n, n.headJudge, n.headJudge));
       }
     }
     this.pointerLane.clear();
@@ -219,7 +261,7 @@ export class Game {
     this.frozenAt = this.pausedAt;
     // Reprise au même instant après un compte à rebours ; les positions des
     // tuiles sont recalculées à partir de l'horloge audio.
-    const bufferPos = Math.max(0, this.pausedAt + this.opts.offsetMs / 1000);
+    const bufferPos = Math.max(0, this.pausedAt + this.offsetMs / 1000);
     this.startCtx = audio.play(this.opts.song, this.opts.buffer, bufferPos, COUNTDOWN);
     this.playOffset = bufferPos;
     this.state = 'resuming';
@@ -237,9 +279,9 @@ export class Game {
     this.laneHead = [0, 0, 0, 0];
     this.keeper = new ScoreKeeper(this.notes);
     this.particles = [];
-    this.rings = [];
+    this.fades = [];
     this.failNote = null;
-    this.lastScore = this.lastCombo = this.lastStars = -1;
+    this.lastScore = this.lastCombo = this.lastStars = this.lastProgress = -1;
     cancelAnimationFrame(this.raf);
     this.start();
   }
@@ -274,6 +316,20 @@ export class Game {
     this.hud.overlay.innerHTML = '';
   }
 
+  /* --------------------------- Géométrie ------------------------- */
+
+  /** Ordonnée du bas d'une tuile dont l'instant est t. */
+  private yOf(t: number, now: number) {
+    return this.lineY - (t - now) * this.pxPerSec;
+  }
+
+  /** Rectangle vertical (haut, bas) d'une tuile à l'instant `now`. */
+  private rectOf(n: Note, now: number): { top: number; bottom: number } {
+    const bottom = this.yOf(n.t, now);
+    const top = n.dur ? Math.min(this.yOf(n.t + n.dur, now), bottom - this.tileH) : bottom - this.tileH;
+    return { top, bottom };
+  }
+
   /* --------------------------- Entrées --------------------------- */
 
   private laneAt(clientX: number): number {
@@ -283,51 +339,65 @@ export class Game {
     return Math.min(3, Math.floor(x / this.laneW));
   }
 
+  /**
+   * Toute tuile visible peut être touchée, dans n'importe quel ordre.
+   * Toucher une zone vide ne pénalise pas.
+   */
   private onDown(e: PointerEvent) {
     e.preventDefault();
     if (this.state !== 'playing') return;
     const lane = this.laneAt(e.clientX);
     if (lane < 0) return;
     this.pointerLane.set(e.pointerId, lane);
-    this.lanePress[lane] = 1;
     const t = this.songTime(e.timeStamp || performance.now());
-    const q = this.laneQueues[lane];
+    const y = e.clientY - this.canvas.getBoundingClientRect().top;
+    const tolAbove = 20;
+    const tolBelow = Math.max(24, this.pxPerSec * 0.1);
     let target: NoteState | undefined;
+    let bestDist = Infinity;
+    const q = this.laneQueues[lane];
     for (let i = this.laneHead[lane]; i < q.length; i++) {
       const n = q[i];
+      if (n.t - t > this.travel * 1.2) break;
       if (n.judged || n.holdPointer !== undefined) continue;
-      if (n.t - t > WINDOWS.great) break;
-      if (Math.abs(n.t - t) <= WINDOWS.great) {
+      const r = this.rectOf(n, t);
+      if (r.bottom < 0 || r.top > this.h) continue;
+      if (y < r.top - tolAbove || y > r.bottom + tolBelow) continue;
+      const d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      if (d < bestDist) {
+        bestDist = d;
         target = n;
-        break;
       }
     }
-    if (!target) return;
-    const judge = judgeOffset(t - target.t)!;
+    if (!target) return; // zone vide : aucune pénalité
+    const dt = t - target.t;
+    const judge = judgeTap(dt);
+    this.calibrate(dt);
     if (target.dur) {
       target.holdPointer = e.pointerId;
       target.headJudge = judge;
       target.hitAt = t;
-      this.showJudge(judge, false);
-      this.burst(target.lane, judge, 6);
+      this.showJudge(judge, false, dt);
+      this.laneFlash[target.lane] = 0.6;
     } else {
       target.judged = true;
       target.result = judge;
       target.hitAt = t;
-      this.applyEvent(target, this.keeper.applyShort(target, judge));
+      const r = this.rectOf(target, t);
+      this.fades.push({ lane: target.lane, top: r.top, bottom: r.bottom, t0: performance.now() / 1000, color: this.theme.fill });
+      this.applyEvent(target, this.keeper.applyShort(target, judge), dt);
     }
   }
 
   private onUp(e: PointerEvent) {
-    const lane = this.pointerLane.get(e.pointerId);
-    if (lane !== undefined) this.pointerLane.delete(e.pointerId);
+    this.pointerLane.delete(e.pointerId);
     if (this.state !== 'playing') return;
     const n = this.notes.find((x) => x.holdPointer === e.pointerId && !x.judged);
     if (!n || !n.headJudge || !n.dur) return;
-    const t = this.songTime(e.timeStamp || performance.now());
-    this.releaseHold(n, t);
+    this.releaseHold(n, this.songTime(e.timeStamp || performance.now()));
   }
 
+  /** Option A : le relâchement est jugé quand le haut de la tuile passe la ligne. */
   private releaseHold(n: NoteState, t: number) {
     const end = n.t + (n.dur ?? 0);
     n.holdPointer = undefined;
@@ -336,15 +406,24 @@ export class Game {
       n.result = 'early';
       this.applyEvent(n, this.keeper.applyEarlyRelease(n));
     } else {
-      const rel = judgeOffset(t - end) ?? 'great';
-      const ev = this.keeper.applyLong(n, n.headJudge!, rel);
+      const dt = t - end;
+      const ev = this.keeper.applyLong(n, n.headJudge!, judgeTap(dt));
       n.result = ev.judge;
-      this.applyEvent(n, ev);
+      this.applyEvent(n, ev, dt);
     }
   }
 
-  private applyEvent(n: Note, ev: ScoreEvent) {
-    this.showJudge(ev.judge, !!ev.earlyRelease, ev.points);
+  private calibrate(dt: number) {
+    if (!this.calibrator) return;
+    const next = this.calibrator.add(dt);
+    if (next !== null) {
+      this.offsetMs = next;
+      this.opts.onOffsetChange?.(Math.round(next));
+    }
+  }
+
+  private applyEvent(n: Note, ev: ScoreEvent, dt?: number) {
+    this.showJudge(ev.judge, !!ev.earlyRelease, dt);
     this.laneFlash[n.lane] = 1;
     this.burst(n.lane, ev.judge, ev.judge === 'perfectPlus' ? 14 : 8);
     if (navigator.vibrate && ev.judge === 'perfectPlus' && !this.opts.reduceMotion) {
@@ -356,16 +435,27 @@ export class Game {
     }
   }
 
-  private showJudge(j: Judge | 'miss', early: boolean, points?: number) {
+  private showJudge(j: Judge | 'miss', early: boolean, dt?: number) {
     const el = this.hud.judge;
-    const label = j === 'miss' ? 'Raté' : early ? 'Relâché trop tôt · Great' : JUDGE_LABEL[j];
-    el.innerHTML = `<span class="judge-label">${label}</span>${points ? `<span class="judge-points">+${points}</span>` : ''}`;
+    const label = j === 'miss' ? 'Raté' : early ? 'Relâché trop tôt' : JUDGE_LABEL[j];
+    // Petit repère : en avance ou en retard sur la ligne.
+    const hint =
+      j === 'perfect' || j === 'great'
+        ? dt !== undefined && Math.abs(dt) > WINDOWS.perfectPlus
+          ? dt < 0
+            ? 'trop tôt'
+            : 'trop tard'
+          : ''
+        : early
+          ? 'Great'
+          : '';
+    el.innerHTML = `<span class="judge-label">${label}</span>${hint ? `<span class="judge-hint">${hint}</span>` : ''}`;
     el.style.color = this.theme.judge[j];
     el.classList.remove('pop');
     void el.offsetWidth;
     el.classList.add('pop');
     window.clearTimeout(this.judgeTimer);
-    this.judgeTimer = window.setTimeout(() => el.classList.remove('pop'), 650);
+    this.judgeTimer = window.setTimeout(() => el.classList.remove('pop'), 700);
   }
 
   /* --------------------------- Boucle ---------------------------- */
@@ -402,14 +492,14 @@ export class Game {
         this.releaseHold(n, now);
       }
     }
-    // Ratés : une tuile disparaît sans toucher valide → fin de partie.
+    // Ratés : une tuile sortie de l'écran par le bas sans avoir été touchée.
     for (let l = 0; l < 4; l++) {
       const q = this.laneQueues[l];
       while (this.laneHead[l] < q.length && q[this.laneHead[l]].judged) this.laneHead[l]++;
       for (let i = this.laneHead[l]; i < q.length; i++) {
         const n = q[i];
-        if (n.t > now) break;
-        if (!n.judged && n.holdPointer === undefined && now - n.t > WINDOWS.great) {
+        if (n.t > now - this.missDelay) break;
+        if (!n.judged && n.holdPointer === undefined) {
           this.fail(n, now);
           return;
         }
@@ -457,16 +547,20 @@ export class Game {
     }
     if (k.combo !== this.lastCombo) {
       this.lastCombo = k.combo;
-      this.hud.combo.textContent = k.combo > 0 ? `Combo ${k.combo}` : '';
-      this.hud.mult.textContent = k.combo > 0 ? `Perfect+ suivant ×${k.nextMultiplier}` : '';
+      this.hud.combo.textContent = k.combo > 0 ? `×${k.combo}` : '';
       if (k.combo > 0 && !this.opts.reduceMotion) {
         this.hud.combo.classList.remove('bump');
         void this.hud.combo.offsetWidth;
         this.hud.combo.classList.add('bump');
       }
     }
-    // Cinq étoiles : une par cinquième de la durée (temps écoulé, pas performance).
-    const stars = this.state === 'done' ? 5 : Math.max(0, Math.min(5, Math.floor((now / this.duration) * 5)));
+    // Progression et cinq étoiles : une par cinquième de la durée (temps écoulé, pas performance).
+    const p = this.state === 'done' ? 1 : Math.max(0, Math.min(1, now / this.duration));
+    if (Math.abs(p - this.lastProgress) > 0.002) {
+      this.lastProgress = p;
+      this.hud.progress.style.transform = `scaleX(${p})`;
+    }
+    const stars = this.state === 'done' ? 5 : Math.floor(p * 5);
     if (stars !== this.lastStars) {
       this.lastStars = stars;
       this.hud.stars.forEach((s, i) => s.classList.toggle('on', i < stars));
@@ -487,12 +581,12 @@ export class Game {
     this.fieldW = Math.min(this.w, this.h * 0.62);
     this.fieldX = (this.w - this.fieldW) / 2;
     this.laneW = this.fieldW / 4;
-    this.lineY = this.h * 0.8;
+    this.lineY = this.h * LINE_RATIO;
     this.pxPerSec = this.lineY / this.travel;
-    const minGap = LEVEL_PARAMS[this.opts.song.level].minGap;
-    this.tileH = Math.max(22, Math.min(this.laneW * 0.55, this.pxPerSec * minGap * 0.85));
+    // Tuiles hautes (style touches de piano), sans chevauchement dans une voie.
+    this.tileH = Math.max(46, Math.min(this.h * 0.2, this.laneW * 1.6, this.pxPerSec * this.minLaneGap * 0.9));
+    this.missDelay = (this.h - this.lineY + this.tileH) / this.pxPerSec;
     this.bg = this.makeBackground();
-    this.sprites.clear();
     this.lineSprite = this.makeLineSprite();
   }
 
@@ -506,10 +600,10 @@ export class Game {
     g.scale(this.dpr, this.dpr);
     if (!this.opts.reduceMotion) {
       g.shadowColor = this.theme.line;
-      g.shadowBlur = this.theme.glow * 1.5;
+      g.shadowBlur = this.theme.glow * 1.8;
     }
-    g.fillStyle = this.theme.line;
-    g.fillRect(pad, pad, this.fieldW, 4);
+    g.fillStyle = this.alpha(this.theme.line, 0.85);
+    g.fillRect(pad, pad + 1, this.fieldW, 2);
     return c;
   }
 
@@ -521,100 +615,86 @@ export class Game {
     g.scale(this.dpr, this.dpr);
     const { w, h } = this;
     const th = this.theme;
-    const grad = g.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, th.bg);
-    grad.addColorStop(1, th.surface);
-    g.fillStyle = grad;
+    g.fillStyle = th.bg;
     g.fillRect(0, 0, w, h);
 
+    // Voies en dégradé coloré
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, th.laneGrad[0]);
+    grad.addColorStop(1, th.laneGrad[1]);
+    g.fillStyle = grad;
+    g.fillRect(this.fieldX, 0, this.fieldW, h);
+
+    g.save();
+    g.beginPath();
+    g.rect(this.fieldX, 0, this.fieldW, h);
+    g.clip();
+    // Grands losanges translucides
+    const s = this.fieldW / 2;
+    g.lineWidth = 1.5;
+    for (let y = -s; y < h + s; y += s) {
+      for (let x = this.fieldX; x <= this.fieldX + this.fieldW; x += s) {
+        const ox = (Math.round(y / s) % 2) * (s / 2);
+        g.fillStyle = 'rgba(255,255,255,0.035)';
+        g.strokeStyle = 'rgba(255,255,255,0.06)';
+        g.beginPath();
+        g.moveTo(x + ox, y - s / 2);
+        g.lineTo(x + ox + s / 2, y);
+        g.lineTo(x + ox, y + s / 2);
+        g.lineTo(x + ox - s / 2, y);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
+    }
     if (th.id === 'cyber') {
-      // Grille en perspective discrète
-      g.strokeStyle = 'rgba(189,0,255,0.18)';
-      g.lineWidth = 1;
-      const horizon = h * 0.35;
-      for (let i = -12; i <= 12; i++) {
-        g.beginPath();
-        g.moveTo(w / 2 + i * 8, horizon);
-        g.lineTo(w / 2 + i * w * 0.18, h);
-        g.stroke();
-      }
-      for (let k = 1; k < 14; k++) {
-        const y = horizon + Math.pow(k / 14, 2) * (h - horizon);
-        g.strokeStyle = `rgba(0,180,255,${0.05 + 0.12 * (k / 14)})`;
-        g.beginPath();
-        g.moveTo(0, y);
-        g.lineTo(w, y);
-        g.stroke();
-      }
-      g.fillStyle = 'rgba(255,255,255,0.025)';
-      for (let y = 0; y < h; y += 3) g.fillRect(0, y, w, 1);
+      g.fillStyle = 'rgba(255,255,255,0.03)';
+      for (let y = 0; y < h; y += 3) g.fillRect(this.fieldX, y, this.fieldW, 1);
     } else if (th.id === 'survivor') {
-      // Bandes diagonales inspirées de plusieurs drapeaux
       const flags = [
         ['#E40303', '#FF8C00', '#FFED00', '#008026', '#004DFF', '#750787'],
         ['#5BCEFA', '#F5A9B8', '#FFFFFF', '#F5A9B8', '#5BCEFA'],
         ['#D60270', '#9B4F96', '#0038A8'],
-        ['#FF218C', '#FFD800', '#21B1FF'],
       ];
-      g.save();
-      g.globalAlpha = 0.11;
+      g.globalAlpha = 0.09;
       g.translate(w / 2, h / 2);
       g.rotate(-Math.PI / 5);
-      let y = -h;
+      let yy = -h;
       let fi = 0;
-      while (y < h) {
-        const flag = flags[fi++ % flags.length];
-        for (const col of flag) {
+      while (yy < h) {
+        for (const col of flags[fi++ % flags.length]) {
           g.fillStyle = col;
-          g.fillRect(-w * 1.5, y, w * 3, 9);
-          y += 9;
+          g.fillRect(-w * 1.5, yy, w * 3, 7);
+          yy += 7;
         }
-        y += 70;
+        yy += 110;
       }
-      g.restore();
     } else {
-      // Losanges emboîtés
-      const s = 34;
+      const d = 22;
+      g.strokeStyle = 'rgba(212,160,23,0.10)';
       g.lineWidth = 1;
-      for (let y = -s; y < h + s; y += s) {
-        for (let x = -s; x < w + s; x += s) {
-          const ox = (Math.floor(y / s) % 2) * (s / 2);
-          g.strokeStyle = 'rgba(212,160,23,0.09)';
+      for (let y = 0; y < h + d; y += d) {
+        for (let x = this.fieldX; x < this.fieldX + this.fieldW + d; x += d) {
+          const ox = (Math.round(y / d) % 2) * (d / 2);
           g.beginPath();
-          g.moveTo(x + ox, y - s / 2);
-          g.lineTo(x + ox + s / 2, y);
-          g.lineTo(x + ox, y + s / 2);
-          g.lineTo(x + ox - s / 2, y);
-          g.closePath();
-          g.stroke();
-          g.strokeStyle = 'rgba(196,98,45,0.08)';
-          g.beginPath();
-          g.moveTo(x + ox, y - s / 4);
-          g.lineTo(x + ox + s / 4, y);
-          g.lineTo(x + ox, y + s / 4);
-          g.lineTo(x + ox - s / 4, y);
+          g.moveTo(x + ox, y - d / 3);
+          g.lineTo(x + ox + d / 3, y);
+          g.lineTo(x + ox, y + d / 3);
+          g.lineTo(x + ox - d / 3, y);
           g.closePath();
           g.stroke();
         }
       }
     }
-    // Voies
-    g.fillStyle = 'rgba(0,0,0,0.45)';
-    g.fillRect(this.fieldX, 0, this.fieldW, h);
-    for (let l = 0; l <= 4; l++) {
-      const x = this.fieldX + l * this.laneW;
-      g.strokeStyle = l === 0 || l === 4 ? th.accents[1] + '88' : 'rgba(255,255,255,0.12)';
-      g.lineWidth = l === 0 || l === 4 ? 2 : 1;
-      g.beginPath();
-      g.moveTo(x, 0);
-      g.lineTo(x, h);
-      g.stroke();
-    }
-    return c;
-  }
+    g.restore();
 
-  private yOf(t: number, now: number) {
-    return this.lineY - (t - now) * this.pxPerSec;
+    // Séparations fines entre les voies
+    g.fillStyle = 'rgba(255,255,255,0.28)';
+    for (let l = 1; l < 4; l++) g.fillRect(Math.round(this.fieldX + l * this.laneW), 0, 1, h);
+    // Zone sous la ligne légèrement assombrie
+    g.fillStyle = 'rgba(0,0,0,0.18)';
+    g.fillRect(this.fieldX, this.lineY, this.fieldW, h - this.lineY);
+    return c;
   }
 
   private render(now: number, raw: number) {
@@ -628,54 +708,50 @@ export class Game {
 
     if (!reduce) this.drawAmbient(g, wall);
 
-    // Appuis sur les voies
+    // Éclairs des voies après un toucher
     for (let l = 0; l < 4; l++) {
-      const held = [...this.pointerLane.values()].includes(l);
-      if (held) this.lanePress[l] = Math.max(this.lanePress[l], 0.6);
-      const a = Math.max(this.lanePress[l] * 0.35, this.laneFlash[l] * 0.5);
+      const a = this.laneFlash[l] * 0.35;
       if (a > 0.01) {
         const x = this.fieldX + l * this.laneW;
-        const grad = g.createLinearGradient(0, this.lineY, 0, this.lineY - this.h * 0.45);
-        grad.addColorStop(0, this.alpha(th.laneColors[l], a));
-        grad.addColorStop(1, this.alpha(th.laneColors[l], 0));
+        const grad = g.createLinearGradient(0, this.h, 0, 0);
+        grad.addColorStop(0, this.alpha(th.fill, a));
+        grad.addColorStop(1, this.alpha(th.fill, 0));
         g.fillStyle = grad;
-        g.fillRect(x, 0, this.laneW, this.lineY + 20);
+        g.fillRect(x, 0, this.laneW, this.h);
       }
-      if (!held) this.lanePress[l] *= 0.85;
-      this.laneFlash[l] *= 0.88;
+      this.laneFlash[l] *= 0.86;
     }
 
-    // Ligne de jugement
     if (this.lineSprite) {
       g.drawImage(this.lineSprite, this.fieldX - 24, this.lineY - 2 - 24, this.fieldW + 48, 4 + 48);
     }
-    g.fillStyle = 'rgba(255,255,255,0.06)';
-    g.fillRect(this.fieldX, this.lineY + 2, this.fieldW, this.h - this.lineY);
 
     // Tuiles
-    const tMin = now - 0.4 - this.maxDur;
-    const tMax = now + this.travel * 1.08;
-    const chordsDrawn = new Set<number>();
+    const tMin = now - this.missDelay - 0.2 - this.maxDur;
+    const tMax = now + this.travel * 1.15;
     for (const n of this.notes) {
       if (n.t < tMin) continue;
       if (n.t > tMax) break;
-      this.drawNote(g, n, now, chordsDrawn);
+      this.drawNote(g, n, now);
     }
 
-    // Anneaux et particules
-    for (let i = this.rings.length - 1; i >= 0; i--) {
-      const r = this.rings[i];
-      const age = wall - r.t;
-      if (age > 0.35) {
-        this.rings.splice(i, 1);
+    // Tuiles touchées qui s'effacent
+    for (let i = this.fades.length - 1; i >= 0; i--) {
+      const f = this.fades[i];
+      const age = wall - f.t0;
+      if (age > 0.25) {
+        this.fades.splice(i, 1);
         continue;
       }
-      g.strokeStyle = this.alpha(r.color, 1 - age / 0.35);
-      g.lineWidth = 3;
-      g.beginPath();
-      g.ellipse(r.x, r.y, this.laneW * (0.3 + age * 1.6), this.laneW * (0.12 + age * 0.6), 0, 0, Math.PI * 2);
-      g.stroke();
+      const k = age / 0.25;
+      const x = this.fieldX + f.lane * this.laneW;
+      const grow = reduce ? 0 : k * 6;
+      g.fillStyle = this.alpha(f.color, 0.55 * (1 - k));
+      this.roundRect(g, x + 1 - grow, f.top - grow, this.laneW - 2 + grow * 2, f.bottom - f.top + grow * 2, th.tileRadius);
+      g.fill();
     }
+
+    // Particules
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= 1 / 60;
@@ -711,24 +787,19 @@ export class Game {
       const y = ((wall * 0.25) % 1) * this.h * 1.2 - this.h * 0.1;
       const grad = g.createLinearGradient(0, y - 40, 0, y + 40);
       grad.addColorStop(0, 'rgba(0,255,240,0)');
-      grad.addColorStop(0.5, 'rgba(0,255,240,0.07)');
+      grad.addColorStop(0.5, 'rgba(0,255,240,0.06)');
       grad.addColorStop(1, 'rgba(0,255,240,0)');
       g.fillStyle = grad;
-      g.fillRect(0, y - 40, this.w, 80);
+      g.fillRect(this.fieldX, y - 40, this.fieldW, 80);
     } else if (th.id === 'survivor') {
-      const a = 0.08 + 0.05 * Math.sin(wall * 1.6);
-      for (const [x, col] of [
-        [this.fieldX, '#F77FB4'],
-        [this.fieldX + this.fieldW, '#5BCEFA'],
-      ] as [number, string][]) {
-        const grad = g.createRadialGradient(x, this.lineY, 0, x, this.lineY, this.h * 0.5);
-        grad.addColorStop(0, this.alpha(col, a));
-        grad.addColorStop(1, this.alpha(col, 0));
-        g.fillStyle = grad;
-        g.fillRect(0, 0, this.w, this.h);
-      }
+      const a = 0.07 + 0.05 * Math.sin(wall * 1.6);
+      const grad = g.createLinearGradient(0, this.lineY - this.h * 0.3, 0, this.lineY);
+      grad.addColorStop(0, this.alpha('#F77FB4', 0));
+      grad.addColorStop(1, this.alpha('#F77FB4', a));
+      g.fillStyle = grad;
+      g.fillRect(this.fieldX, this.lineY - this.h * 0.3, this.fieldW, this.h * 0.3);
     } else {
-      const a = 0.06 + 0.04 * Math.sin(wall * 1.2);
+      const a = 0.05 + 0.035 * Math.sin(wall * 1.2);
       g.strokeStyle = `rgba(212,160,23,${a})`;
       g.lineWidth = 2;
       const cx = this.w / 2;
@@ -746,155 +817,91 @@ export class Game {
     }
   }
 
-  private drawNote(g: CanvasRenderingContext2D, n: NoteState, now: number, chordsDrawn: Set<number>) {
+  private drawNote(g: CanvasRenderingContext2D, n: NoteState, now: number) {
     const th = this.theme;
-    const x = this.fieldX + n.lane * this.laneW + 4;
-    const w = this.laneW - 8;
-    const color = th.laneColors[n.lane];
     const isFail = this.failNote === n;
+    if (n.judged && !isFail) return;
+    const { top, bottom } = this.rectOf(n, now);
+    if (bottom < -4 || top > this.h + 4) return;
+    const x = this.fieldX + n.lane * this.laneW + 1;
+    const w = this.laneW - 2;
+    const r = th.tileRadius;
+
+    // Corps sombre
+    const grad = g.createLinearGradient(0, top, 0, bottom);
+    grad.addColorStop(0, isFail ? '#5A0A14' : th.tile[0]);
+    grad.addColorStop(1, isFail ? '#C0283D' : th.tile[1]);
+    g.fillStyle = grad;
+    this.roundRect(g, x, top, w, bottom - top, r);
+    g.fill();
+    // Reflet en haut et liseré coloré en bas
+    g.fillStyle = 'rgba(255,255,255,0.07)';
+    g.fillRect(x + r / 2, top + 1, w - r, 2);
+    g.fillStyle = this.alpha(th.laneColors[n.lane], 0.8);
+    g.fillRect(x + r / 2, bottom - 3, w - r, 2);
 
     if (n.dur) {
-      const end = n.t + n.dur;
-      if (n.judged && n.result !== 'early') return;
       const holding = n.holdPointer !== undefined;
-      const headT = holding ? Math.max(now, n.t) : n.t;
-      if (n.judged && n.result === 'early' && now > (n.hitAt ?? n.t) + 0.3) return;
-      const yHead = this.yOf(headT, now);
-      const yTail = this.yOf(end, now);
-      if (yHead < -20 || yTail > this.h + 20) return;
-      const bodyW = w * 0.62;
-      const grad = g.createLinearGradient(0, yTail, 0, yHead);
-      const c2 = th.id === 'african' ? '#2D5A27' : th.accents[1];
-      grad.addColorStop(0, this.alpha(c2, holding ? 0.95 : 0.7));
-      grad.addColorStop(1, this.alpha(color, holding ? 0.95 : 0.7));
-      if (holding && !this.opts.reduceMotion) {
-        // halo simple (sans shadowBlur)
-        g.fillStyle = this.alpha(color, 0.18);
-        g.fillRect(x + (w - bodyW) / 2 - 6, yTail, bodyW + 12, Math.max(0, yHead - yTail));
-      }
-      g.fillStyle = grad;
-      this.roundRect(g, x + (w - bodyW) / 2, yTail, bodyW, Math.max(0, yHead - yTail), Math.min(th.tileRadius, bodyW / 2));
-      g.fill();
-      // tête et queue
-      this.drawTile(g, x, yHead - this.tileH / 2, w, this.tileH, isFail ? th.judge.miss : color, holding);
-      g.fillStyle = this.alpha('#FFFFFF', 0.6);
-      g.fillRect(x + w * 0.2, yTail - 2, w * 0.6, 4);
-      if (holding && !this.opts.reduceMotion && Math.random() < 0.5) this.spark(n.lane, color, 1);
-      return;
-    }
-
-    if (n.judged && !isFail) return;
-    const y = this.yOf(n.t, now);
-    if (y < -this.tileH || y > this.h + this.tileH) return;
-    if (n.chord !== undefined && !chordsDrawn.has(n.chord)) {
-      chordsDrawn.add(n.chord);
-      const lanes = this.notes.filter((m) => m.chord === n.chord && !m.judged).map((m) => m.lane);
-      if (lanes.length > 1) {
-        const x1 = this.fieldX + (Math.min(...lanes) + 0.5) * this.laneW;
-        const x2 = this.fieldX + (Math.max(...lanes) + 0.5) * this.laneW;
-        g.fillStyle = this.alpha(th.text, 0.35);
-        g.fillRect(x1, y - 2, x2 - x1, 4);
-      }
-    }
-    this.drawTile(g, x, y - this.tileH / 2, w, this.tileH, isFail ? th.judge.miss : color, false, n.chord !== undefined);
-  }
-
-  private drawTile(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, active: boolean, chord = false) {
-    const key = `${color}|${active}|${chord}`;
-    let sp = this.sprites.get(key);
-    if (!sp) {
-      const pad = this.theme.glow * 2 + 4;
-      const c = document.createElement('canvas');
-      c.width = Math.ceil((w + pad * 2) * this.dpr);
-      c.height = Math.ceil((h + pad * 2) * this.dpr);
-      const sg = c.getContext('2d')!;
-      sg.scale(this.dpr, this.dpr);
-      this.paintTile(sg, pad, pad, w, h, color, active, chord);
-      sp = { c, pad };
-      this.sprites.set(key, sp);
-    }
-    g.drawImage(sp.c, x - sp.pad, y - sp.pad, w + sp.pad * 2, h + sp.pad * 2);
-  }
-
-  private paintTile(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, active: boolean, chord: boolean) {
-    const th = this.theme;
-    g.save();
-    if (!this.opts.reduceMotion) {
-      g.shadowColor = color;
-      g.shadowBlur = th.glow * (active ? 2 : 1);
-    }
-    if (th.id === 'cyber') {
-      const c = Math.min(10, h / 3);
-      g.beginPath();
-      g.moveTo(x + c, y);
-      g.lineTo(x + w, y);
-      g.lineTo(x + w, y + h - c);
-      g.lineTo(x + w - c, y + h);
-      g.lineTo(x, y + h);
-      g.lineTo(x, y + c);
-      g.closePath();
-      const grad = g.createLinearGradient(x, y, x + w, y + h);
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, '#2A0050');
-      g.fillStyle = grad;
-      g.fill();
-      g.shadowBlur = 0;
-      g.strokeStyle = '#00FFF0';
-      g.lineWidth = 1.5;
-      g.stroke();
-      g.fillStyle = 'rgba(255,215,120,0.85)'; // petit reflet doré
-      g.fillRect(x + c + 3, y + 3, Math.min(14, w * 0.2), 2);
-    } else if (th.id === 'survivor') {
-      const grad = g.createLinearGradient(x, y, x, y + h);
-      grad.addColorStop(0, '#FFFFFF');
-      grad.addColorStop(0.25, color);
-      grad.addColorStop(1, this.alpha(color, 0.85));
-      g.fillStyle = grad;
-      this.roundRect(g, x, y, w, h, Math.min(16, h / 2));
-      g.fill();
-      g.shadowBlur = 0;
-      g.strokeStyle = 'rgba(255,255,255,0.7)';
-      g.lineWidth = 1.5;
-      g.stroke();
-    } else {
-      g.fillStyle = color;
-      this.roundRect(g, x, y, w, h, Math.min(8, h / 2));
-      g.fill();
-      g.shadowBlur = 0;
-      g.strokeStyle = '#D4A017';
-      g.lineWidth = 1.5;
-      g.stroke();
-      // losange central
       const cx = x + w / 2;
-      const cy = y + h / 2;
-      const s = Math.min(h * 0.32, 10);
-      g.fillStyle = '#FFF3E0';
+      // Remplissage de la partie déjà passée sous la ligne
+      if (holding) {
+        const fTop = Math.max(top, Math.min(this.lineY, bottom));
+        const fBottom = Math.min(bottom, this.h);
+        if (fBottom > fTop) {
+          const fg = g.createLinearGradient(0, fTop, 0, fBottom);
+          fg.addColorStop(0, this.alpha(th.fill, 0.95));
+          fg.addColorStop(1, this.alpha(th.laneColors[n.lane], 0.85));
+          g.fillStyle = fg;
+          this.roundRect(g, x, fTop, w, fBottom - fTop, r);
+          g.fill();
+        }
+        g.strokeStyle = this.alpha(th.fill, 0.9);
+        g.lineWidth = 2;
+        this.roundRect(g, x + 1, top + 1, w - 2, bottom - top - 2, r);
+        g.stroke();
+        if (!this.opts.reduceMotion && Math.random() < 0.5) this.spark(n.lane, th.fill, 1);
+      }
+      // Trait central et point
+      const lineTop = top + 14;
+      const lineBottom = holding ? Math.min(bottom, this.lineY) : bottom - 10;
+      if (lineBottom > lineTop) {
+        g.fillStyle = 'rgba(255,255,255,0.75)';
+        g.fillRect(cx - 1, lineTop, 2, lineBottom - lineTop);
+      }
+      g.fillStyle = '#FFFFFF';
+      g.beginPath();
+      g.arc(cx, lineTop, 4.5, 0, Math.PI * 2);
+      g.fill();
+      if (holding) {
+        g.beginPath();
+        g.arc(cx, Math.min(bottom, this.lineY), 6, 0, Math.PI * 2);
+        g.fill();
+      }
+    } else if (th.id === 'african') {
+      // petit losange doré
+      const cx = x + w / 2;
+      const cy = (top + bottom) / 2;
+      const s = Math.min(9, (bottom - top) / 4);
+      g.strokeStyle = 'rgba(212,160,23,0.7)';
+      g.lineWidth = 1.5;
       g.beginPath();
       g.moveTo(cx, cy - s);
       g.lineTo(cx + s, cy);
       g.lineTo(cx, cy + s);
       g.lineTo(cx - s, cy);
       g.closePath();
-      g.fill();
+      g.stroke();
     }
-    if (chord) {
-      g.fillStyle = 'rgba(255,255,255,0.9)';
-      g.fillRect(x + w / 2 - 6, y + h - 5, 12, 2);
-    }
-    g.restore();
   }
 
   private burst(lane: number, j: Judge, count: number) {
-    const x = this.fieldX + (lane + 0.5) * this.laneW;
-    const color = this.theme.judge[j];
-    this.rings.push({ x, y: this.lineY, t: performance.now() / 1000, color });
     if (this.opts.reduceMotion) return;
-    this.spark(lane, color, count);
+    this.spark(lane, this.theme.judge[j], count);
   }
 
   private spark(lane: number, color: string, count: number) {
     const x = this.fieldX + (lane + 0.5) * this.laneW;
-    const palette = this.theme.id === 'survivor' ? this.theme.accents : [color, this.theme.accents[1]];
+    const palette = this.theme.id === 'survivor' ? this.theme.accents : [color, this.theme.fill];
     for (let i = 0; i < count; i++) {
       this.particles.push({
         x: x + (Math.random() - 0.5) * this.laneW * 0.6,

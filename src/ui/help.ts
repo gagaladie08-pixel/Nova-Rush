@@ -19,13 +19,16 @@ export function helpScreen(): Screen {
           <section class="card">
             <h3>Le principe</h3>
             <p>Choisis une démo ou importe ta musique (MP3, M4A, WAV). Nova Rush l’analyse et crée un parcours de tuiles sur quatre voies.
-            Touche chaque tuile au moment où elle atteint la ligne lumineuse.</p>
+            Touche les tuiles sombres : <strong>n’importe quelle tuile visible peut être touchée</strong>, dans l’ordre que tu veux.
+            La ligne lumineuse sert à la précision : touche une tuile quand son bas passe sur la ligne pour obtenir un Perfect+.
+            Toucher une zone vide n’est pas pénalisé.</p>
           </section>
           <section class="card">
             <h3>Les tuiles</h3>
             <ul>
               <li><strong>Courte</strong> : touche une fois quand elle atteint la ligne.</li>
-              <li><strong>Longue</strong> : touche au début, maintiens, puis relâche à la fin. Les points dépendent de la durée.
+              <li><strong>Longue</strong> : attrape-la quand tu veux (le début est jugé selon la position de son bas par rapport à la ligne), maintiens,
+                puis relâche quand son haut passe sur la ligne. Les points dépendent de la durée.
                 Relâchée trop tôt, elle compte comme un Great (50 points) et le combo repart à zéro, mais la partie continue.</li>
               <li><strong>Accord</strong> : plusieurs tuiles reliées à toucher ensemble, avec plusieurs doigts.</li>
             </ul>
@@ -33,10 +36,10 @@ export function helpScreen(): Screen {
           <section class="card">
             <h3>Jugements</h3>
             <table class="rules">
-              <tr><td class="j-pp">Perfect+</td><td>à ±25 ms de la ligne</td><td>150 × multiplicateur</td></tr>
-              <tr><td class="j-p">Perfect</td><td>jusqu’à ±70 ms</td><td>100</td></tr>
-              <tr><td class="j-g">Great</td><td>moins précis</td><td>50</td></tr>
-              <tr><td class="j-m">Raté</td><td>la tuile disparaît</td><td>fin de partie</td></tr>
+              <tr><td class="j-pp">Perfect+</td><td>sur la ligne (±25 ms)</td><td>150 × multiplicateur</td></tr>
+              <tr><td class="j-p">Perfect</td><td>tout près (±70 ms)</td><td>100</td></tr>
+              <tr><td class="j-g">Great</td><td>ailleurs à l’écran</td><td>50</td></tr>
+              <tr><td class="j-m">Raté</td><td>la tuile sort de l’écran par le bas</td><td>fin de partie</td></tr>
             </table>
           </section>
           <section class="card">
@@ -53,7 +56,8 @@ export function helpScreen(): Screen {
             <h3>Pendant la partie</h3>
             <p>Les cinq étoiles indiquent le temps écoulé dans le morceau (une par cinquième), pas ta performance.
             La pause est disponible à tout moment ; la reprise se fait au même instant après un compte à rebours.
-            Si le son te semble décalé, lance le test de synchronisation dans les paramètres.</p>
+            « trop tôt » ou « trop tard » s’affiche sous un Perfect ou un Great. Si le son te semble décalé, lance le test de synchronisation
+            dans les paramètres ; la calibration automatique corrige aussi doucement le décalage pendant les parties.</p>
           </section>
           <section class="card">
             <h3>Confidentialité</h3>
