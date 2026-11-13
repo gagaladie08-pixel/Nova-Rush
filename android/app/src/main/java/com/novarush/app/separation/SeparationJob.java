@@ -294,7 +294,8 @@ final class SeparationJob {
                     RawAudio.Writer wv = new RawAudio.Writer(voc44, 1);
                     RawAudio.Writer wa = new RawAudio.Writer(acc44, 1);
                     RawAudio.Writer ws = models.demucs != null ? new RawAudio.Writer(accSt, 2) : null) {
-                separateStream(r, models.sep, 15 * SR, SR, wv, wa, ws, (f) -> {
+                // Marge de 0,5 s autour de chaque bloc de 15 s (au lieu de 1 s) : 6 % de calcul en moins.
+                separateStream(r, models.sep, 15 * SR, SR / 2, wv, wa, ws, (f) -> {
                     if (SeparationService.gameActive) played[0] = true;
                     if (!checked[0] && f > 0.1 && !played[0]) {
                         // Vérifié une seule fois, hors partie (le mode léger fausserait la mesure).
@@ -413,17 +414,8 @@ final class SeparationJob {
                 RawAudio.Writer b = new RawAudio.Writer(out44[1], 1);
                 RawAudio.Writer o = new RawAudio.Writer(out44[2], 1)) {
             if (r.frames() > (long) MAX_BEAT_SECONDS * SR) throw new IllegalStateException("morceau trop long pour Demucs");
-            new DemucsSeparator(net).separate(r, new RawAudio.Writer[] {d, b, o}, 1e-4f, new DemucsSeparator.Progress() {
-                @Override
-                public boolean onProgress(double f) {
-                    return progress.onProgress(f);
-                }
-
-                @Override
-                public boolean paused() {
-                    return SeparationService.gameActive;
-                }
-            });
+            // Pendant une partie, Demucs ne s'arrête plus : il passe sur 2 fils (voir OrtNet).
+            new DemucsSeparator(net).separate(r, new RawAudio.Writer[] {d, b, o}, 1e-4f, progress::onProgress);
         }
     }
 

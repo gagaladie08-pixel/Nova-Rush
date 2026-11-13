@@ -162,7 +162,8 @@ public class SeparationService extends Service {
             while (true) {
                 JSONObject job = nextQueued();
                 if (job == null) break;
-                wl.acquire(120 * 60 * 1000L);
+                // Jusqu'à 6 h (limite Android d'un service de traitement) : le processeur ne s'endort pas en route.
+                wl.acquire(6 * 60 * 60 * 1000L);
                 runJob(job);
             }
         } finally {
@@ -252,6 +253,7 @@ public class SeparationService extends Service {
         final long t0 = SystemClock.elapsedRealtime();
         final long[] lastUi = {0};
         final double[] etaStart = {-1, 0};
+        final Diagnostics diag = new Diagnostics();
         final int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
         try (OrtModel model = new OrtModel(modelFile().getAbsolutePath(), threads)) {
             int nFft = model.metaInt("n_fft");
@@ -282,7 +284,8 @@ public class SeparationService extends Service {
                 }
             }
             final CrepePitch.OrtNet crepe = crepeNet;
-            File bpFile = optionalModel(BASIC_PITCH_ASSET, "basic_pitch");
+            final boolean full = job.optBoolean("full", false);
+            File bpFile = full ? optionalModel(BASIC_PITCH_ASSET, "basic_pitch") : null;
             BasicPitch.OrtNet bpNet = null;
             if (bpFile != null) {
                 try {
@@ -292,7 +295,7 @@ public class SeparationService extends Service {
                 }
             }
             final BasicPitch.OrtNet basicPitch = bpNet;
-            final File demucsFile = optionalModel(DEMUCS_ASSET, "demucs");
+            final File demucsFile = full ? optionalModel(DEMUCS_ASSET, "demucs") : null;
             SeparationJob.Models models = new SeparationJob.Models();
             models.sep = sep;
             models.beat = beats;
@@ -321,6 +324,7 @@ public class SeparationService extends Service {
                 }
             };
             SeparationJob.run(dir, models, (fraction, stage) -> {
+                diag.tick(stage);
                 String cid = cancelId;
                 if (cid != null && (cid.equals(id) || cid.equals("*"))) return false;
                 long now = SystemClock.elapsedRealtime();
@@ -371,6 +375,7 @@ public class SeparationService extends Service {
                 else j.remove(e[0]);
             }
             j.put("threads", threads);
+            j.put("diag", diag.toJson());
             JobStore.write(this, id, j);
             emit(id);
             notifyDone(title, true);
@@ -384,6 +389,15 @@ public class SeparationService extends Service {
             } else {
                 String msg = t instanceof TooSlowException ? "trop lent" : cancelled ? "annulé" : String.valueOf(t.getMessage());
                 JobStore.update(this, id, JobStore.ERROR, 0, msg, -1);
+                try {
+                    JSONObject e = JobStore.read(this, id);
+                    if (e != null) {
+                        e.put("diag", diag.toJson());
+                        JobStore.write(this, id, e);
+                    }
+                } catch (Exception ignored) {
+                    // diagnostic facultatif
+                }
                 if (!cancelled) notifyDone(title, false);
             }
             emit(id);

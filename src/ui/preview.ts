@@ -3,6 +3,7 @@ import { previewStart } from '../game/sections';
 import { cancelVoice, isVoiceAvailable, onVoiceChange, relaunchVoice, voiceLive } from '../analysis/voiceQueue';
 import { LEVEL_LABEL, type SongMeta } from '../game/types';
 import { db } from '../storage/db';
+import { settings } from '../storage/settings';
 import { coverFor } from './covers';
 import { confirmDialog, esc, formatScore, formatTime, toast } from './dom';
 import { startImport } from './importer';
@@ -58,6 +59,7 @@ export function previewScreen(song: SongMeta): Screen {
                 : 'Mélodie peu nette : le parcours suit les battements et les accents.'
           }</p>
           <p class="muted preview-voice"></p>
+          ${song.voice?.diag?.stages ? `<p class="muted preview-diag">${diagText(song)}</p>` : ''}
           <div class="preview-records"></div>
           ${
             song.hasAudio
@@ -120,7 +122,9 @@ export function previewScreen(song: SongMeta): Screen {
       relaunchBtn?.addEventListener('click', async () => {
         const ok = await confirmDialog(
           'Relancer l’analyse avancée ?',
-          'Voix, rythme, batterie, basse et instruments seront de nouveau analysés sur l’appareil (cela peut prendre plusieurs dizaines de minutes). Le parcours actuel reste jouable pendant ce temps.',
+          settings.get().fullAnalysis
+            ? 'Analyse complète : voix, rythme, batterie, basse et instruments seront de nouveau analysés sur l’appareil (c’est le plus long). Le parcours actuel reste jouable pendant ce temps.'
+            : 'Voix, rythme et mélodie seront de nouveau analysés sur l’appareil. (L’analyse complète avec la batterie et les instruments s’active dans les Options.) Le parcours actuel reste jouable pendant ce temps.',
           'Relancer',
         );
         if (!ok) return;
@@ -194,4 +198,30 @@ function conductorText(song: SongMeta): string {
   const parts = leads.map((l) => LEAD_TEXT[l]).filter(Boolean);
   const extra = song.chart.crashes?.length ? ' Accords appuyés sur les coups de cymbale.' : '';
   return `Analyse complète par les IA de l’appareil : les tuiles suivent ${parts.join(', ')}.${extra}`;
+}
+
+const STAGE_TEXT: Record<string, string> = {
+  decode: 'préparation',
+  beats: 'rythme',
+  separate: 'voix',
+  pitch: 'mélodie',
+  finish: 'pistes',
+  demucs: 'batterie et instruments',
+  tracks: 'pistes',
+  notes: 'notes',
+};
+
+/** Durées de la dernière analyse, pour repérer ce qui est lent sur l'appareil. */
+function diagText(song: SongMeta): string {
+  const d = song.voice!.diag!;
+  const merged = new Map<string, number>();
+  for (const [k, sec] of Object.entries(d.stages ?? {})) {
+    const label = STAGE_TEXT[k] ?? k;
+    merged.set(label, (merged.get(label) ?? 0) + sec);
+  }
+  const fmt = (s: number) => (s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`);
+  const total = [...merged.values()].reduce((a, b) => a + b, 0);
+  const parts = [...merged].filter(([, s]) => s >= 1).map(([k, s]) => `${k} ${fmt(s)}`);
+  const big = d.big !== undefined ? ` · cœurs rapides ${Math.round(d.big * 100)} %` : '';
+  return `Dernière analyse : ${fmt(total)} (${parts.join(' · ')})${big}.`;
 }

@@ -53,6 +53,12 @@ export function settingsScreen(): Screen {
               </label>
             </section>
             <section class="card">
+              <label class="switch-row">
+                <span><strong>Analyse complète des morceaux</strong><br><span class="muted">En plus de la voix, l’IA analyse aussi la batterie, la basse et les instruments : accords sur les cymbales, intros et solos suivis. Environ deux fois plus long. S’applique aux prochains imports (ou au bouton « Relancer l’analyse avancée »).</span></span>
+                <input type="checkbox" data-full ${s.fullAnalysis ? 'checked' : ''} />
+              </label>
+            </section>
+            <section class="card">
               <h3>Synchronisation audio</h3>
               <p class="muted">Compense le délai du son et de l’écran tactile de ton appareil.</p>
               <div class="offset-row">
@@ -88,6 +94,9 @@ export function settingsScreen(): Screen {
         );
         root.querySelector<HTMLInputElement>('[data-reduce]')!.addEventListener('change', (e) =>
           settings.update({ reduceMotion: (e.target as HTMLInputElement).checked }),
+        );
+        root.querySelector<HTMLInputElement>('[data-full]')!.addEventListener('change', (e) =>
+          settings.update({ fullAnalysis: (e.target as HTMLInputElement).checked }),
         );
         root.querySelector<HTMLInputElement>('[data-autocal]')!.addEventListener('change', (e) =>
           settings.update({ autoCalibrate: (e.target as HTMLInputElement).checked }),

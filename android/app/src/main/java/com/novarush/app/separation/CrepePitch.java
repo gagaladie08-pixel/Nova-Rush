@@ -97,7 +97,7 @@ final class CrepePitch {
             so.setIntraOpNumThreads(threads);
             so.setInterOpNumThreads(1);
             so.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
-            so.addConfigEntry("session.intra_op.allow_spinning", "0");
+            // Attente active entre les couches (étape courte) : plus rapide sur téléphone.
             session = env.createSession(path, so);
             input = session.getInputNames().iterator().next();
         }

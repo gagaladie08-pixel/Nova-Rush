@@ -91,6 +91,8 @@ public class SeparationPlugin extends Plugin {
             JSONObject j = new JSONObject();
             j.put("id", id);
             j.put("title", title);
+            // Analyse complète : batterie, basse et instruments (Demucs + Basic Pitch), environ deux fois plus longue.
+            j.put("full", Boolean.TRUE.equals(call.getBoolean("full", false)));
             j.put("state", JobStore.UPLOADING);
             j.put("progress", 0);
             j.put("createdAt", System.currentTimeMillis());

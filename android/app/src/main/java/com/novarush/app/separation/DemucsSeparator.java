@@ -31,7 +31,8 @@ final class DemucsSeparator {
     static final int SOURCES = 4; // drums, bass, other, vocals
     /** Sources gardées : batterie, basse, autres. */
     static final int KEEP = 3;
-    static final int STRIDE = (int) (0.75 * SEGMENT);
+    /** Segments bout à bout (sans recouvrement) : 25 % de calcul en moins, différence négligeable pour le jeu. */
+    static final int STRIDE = SEGMENT;
     private static final float NORM = (float) Math.sqrt(NFFT);
 
     /** Réponse du réseau : spectre (1,S,4,BINS,LE) et onde (1,S,2,SEGMENT), en lecture absolue. */
@@ -46,11 +47,6 @@ final class DemucsSeparator {
 
     interface Progress {
         boolean onProgress(double fraction);
-
-        /** true : attendre avant le segment suivant (une partie est en cours). */
-        default boolean paused() {
-            return false;
-        }
     }
 
     private final Net net;
@@ -221,10 +217,6 @@ final class DemucsSeparator {
         final long segments = (n + STRIDE - 1) / STRIDE;
         long index = 0;
         for (long off = 0; off < n; off += STRIDE) {
-            while (progress != null && progress.paused()) {
-                if (!progress.onProgress((double) index / segments)) throw new UvrSeparator.Cancelled();
-                Thread.sleep(1000);
-            }
             final int length = (int) Math.min(SEGMENT, n - off);
             final int delta = SEGMENT - length;
             final long start = off - delta / 2;
@@ -277,6 +269,10 @@ final class DemucsSeparator {
     static final class OrtNet implements Net, AutoCloseable {
         private final OrtEnvironment env = OrtEnvironment.getEnvironment();
         private final OrtSession session;
+        /** Session légère (2 fils, sans attente active) pendant une partie, pour garder le jeu fluide. */
+        private OrtSession light;
+        private final String path;
+        private final int threads;
         private final String mixName;
         private final String specName;
         private final String outSpecName;
@@ -292,16 +288,9 @@ final class DemucsSeparator {
         private final OnnxTensor specT;
 
         OrtNet(String path, int threads) throws Exception {
-            OrtSession.SessionOptions so = new OrtSession.SessionOptions();
-            so.setIntraOpNumThreads(threads);
-            so.setInterOpNumThreads(1);
-            so.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
-            so.addConfigEntry("session.intra_op.allow_spinning", "0");
-            // Mémoire : sans réserve (arena) ni plan pré-alloué, la mémoire de chaque couche est rendue
-            // aussitôt (pic bien plus bas, mesuré en CI ; vitesse quasi identique).
-            so.setCPUArenaAllocator(false);
-            so.setMemoryPatternOptimization(false);
-            session = env.createSession(path, so);
+            this.path = path;
+            this.threads = threads;
+            session = env.createSession(path, options(threads, true));
             Iterator<String> in = session.getInputNames().iterator();
             String a = in.next(), b = in.next();
             mixName = session.getInputNames().contains("mix") ? "mix" : a;
@@ -318,6 +307,26 @@ final class DemucsSeparator {
             specBuf = direct(4 * BINS * LE);
             mixT = OnnxTensor.createTensor(env, mixBuf, new long[] {1, 2, SEGMENT});
             specT = OnnxTensor.createTensor(env, specBuf, new long[] {1, 4, BINS, LE});
+        }
+
+        private static OrtSession.SessionOptions options(int threads, boolean spinning) throws Exception {
+            OrtSession.SessionOptions so = new OrtSession.SessionOptions();
+            so.setIntraOpNumThreads(threads);
+            so.setInterOpNumThreads(1);
+            so.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
+            // Attente active entre les couches (comme les mesures en CI) : plus rapide sur téléphone.
+            if (!spinning) so.addConfigEntry("session.intra_op.allow_spinning", "0");
+            // Mémoire : sans réserve (arena) ni plan pré-alloué, la mémoire de chaque couche est rendue
+            // aussitôt (pic 2,5 Go au lieu de 5,5 Go, mesuré en CI ; vitesse quasi identique).
+            so.setCPUArenaAllocator(false);
+            so.setMemoryPatternOptimization(false);
+            return so;
+        }
+
+        private OrtSession current() throws Exception {
+            if (!SeparationService.gameActive || threads <= 2) return session;
+            if (light == null) light = env.createSession(path, options(2, false));
+            return light;
         }
 
         private static FloatBuffer direct(int floats) {
@@ -338,7 +347,7 @@ final class DemucsSeparator {
             specBuf.rewind();
             inputs.put(mixName, mixT);
             inputs.put(specName, specT);
-            try (OrtSession.Result r = session.run(inputs, pinned)) {
+            try (OrtSession.Result r = current().run(inputs, pinned)) {
                 sink.accept(specOut, waveOut);
             }
         }
@@ -350,6 +359,7 @@ final class DemucsSeparator {
                 waveOutT.close();
                 mixT.close();
                 specT.close();
+                if (light != null) light.close();
                 session.close();
             } catch (Exception ignored) {
                 // rien de plus

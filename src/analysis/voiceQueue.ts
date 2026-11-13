@@ -12,6 +12,7 @@
  */
 import type { SongMeta, VoiceAnalysis } from '../game/types';
 import { db } from '../storage/db';
+import { settings } from '../storage/settings';
 import { ANALYSIS_RATE, chartFromStoredSummary, decodeForAnalysis, runAnalysisFull } from './client';
 import { CONDUCTOR_VERSION } from './conductor';
 import { parseBeats, parsePitch } from './beatsFile';
@@ -96,10 +97,11 @@ export async function enqueueVoice(song: SongMeta, blob: Blob): Promise<boolean>
       notifAsked = true;
       await VoiceSeparation.requestNotifications().catch(() => {});
     }
-    await VoiceSeparation.createJob({ id: song.id, title: song.title });
+    const full = settings.get().fullAnalysis;
+    await VoiceSeparation.createJob({ id: song.id, title: song.title, full });
     await uploadInput(song.id, blob);
     live.set(song.id, { state: 'queued', progress: 0 });
-    await setSongVoice(song.id, { state: 'queued' });
+    await setSongVoice(song.id, { state: 'queued', ...(full ? { full } : {}) });
     await VoiceSeparation.enqueue({ id: song.id });
     emit();
     return true;
@@ -180,7 +182,7 @@ async function handle(job: NativeJob): Promise<void> {
   }
   if (job.state === 'error') {
     live.delete(id);
-    await failVoice(id, job.error ?? 'erreur');
+    await failVoice(id, job.error ?? 'erreur', job);
     await VoiceSeparation.remove({ id }).catch(() => {});
     emit();
     return;
@@ -196,9 +198,15 @@ async function handle(job: NativeJob): Promise<void> {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Échec : le parcours en place (classique, ou premier parcours sur la voix) est gardé. */
-async function failVoice(id: string, reason: string) {
-  const stage = (await db.getSong(id))?.voice?.stage;
-  await setSongVoice(id, { state: 'failed', reason, ...(stage ? { stage } : {}) });
+async function failVoice(id: string, reason: string, job?: NativeJob) {
+  const v = (await db.getSong(id))?.voice;
+  await setSongVoice(id, {
+    state: 'failed',
+    reason,
+    ...(v?.stage ? { stage: v.stage } : {}),
+    ...(v?.full ? { full: true } : {}),
+    ...(job?.diag ? { diag: job.diag } : {}),
+  });
 }
 const partials = new Set<string>();
 
@@ -251,7 +259,7 @@ async function finishPartial(job: NativeJob): Promise<void> {
     const fresh = await db.getSong(id);
     const now = live.get(id);
     if (!fresh || !fresh.hasAudio || !now || now.state === 'finishing') return;
-    await db.putSong({ ...fresh, chart, level: chart.level, voice: { state: 'running', stage: 1 } });
+    await db.putSong({ ...fresh, chart, level: chart.level, voice: { state: 'running', stage: 1, full: true } });
     emit();
     const { toast } = await import('../ui/dom');
     toast(`« ${fresh.title} » : premier parcours prêt (suit la voix) — batterie et instruments en cours d'analyse`);
@@ -303,6 +311,8 @@ async function finish(job: NativeJob): Promise<void> {
       voice: {
         state: 'done',
         seconds: job.seconds ? Math.round(job.seconds) : undefined,
+        ...(job.full ? { full: true } : {}),
+        ...(job.diag ? { diag: job.diag } : {}),
         ...(lagSec !== undefined ? { lagSec: Math.round(lagSec * 1000) / 1000 } : {}),
       },
     });
@@ -312,7 +322,7 @@ async function finish(job: NativeJob): Promise<void> {
     toast(`« ${fresh.title} » : parcours mis à jour${chart.source === 'voice' ? ' (suit la voix)' : ''}`);
   } catch (e) {
     live.delete(id);
-    await failVoice(id, e instanceof Error ? e.message : 'erreur');
+    await failVoice(id, e instanceof Error ? e.message : 'erreur', job);
     emit();
   } finally {
     await VoiceSeparation.remove({ id }).catch(() => {});

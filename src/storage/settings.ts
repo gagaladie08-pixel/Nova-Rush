@@ -9,10 +9,12 @@ export interface Settings {
   audioOffsetMs: number;
   /** Corrige doucement le décalage selon la façon de taper du joueur. */
   autoCalibrate: boolean;
+  /** Analyse avancée complète : batterie, basse et instruments en plus de la voix (environ deux fois plus longue). */
+  fullAnalysis: boolean;
 }
 
 const KEY = 'nova-rush.settings';
-const DEFAULTS: Settings = { menuTheme: 'cyber', nextGameTheme: null, reduceMotion: false, audioOffsetMs: 0, autoCalibrate: true };
+const DEFAULTS: Settings = { menuTheme: 'cyber', nextGameTheme: null, reduceMotion: false, audioOffsetMs: 0, autoCalibrate: true, fullAnalysis: false };
 
 let current: Settings = load();
 const listeners = new Set<(s: Settings) => void>();

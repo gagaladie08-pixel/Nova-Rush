@@ -1,6 +1,6 @@
 """Demucs par segments, en flux (modèle exact du portage Java DemucsSeparator).
 
-Même calcul que ref.demucs_separate (recouvrement 0,25, poids triangulaires),
+Même calcul que ref.demucs_separate (recouvrement réglable, 0 sur le téléphone),
 mais sans garder tout le morceau en mémoire : après chaque segment, la partie
 que plus aucun segment ne touchera est écrite. Ne garde que batterie, basse et
 autres instruments, en mono.
@@ -80,7 +80,8 @@ def main() -> None:
         name = os.path.basename(path).replace(".acc44.f32", "")
         x = np.fromfile(path, dtype="<f4").astype(np.float64).reshape(-1, 2).T
         t = time.time()
-        y = separate_stream(lambda c: ref.demucs_segment(sess, c), x, silent=1e-4)
+        # Comme le téléphone : segments bout à bout (sans recouvrement).
+        y = separate_stream(lambda c: ref.demucs_segment(sess, c), x, overlap=0.0, silent=1e-4)
         dt = time.time() - t
         dur = x.shape[1] / 44100
         for j, stem in enumerate(("drums", "bass", "other")):

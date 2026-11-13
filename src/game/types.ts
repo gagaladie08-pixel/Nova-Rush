@@ -118,6 +118,10 @@ export interface VoiceAnalysis {
   lagSec?: number;
   /** 1 : premier parcours (voix) déjà en place, instruments encore en analyse. */
   stage?: 1;
+  /** Analyse complète demandée (batterie, basse, instruments). */
+  full?: boolean;
+  /** Mesures de la dernière analyse sur l'appareil. */
+  diag?: { stages?: Record<string, number>; big?: number; cores?: number };
 }
 
 export interface SongRecord {

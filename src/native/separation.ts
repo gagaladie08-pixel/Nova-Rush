@@ -24,12 +24,22 @@ export interface NativeJob {
   seconds?: number;
   /** Voix, accompagnement, temps et hauteur prêts ; instruments (Demucs) encore en cours. */
   partial?: boolean;
+  /** Analyse complète (batterie, basse, instruments). */
+  full?: boolean;
+  /** Mesures : secondes par étape, part du calcul sur les cœurs rapides. */
+  diag?: AnalysisDiag;
+}
+
+export interface AnalysisDiag {
+  stages?: Record<string, number>;
+  big?: number;
+  cores?: number;
 }
 
 interface VoiceSeparationPlugin {
   isAvailable(): Promise<{ available: boolean; cores: number }>;
   requestNotifications(): Promise<{ granted: boolean }>;
-  createJob(o: { id: string; title: string }): Promise<void>;
+  createJob(o: { id: string; title: string; full?: boolean }): Promise<void>;
   appendInput(o: { id: string; data: string }): Promise<void>;
   enqueue(o: { id: string }): Promise<void>;
   list(): Promise<{ jobs: NativeJob[] }>;
