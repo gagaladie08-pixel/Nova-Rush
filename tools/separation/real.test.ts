@@ -1,6 +1,6 @@
 /**
  * Analyse de vraies chansons séparées par la CI (tools/separation/stems.py).
- * Ignoré hors CI (pas de pistes).
+ * Ignoré hors CI (pas de pistes). Compare aussi le rythme de Beat This! et la structure.
  */
 import { appendFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
