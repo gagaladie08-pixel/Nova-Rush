@@ -2,6 +2,7 @@ import { fft, hann, magnitudeAt, median, midiToHz, movingAverage, percentile, rn
 import { LEVEL_PARAMS, computeStats, levelFromScore } from './difficulty';
 import { inSpans, trackVoice } from './voice';
 import { detectStructure } from './structure';
+import type { ExternalPitch } from './beatsFile';
 import type { Chart, Lane, Level, Note, Section } from '../game/types';
 
 export type ProgressFn = (p: number, label: string) => void;
@@ -866,6 +867,7 @@ export function extractFeaturesVoice(
   sr: number,
   progress: ProgressFn = () => {},
   rhythm?: Rhythm,
+  pitch?: ExternalPitch,
 ): VoiceFeatures {
   // Rythme : l'accompagnement seul donne une pulsation plus propre (sauf a cappella).
   const rhythmSrc = rmsOf(accomp) > rmsOf(mix) * 0.12 ? accomp : mix;
@@ -883,7 +885,7 @@ export function extractFeaturesVoice(
     return none;
   }
   progress(0.62, 'Suivi de la mélodie chantée…');
-  const voice = trackVoice(vocals, sr, vOnsets, (p) => progress(0.62 + 0.26 * p, 'Suivi de la mélodie chantée…'));
+  const voice = trackVoice(vocals, sr, vOnsets, (p) => progress(0.62 + 0.26 * p, 'Suivi de la mélodie chantée…'), pitch);
   if (voice.notes.length < 12 || voice.ratio < 0.04) return { ...none, voiceRatio: voice.ratio };
 
   progress(0.89, 'Construction du parcours…');
@@ -1024,10 +1026,12 @@ export function analyzeSongWithVoice(
   seed: number,
   progress: ProgressFn = () => {},
   rhythm?: Rhythm,
+  pitch?: ExternalPitch,
 ): Chart {
-  const fv = extractFeaturesVoice(mix, vocals, accomp, sr, progress, rhythm);
+  const fv = extractFeaturesVoice(mix, vocals, accomp, sr, progress, rhythm, pitch);
   const f = withStructure(fv, mix, sr, progress, fv.followsVoice ? fv.voiceSpans : undefined);
   return finishChart(f, seed, progress, {
+    ...(fv.followsVoice ? { pitchSource: pitch ? ('ai' as const) : ('classic' as const) } : {}),
     voiceRatio: Math.round(f.voiceRatio * 100) / 100,
     ...(f.followsVoice ? { source: 'voice' as const } : {}),
   });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { analyzeSongWithVoice, onsetEnvelope, pickOnsets } from '../src/analysis/analyzer';
 import { percentile } from '../src/analysis/dsp';
 import { inSpans, trackVoice } from '../src/analysis/voice';
+import type { ExternalPitch } from '../src/analysis/beatsFile';
 
 const SR = 22050;
 
@@ -186,5 +187,59 @@ describe('suivi de la voix', () => {
     expect(sung.length).toBeGreaterThan(30);
     expect(inBridge.length).toBeGreaterThan(3);
     expect(longs.length).toBeGreaterThan(0);
+  });
+
+  it('utilise la hauteur de l’IA CREPE quand elle est fournie', () => {
+    // Piste « CREPE » simulée : vraie hauteur (avec vibrato) et confiance élevée
+    // pendant le chant, quelques erreurs d'octave peu sûres, rien de fiable ailleurs.
+    let r = 11;
+    const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+    const n = Math.floor(s.mix.length / SR / 0.01) + 1;
+    const f0 = new Float32Array(n);
+    const conf = new Float32Array(n);
+    for (let k = 0; k < n; k++) {
+      const t = k * 0.01;
+      const i = s.truth.findIndex((x, j) => {
+        const next = s.truth[j + 1];
+        const tied = next && next.legato && Math.abs(next.t - (x.t + x.dur)) < 1e-6;
+        return t >= x.t + 0.01 && t < x.t + x.dur - (tied ? 0 : 0.07);
+      });
+      if (i < 0) {
+        f0[k] = 60 + rnd() * 40; // reste de basse, peu sûr
+        conf[k] = 0.15 + 0.2 * rnd();
+        continue;
+      }
+      const nt = s.truth[i];
+      const u = t - nt.t;
+      const m = nt.midi + (u > 0.25 ? 0.25 * Math.sin(2 * Math.PI * 5.5 * (u - 0.25)) : 0);
+      const octave = rnd() < 0.03;
+      f0[k] = 440 * Math.pow(2, (m - 69) / 12) / (octave ? 2 : 1);
+      conf[k] = octave ? 0.55 : 0.8 + 0.15 * rnd();
+    }
+    const ext: ExternalPitch = { t0: 0, hopT: 0.01, f0, conf };
+    const env = onsetEnvelope(s.vocals, SR, () => {});
+    const odf = new Float32Array(env.flux.length);
+    for (let i = 1; i < odf.length - 1; i++) odf[i] = (env.flux[i - 1] + 2 * env.flux[i] + env.flux[i + 1]) / 4;
+    const p95 = percentile(odf, 0.95);
+    for (let i = 0; i < odf.length; i++) odf[i] /= p95;
+    const v = trackVoice(s.vocals, SR, pickOnsets(odf, env.hopT, env.t0), () => {}, ext);
+    let matched = 0;
+    let pitchOk = 0;
+    for (const tn of s.truth) {
+      let best = v.notes[0];
+      for (const x of v.notes) if (Math.abs(x.t - tn.t) < Math.abs(best.t - tn.t)) best = x;
+      if (Math.abs(best.t - tn.t) >= 0.06) continue;
+      matched++;
+      if (best.midi === tn.midi) pitchOk++;
+    }
+    console.log(`CREPE : rappel ${(matched / s.truth.length).toFixed(3)}, précision ${(matched / v.notes.length).toFixed(3)}, hauteur juste ${(pitchOk / matched).toFixed(3)}`);
+    expect(matched / s.truth.length).toBeGreaterThan(0.85);
+    expect(matched / v.notes.length).toBeGreaterThan(0.8);
+    expect(pitchOk / matched).toBeGreaterThan(0.95);
+    expect(inSpans(v.spans, s.phrases[4] - 8 * s.beat)).toBe(false);
+    // Le parcours complet accepte la piste et l'indique.
+    const chart = analyzeSongWithVoice(s.mix, s.vocals, s.accomp, SR, 7, () => {}, undefined, ext);
+    expect(chart.source).toBe('voice');
+    expect(chart.pitchSource).toBe('ai');
   });
 });

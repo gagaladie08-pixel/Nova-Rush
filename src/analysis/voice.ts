@@ -1,4 +1,5 @@
 import { fft, percentile } from './dsp';
+import type { ExternalPitch } from './beatsFile';
 
 /**
  * Suivi de la voix sur la piste vocale isolée (séparation de sources).
@@ -139,6 +140,44 @@ export function pitchTrack(x: Float32Array, sr: number, progress: Progress = () 
   return { midi, ap, rms, hopT, frames, ref };
 }
 
+/** Confiance minimale de CREPE pour considérer une trame comme chantée. */
+export const CREPE_VOICED = 0.5;
+
+/**
+ * Même sortie que pitchTrack, mais la hauteur vient de l'IA CREPE (plus
+ * robuste : peu d'erreurs d'octave, moins sensible aux restes d'instruments).
+ * L'énergie (portes de silence, creux entre syllabes) reste mesurée ici.
+ */
+export function pitchFromExternal(x: Float32Array, sr: number, ext: ExternalPitch, progress: Progress = () => {}) {
+  const hopT = HOP / sr;
+  const frames = Math.max(0, Math.floor((x.length - WIN) / HOP) + 1);
+  const midi = new Float32Array(frames).fill(NaN);
+  const ap = new Float32Array(frames).fill(1);
+  const rms = new Float32Array(frames);
+  const cum = new Float64Array(x.length + 1);
+  for (let i = 0; i < x.length; i++) cum[i + 1] = cum[i] + x[i] * x[i];
+  for (let f = 0; f < frames; f++) {
+    const a = f * HOP;
+    rms[f] = Math.sqrt((cum[a + WIN] - cum[a]) / WIN);
+  }
+  const ref = percentile(rms.filter((_, i) => i % 3 === 0), 0.95);
+  const gate = Math.max(ref * 0.06, 1e-4);
+  const n = ext.f0.length;
+  for (let f = 0; f < frames; f++) {
+    if (rms[f] < gate) continue;
+    const t = f * hopT + WIN / 2 / sr; // centre de la trame
+    const k = Math.round((t - ext.t0) / ext.hopT);
+    if (k < 0 || k >= n) continue;
+    const c = ext.conf[k];
+    const hz = ext.f0[k];
+    if (!(c >= CREPE_VOICED) || !(hz >= FMIN && hz <= FMAX)) continue;
+    midi[f] = 69 + 12 * Math.log2(hz / 440);
+    ap[f] = 1 - c;
+  }
+  progress(1);
+  return { midi, ap, rms, hopT, frames, ref };
+}
+
 /** Corrige les sauts d'octave isolés et lisse légèrement (médiane 5 trames). */
 function cleanPitch(midi: Float32Array): Float32Array {
   const out = new Float32Array(midi);
@@ -175,8 +214,9 @@ export function trackVoice(
   sr: number,
   onsets: { t: number; strength: number }[],
   progress: Progress = () => {},
+  ext?: ExternalPitch,
 ): VoiceTrack {
-  const pt = pitchTrack(vocals, sr, progress);
+  const pt = ext ? pitchFromExternal(vocals, sr, ext, progress) : pitchTrack(vocals, sr, progress);
   const { hopT, frames } = pt;
   const midi = cleanPitch(pt.midi);
   const center = WIN / 2 / sr; // la trame f est centrée sur f·hop + WIN/2

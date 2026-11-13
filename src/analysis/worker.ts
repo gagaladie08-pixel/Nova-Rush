@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { alignStems } from './align';
 import { AnalysisError, analyzeSong, analyzeSongWithVoice, type Rhythm } from './analyzer';
+import type { ExternalPitch } from './beatsFile';
 
 export interface AnalyzeRequest {
   samples: Float32Array;
@@ -11,10 +12,12 @@ export interface AnalyzeRequest {
   accomp?: Float32Array;
   /** Temps de l'IA Beat This!, sur l'horloge des pistes séparées. */
   rhythm?: Rhythm;
+  /** Hauteur de la voix par l'IA CREPE, sur l'horloge des pistes séparées. */
+  pitch?: ExternalPitch;
 }
 
 self.onmessage = (e: MessageEvent<AnalyzeRequest>) => {
-  const { samples, sampleRate, seed, vocals, accomp, rhythm } = e.data;
+  const { samples, sampleRate, seed, vocals, accomp, rhythm, pitch } = e.data;
   try {
     let last = 0;
     const progress = (p: number, label: string) => {
@@ -31,7 +34,8 @@ self.onmessage = (e: MessageEvent<AnalyzeRequest>) => {
         beats: rhythm.beats.map((t) => t - a.lagSec),
         downbeats: rhythm.downbeats.map((t) => t - a.lagSec),
       };
-      const chart = analyzeSongWithVoice(samples, a.vocals, a.accomp, sampleRate, seed, progress, r);
+      const p = pitch && { ...pitch, t0: pitch.t0 - a.lagSec };
+      const chart = analyzeSongWithVoice(samples, a.vocals, a.accomp, sampleRate, seed, progress, r, p);
       self.postMessage({ type: 'done', chart, lagSec: a.lagSec });
     } else {
       self.postMessage({ type: 'done', chart: analyzeSong(samples, sampleRate, seed, progress, rhythm) });

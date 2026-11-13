@@ -55,7 +55,8 @@ jobs:
       # Modèles d'IA open source embarqués dans l'APK (l'analyse se fait
       # entièrement sur le téléphone), convertis et vérifiés par ai-models.yml :
       # - voix : UVR-MDX (Apache 2.0, via sherpa-onnx), poids en float16 ;
-      # - temps et mesures : Beat This! « final » (MIT), poids int8.
+      # - temps et mesures : Beat This! « final » (MIT), poids int8 ;
+      # - hauteur de la voix : CREPE « tiny » (MIT, via onnxcrepe).
       - name: Modèles d'IA
         run: |
           set -e
@@ -64,10 +65,12 @@ jobs:
           mkdir -p $A/separation $A/ai
           curl -fsSL --retry 3 -o $A/separation/model.onnx $R/uvr_1_9703.onnx
           curl -fsSL --retry 3 -o $A/ai/beat_this.onnx $R/beat_this_final0.int8.onnx
+          curl -fsSL --retry 3 -o $A/ai/crepe.onnx $R/crepe_tiny.onnx
           curl -fsSL --retry 3 -o /tmp/SHA256SUMS $R/SHA256SUMS
-          (cd /tmp && grep -E ' (uvr_1_9703|beat_this_final0.int8).onnx$' SHA256SUMS > want.txt)
+          (cd /tmp && grep -E ' (uvr_1_9703|beat_this_final0.int8|crepe_tiny).onnx$' SHA256SUMS > want.txt)
           echo "$(awk '/uvr_1_9703/{print $1}' /tmp/want.txt)  $A/separation/model.onnx" | sha256sum -c
           echo "$(awk '/beat_this_final0.int8/{print $1}' /tmp/want.txt)  $A/ai/beat_this.onnx" | sha256sum -c
+          echo "$(awk '/crepe_tiny/{print $1}' /tmp/want.txt)  $A/ai/crepe.onnx" | sha256sum -c
           ls -la $A/separation $A/ai
 
       - name: Tests Java (FFT, STFT, découpage, rééchantillonnage)

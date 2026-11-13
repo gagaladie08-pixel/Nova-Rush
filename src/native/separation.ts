@@ -13,6 +13,8 @@ export interface NativeJob {
   accomp?: string;
   /** Temps et mesures de l'IA Beat This! (float32 : nb, nd, temps…, premiers temps…). */
   beats?: string;
+  /** Hauteur de la voix par l'IA CREPE (float32 : n, f0…, confiance…). */
+  pitch?: string;
   sampleRate?: number;
   seconds?: number;
 }

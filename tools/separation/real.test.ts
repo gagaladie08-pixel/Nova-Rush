@@ -9,6 +9,7 @@ import { analyzeSong, analyzeSongWithVoice, onsetEnvelope, pickOnsets } from '..
 import { percentile } from '../../src/analysis/dsp';
 import { trackVoice } from '../../src/analysis/voice';
 import { parseBeats } from '../../src/analysis/beatsFile';
+import { parsePitch } from '../../src/analysis/beatsFile';
 
 const DIR = join(process.env.SEP_DATA ?? '/nonexistent', 'stems');
 const SR = 22050;
@@ -98,12 +99,27 @@ describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
       const beatsFile = join(DIR, `${name}.beats.f32`);
       const rhythm = existsSync(beatsFile) ? parseBeats(read(name, 'beats')) : undefined;
       const ai = rhythm ? analyzeSongWithVoice(mix, voc, acc, SR, 1, () => {}, rhythm) : undefined;
+      const pitchFile = join(DIR, `${name}.pitch.f32`);
+      const ext = existsSync(pitchFile) ? parsePitch(read(name, 'pitch')) : undefined;
+      const ai2 = ext ? analyzeSongWithVoice(mix, voc, acc, SR, 1, () => {}, rhythm, ext) : undefined;
 
       const env = onsetEnvelope(voc, SR, () => {});
       const odf = env.flux.slice();
       const p95 = percentile(odf, 0.95) || 1;
       for (let i = 0; i < odf.length; i++) odf[i] /= p95;
-      const vt = trackVoice(voc, SR, pickOnsets(odf, env.hopT, env.t0));
+      const vOn = pickOnsets(odf, env.hopT, env.t0);
+      const vt = trackVoice(voc, SR, vOn);
+      const vc = ext ? trackVoice(voc, SR, vOn, () => {}, ext) : undefined;
+      /** Sauts d'au moins une octave entre notes voisines (souvent des erreurs). */
+      const jumps = (ns: { midi: number; t: number; dur: number }[]) => {
+        let j = 0;
+        for (let i = 1; i < ns.length; i++) if (ns[i].t - (ns[i - 1].t + ns[i - 1].dur) < 0.3 && Math.abs(ns[i].midi - ns[i - 1].midi) >= 11) j++;
+        return `${j}/${Math.max(1, ns.length - 1)}`;
+      };
+      const range = (ns: { midi: number }[]) => {
+        const m = ns.map((n) => n.midi).sort((a, b) => a - b);
+        return `${m[Math.floor(m.length * 0.05)]}–${m[Math.floor(m.length * 0.95)]}`;
+      };
       const durs = vt.notes.map((n) => n.dur).sort((a, b) => a - b);
       const midis = vt.notes.map((n) => n.midi).sort((a, b) => a - b);
       // Part des tuiles posées sur une note chantée (±70 ms), pendant le chant.
@@ -128,6 +144,11 @@ describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
               `refrains : ${refrainMotif(ai)}\n` +
               `détail : ${refrainDump(ai, vt.notes)}\n`
             : 'Beat This! : pas de temps\n') +
+          (vc && ai2
+            ? `CREPE : ${vc.notes.length} notes (YIN ${vt.notes.length}), hauteurs ${range(vc.notes)} (YIN ${range(vt.notes)}), ` +
+              `sauts d'octave ${jumps(vc.notes)} (YIN ${jumps(vt.notes)}), part chantée ${(vc.ratio * 100).toFixed(0)} %\n` +
+              `voix + Beat This! + CREPE : ${fmt(ai2)}\nrefrains (CREPE) : ${refrainMotif(ai2)}\n`
+            : 'CREPE : pas de hauteur\n') +
           `premières notes : ${vt.notes
             .slice(0, 16)
             .map((n) => `${n.t.toFixed(2)}/${n.midi}/${n.dur.toFixed(2)}`)

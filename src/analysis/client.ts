@@ -1,5 +1,6 @@
 import type { Chart } from '../game/types';
 import { hashString } from './dsp';
+import type { ExternalPitch } from './beatsFile';
 
 export class ImportError extends Error {}
 
@@ -33,6 +34,7 @@ export function runAnalysis(
   signal?: AbortSignal,
   stems?: { vocals: Float32Array; accomp: Float32Array },
   rhythm?: { beats: number[]; downbeats: number[] },
+  pitch?: ExternalPitch,
 ): Promise<Chart> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
@@ -57,6 +59,7 @@ export function runAnalysis(
     };
     const transfer: Transferable[] = [samples.buffer];
     if (stems) transfer.push(stems.vocals.buffer, stems.accomp.buffer);
-    worker.postMessage({ samples, sampleRate: ANALYSIS_RATE, seed: hashString(seedKey), ...stems, rhythm }, transfer);
+    if (pitch) transfer.push(pitch.f0.buffer, pitch.conf.buffer);
+    worker.postMessage({ samples, sampleRate: ANALYSIS_RATE, seed: hashString(seedKey), ...stems, rhythm, pitch }, transfer);
   });
 }

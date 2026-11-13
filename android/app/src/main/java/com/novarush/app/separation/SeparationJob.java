@@ -122,11 +122,42 @@ final class SeparationJob {
         }
     }
 
-    static void run(File dir, UvrSeparator sep, Listener listener) throws Exception {
-        run(dir, sep, null, listener);
+    /**
+     * Hauteur de la voix isolée (CREPE) : écrit pitch.f32 = [n, f0…, confiance…]
+     * (une valeur toutes les 10 ms, f0 en Hz).
+     */
+    static void computePitch(File voc44, File dir, CrepePitch.Net net, Listener.Fraction progress) throws Exception {
+        File v16 = new File(dir, "voc16.raw");
+        try {
+            try (RawAudio.Reader r = new RawAudio.Reader(voc44, 1); RawAudio.Writer w = new RawAudio.Writer(v16, 1)) {
+                if (r.frames() > (long) MAX_BEAT_SECONDS * SR) return;
+                new Resampler(SR, CrepePitch.SR).run(r, w, (f) -> progress.onProgress(0.1 * f));
+            }
+            float[] x;
+            try (RawAudio.Reader r = new RawAudio.Reader(v16, 1)) {
+                x = new float[(int) r.frames()];
+                r.read(0, x.length, x);
+            }
+            v16.delete();
+            float[][] fc = CrepePitch.track(net, x, (f) -> progress.onProgress(0.1 + 0.9 * f));
+            File tmp = new File(dir, "pitch.f32.tmp");
+            try (RawAudio.Writer w = new RawAudio.Writer(tmp, 1)) {
+                w.put(fc[0].length);
+                for (float v : fc[0]) w.put(v);
+                for (float v : fc[1]) w.put(v);
+            }
+            if (!tmp.renameTo(new File(dir, "pitch.f32"))) throw new IllegalStateException("renommage impossible");
+        } finally {
+            v16.delete();
+        }
     }
 
-    static void run(File dir, UvrSeparator sep, BeatThis.Net beatNet, Listener listener) throws Exception {
+    static void run(File dir, UvrSeparator sep, Listener listener) throws Exception {
+        run(dir, sep, null, null, listener);
+    }
+
+    static void run(File dir, UvrSeparator sep, BeatThis.Net beatNet, CrepePitch.Net crepeNet, Listener listener)
+            throws Exception {
         File input = new File(dir, "input.bin");
         File src = new File(dir, "decoded.raw");
         File pcm = new File(dir, "pcm44.raw");
@@ -157,15 +188,27 @@ final class SeparationJob {
                 }
                 sepFrom = 0.12;
             }
-            // 4. Séparation (→ 96 %)
+            // 4. Séparation (→ 90 % avec CREPE, sinon 96 %)
             final double from = sepFrom;
+            final double sepTo = crepeNet != null ? 0.90 : 0.96;
             try (RawAudio.Reader r = new RawAudio.Reader(pcm, 2);
                     RawAudio.Writer wv = new RawAudio.Writer(voc44, 1);
                     RawAudio.Writer wa = new RawAudio.Writer(acc44, 1)) {
-                separateStream(r, sep, 15 * SR, SR, wv, wa, (f) -> listener.onProgress(from + (0.96 - from) * f, "separate"));
+                separateStream(r, sep, 15 * SR, SR, wv, wa, (f) -> listener.onProgress(from + (sepTo - from) * f, "separate"));
             }
             pcm.delete();
-            // 5. 22 050 Hz mono (96 → 100 %)
+            // 5. Hauteur de la voix par l'IA (90 → 96 %) — facultatif : sinon suivi classique (YIN).
+            if (crepeNet != null) {
+                try {
+                    computePitch(voc44, dir, crepeNet, (f) -> listener.onProgress(0.90 + 0.06 * f, "pitch"));
+                } catch (UvrSeparator.Cancelled c) {
+                    throw c;
+                } catch (Throwable t) {
+                    Log.w("NovaRushSep", "CREPE : " + t, t);
+                    new File(dir, "pitch.f32").delete();
+                }
+            }
+            // 6. 22 050 Hz mono (96 → 100 %)
             Resampler down = new Resampler(SR, OUT_SR);
             File vocOut = new File(dir, "vocals.f32.tmp");
             File accOut = new File(dir, "accomp.f32.tmp");

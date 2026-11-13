@@ -37,6 +37,8 @@ public class SeparationService extends Service {
     static final String MODEL_ASSET = "separation/model.onnx";
     /** Beat This! (temps et mesures), facultatif. */
     static final String BEAT_ASSET = "ai/beat_this.onnx";
+    /** CREPE (hauteur de la voix), facultatif. */
+    static final String CREPE_ASSET = "ai/crepe.onnx";
     /** Au-delà, le téléphone est jugé trop lent : on garde l'analyse classique. */
     private static final double MAX_MINUTES = 25;
 
@@ -268,8 +270,18 @@ public class SeparationService extends Service {
                 }
             }
             final BeatThis.OrtNet beats = beatNet;
+            File crepeFile = optionalModel(CREPE_ASSET, "crepe");
+            CrepePitch.OrtNet crepeNet = null;
+            if (crepeFile != null) {
+                try {
+                    crepeNet = new CrepePitch.OrtNet(crepeFile.getAbsolutePath(), threads);
+                } catch (Throwable t) {
+                    Log.w(TAG, "CREPE indisponible : " + t);
+                }
+            }
+            final CrepePitch.OrtNet crepe = crepeNet;
             try {
-            SeparationJob.run(dir, sep, beats, (fraction, stage) -> {
+            SeparationJob.run(dir, sep, beats, crepe, (fraction, stage) -> {
                 String cid = cancelId;
                 if (cid != null && (cid.equals(id) || cid.equals("*"))) return false;
                 long now = SystemClock.elapsedRealtime();
@@ -296,6 +308,8 @@ public class SeparationService extends Service {
                     int pct = (int) Math.floor(fraction * 100);
                     String text = "beats".equals(stage)
                             ? "Rythme et mesures analysés par l’IA"
+                            : "pitch".equals(stage)
+                            ? "Mélodie chantée suivie par l’IA"
                             : eta >= 0 ? "Voix isolée · environ " + formatEta(eta) + " restantes" : "Voix isolée par l’IA de l’appareil";
                     nm.notify(NOTIF_ID, buildProgress("Analyse de " + title + "… " + pct + " %", text, pct, false));
                     JobStore.update(this, id, JobStore.RUNNING, fraction, null, eta);
@@ -305,6 +319,7 @@ public class SeparationService extends Service {
             });
             } finally {
                 if (beats != null) beats.close();
+                if (crepe != null) crepe.close();
             }
             JSONObject j = JobStore.read(this, id);
             if (j == null) j = new JSONObject();
@@ -317,6 +332,9 @@ public class SeparationService extends Service {
             File beatsOut = new File(dir, "beats.f32");
             if (beatsOut.exists()) j.put("beats", beatsOut.getAbsolutePath());
             else j.remove("beats");
+            File pitchOut = new File(dir, "pitch.f32");
+            if (pitchOut.exists()) j.put("pitch", pitchOut.getAbsolutePath());
+            else j.remove("pitch");
             j.put("threads", threads);
             JobStore.write(this, id, j);
             emit(id);

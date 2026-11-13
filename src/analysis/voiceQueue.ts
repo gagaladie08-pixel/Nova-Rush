@@ -10,7 +10,7 @@
 import type { SongMeta, VoiceAnalysis } from '../game/types';
 import { db } from '../storage/db';
 import { ANALYSIS_RATE, decodeForAnalysis, runAnalysis } from './client';
-import { parseBeats } from './beatsFile';
+import { parseBeats, parsePitch } from './beatsFile';
 import {
   VoiceSeparation,
   nativeSeparationPossible,
@@ -148,6 +148,15 @@ async function handle(job: NativeJob): Promise<void> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+async function readPitch(path: string | undefined) {
+  if (!path) return undefined;
+  try {
+    return parsePitch(await readFloatFile(path));
+  } catch {
+    return undefined; // suivi classique de la voix
+  }
+}
+
 async function readBeats(path: string | undefined) {
   if (!path) return undefined;
   try {
@@ -167,11 +176,12 @@ async function finish(job: NativeJob): Promise<void> {
     const blob = await db.getAudio(id);
     if (!song || !blob || !job.vocals || !job.accomp) throw new Error('données manquantes');
     if ((job.sampleRate ?? ANALYSIS_RATE) !== ANALYSIS_RATE) throw new Error('fréquence inattendue');
-    const [{ samples }, vocals, accomp, rhythm] = await Promise.all([
+    const [{ samples }, vocals, accomp, rhythm, pitch] = await Promise.all([
       decodeForAnalysis(await blob.arrayBuffer()),
       readFloatFile(job.vocals),
       readFloatFile(job.accomp),
       readBeats(job.beats),
+      readPitch(job.pitch),
     ]);
     const chart = await runAnalysis(
       samples,
@@ -180,6 +190,7 @@ async function finish(job: NativeJob): Promise<void> {
       undefined,
       { vocals, accomp },
       rhythm,
+      pitch,
     );
     const fresh = await db.getSong(id);
     if (!fresh || !fresh.hasAudio) throw new Error('morceau supprimé');

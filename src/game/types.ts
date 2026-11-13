@@ -52,6 +52,8 @@ export interface Chart {
   beats?: number[];
   downbeats?: number[];
   rhythmSource?: 'ai' | 'classic';
+  /** Hauteur de la voix : IA CREPE ou suivi classique (YIN). */
+  pitchSource?: 'ai' | 'classic';
   /** Structure du morceau (intro, couplets, refrains…). */
   sections?: Section[];
   structureConfidence?: number;
