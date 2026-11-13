@@ -68,5 +68,8 @@ jobs:
       - name: Analyse de la voix sur les pistes séparées
         run: |
           npm ci
+          set +e
           npx vitest run tools/separation/real.test.ts
+          code=$?
           cat $SEP_DATA/stems/notices.txt
+          exit $code

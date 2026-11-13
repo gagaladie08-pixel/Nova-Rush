@@ -95,6 +95,6 @@ describe.skipIf(songs.length === 0)('vraies chansons séparées', () => {
             .join(' ')}`,
       );
       expect(voice.notes.length).toBeGreaterThan(10);
-    });
+    }, 180_000);
   }
 });

@@ -235,7 +235,7 @@ export function detectStructure(
   // Choix des frontières : pics forts, au moins 4 mesures d'écart.
   const thr = percentile(Array.from(score), 0.7);
   const cands = Array.from({ length: B }, (_, b) => b)
-    .filter((b) => b >= 2 && b <= B - 2 && score[b] >= thr && score[b] >= (score[b - 1] ?? 0) && score[b] >= (score[b + 1] ?? 0))
+    .filter((b) => b >= 4 && b <= B - 4 && score[b] >= thr && score[b] >= (score[b - 1] ?? 0) && score[b] >= (score[b + 1] ?? 0))
     .sort((a, b) => score[b] - score[a]);
   const cuts: number[] = [];
   for (const b of cands) if (cuts.every((c) => Math.abs(c - b) >= 4)) cuts.push(b);
