@@ -120,6 +120,8 @@ def check_beat(models: str, audio: str) -> None:
             ob, od = ref.beat_frames(s, spect_np)
             dt = time.time() - t
             bt, dtt = ref.beat_postprocess(ob, od)
+            nb, nd = ref.beat_frames(s, spect_t.astype(np.float32))
+            net_err = float(max(np.abs(nb - tb.numpy()).max(), np.abs(nd - td.numpy()).max()))
             logit_err = float(max(np.abs(ob - tb.numpy()).max(), np.abs(od - td.numpy()).max()))
             same_b = len(bt) == len(bt_ref) and np.allclose(bt, bt_ref, atol=0.021)
             same_d = len(dtt) == len(dt_ref) and np.allclose(dtt, dt_ref, atol=0.021)
@@ -127,7 +129,7 @@ def check_beat(models: str, audio: str) -> None:
             bpm = 60 / np.median(ibi) if len(ibi) else 0
             notice(
                 f"beat {name}.{suffix}",
-                f"{size_mb(p):.1f} Mo | mel écart max {mel_err:.2e} | logits écart max {logit_err:.3f} | "
+                f"{size_mb(p):.1f} Mo | mel écart max {mel_err:.2e} | logits écart max {logit_err:.3f} (réseau seul {net_err:.3f}) | "
                 f"temps {len(bt)}/{len(bt_ref)} {'identiques' if same_b else 'DIFFÉRENTS'}, "
                 f"1ers temps {len(dtt)}/{len(dt_ref)} {'identiques' if same_d else 'DIFFÉRENTS'} | "
                 f"tempo {bpm:.1f} bpm | {dur:.0f} s en {dt:.2f} s (x{dt / dur:.4f})",

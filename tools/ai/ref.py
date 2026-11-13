@@ -196,8 +196,7 @@ def mel_filterbank(n_freqs=513, f_min=30.0, f_max=11000.0, n_mels=128, sr=22050)
 def beat_logmel(x: np.ndarray) -> np.ndarray:
     """x : mono 22 050 Hz → (frames, 128) = log1p(1000 · mel(|STFT|)) (LogMelSpect de Beat This!)."""
     z = stft(x, 1024, 441, normalized=False)  # (513, frames)
-    w = hann(1024)
-    mag = np.abs(z) / math.sqrt((w * w).sum())  # normalized="frame_length"
+    mag = np.abs(z) / math.sqrt(1024)  # normalized="frame_length" → torch.stft(normalized=True)
     mel = mel_filterbank().T @ mag  # (128, frames)
     return np.log1p(1000.0 * mel).T.astype(np.float32)
 
@@ -237,17 +236,19 @@ def beat_postprocess(beat: np.ndarray, down: np.ndarray, fps: int = BEAT_FPS) ->
         return dedup(p)
 
     def dedup(p, width=1):
-        if len(p) == 0:
-            return p.astype(np.float64)
+        # Comme deduplicate_peaks : comparaison avec la moyenne courante du groupe.
         out = []
-        cur = [p[0]]
+        if len(p) == 0:
+            return np.array(out, np.float64)
+        cur, c = float(p[0]), 1
         for v in p[1:]:
-            if v - cur[-1] <= width:
-                cur.append(v)
+            if v - cur <= width:
+                c += 1
+                cur += (v - cur) / c
             else:
-                out.append(np.mean(cur))
-                cur = [v]
-        out.append(np.mean(cur))
+                out.append(cur)
+                cur, c = float(v), 1
+        out.append(cur)
         return np.array(out)
 
     bt = peaks(beat) / fps

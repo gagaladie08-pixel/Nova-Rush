@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { alignStems } from './align';
-import { AnalysisError, analyzeSong, analyzeSongWithVoice } from './analyzer';
+import { AnalysisError, analyzeSong, analyzeSongWithVoice, type Rhythm } from './analyzer';
 
 export interface AnalyzeRequest {
   samples: Float32Array;
@@ -9,10 +9,12 @@ export interface AnalyzeRequest {
   /** Analyse avancée : pistes séparées (voix, accompagnement) à la même fréquence. */
   vocals?: Float32Array;
   accomp?: Float32Array;
+  /** Temps de l'IA Beat This!, sur l'horloge des pistes séparées. */
+  rhythm?: Rhythm;
 }
 
 self.onmessage = (e: MessageEvent<AnalyzeRequest>) => {
-  const { samples, sampleRate, seed, vocals, accomp } = e.data;
+  const { samples, sampleRate, seed, vocals, accomp, rhythm } = e.data;
   try {
     let last = 0;
     const progress = (p: number, label: string) => {
@@ -24,10 +26,15 @@ self.onmessage = (e: MessageEvent<AnalyzeRequest>) => {
     };
     if (vocals && accomp) {
       const a = alignStems(samples, vocals, accomp, sampleRate);
-      const chart = analyzeSongWithVoice(samples, a.vocals, a.accomp, sampleRate, seed, progress);
+      // stems[i + lag] ≈ mix[i] : un instant t des pistes vaut t − lag sur le mix.
+      const r = rhythm && {
+        beats: rhythm.beats.map((t) => t - a.lagSec),
+        downbeats: rhythm.downbeats.map((t) => t - a.lagSec),
+      };
+      const chart = analyzeSongWithVoice(samples, a.vocals, a.accomp, sampleRate, seed, progress, r);
       self.postMessage({ type: 'done', chart, lagSec: a.lagSec });
     } else {
-      self.postMessage({ type: 'done', chart: analyzeSong(samples, sampleRate, seed, progress) });
+      self.postMessage({ type: 'done', chart: analyzeSong(samples, sampleRate, seed, progress, rhythm) });
     }
   } catch (err) {
     const message =

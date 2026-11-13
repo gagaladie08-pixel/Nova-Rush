@@ -1,11 +1,18 @@
 import { fft, hann, magnitudeAt, median, midiToHz, movingAverage, percentile, rng } from './dsp';
 import { LEVEL_PARAMS, computeStats, levelFromScore } from './difficulty';
 import { inSpans, trackVoice } from './voice';
-import type { Chart, Lane, Level, Note } from '../game/types';
+import { detectStructure } from './structure';
+import type { Chart, Lane, Level, Note, Section } from '../game/types';
 
 export type ProgressFn = (p: number, label: string) => void;
 
 export class AnalysisError extends Error {}
+
+/** Temps et premiers temps fournis par l'IA Beat This! (en secondes, sur le mix). */
+export interface Rhythm {
+  beats: number[];
+  downbeats: number[];
+}
 
 interface Onset {
   t: number;
@@ -35,6 +42,11 @@ export interface AnalysisFeatures {
   duration: number;
   /** Énergie moyenne par temps (pour choisir des motifs cohérents par section). */
   beatEnergy: number[];
+  /** isDown[b] : le temps b est un premier temps de mesure. */
+  isDown: boolean[];
+  rhythmSource: 'ai' | 'classic';
+  sections?: Section[];
+  structureConfidence?: number;
 }
 
 const nextPow2 = (x: number) => 1 << Math.ceil(Math.log2(Math.max(2, x)));
@@ -288,7 +300,38 @@ function normalizedOdf(flux: Float32Array): Float32Array | null {
 /* 4. Extraction des caractéristiques                                  */
 /* ------------------------------------------------------------------ */
 
-export function extractFeatures(samples: Float32Array, sr: number, progress: ProgressFn = () => {}): AnalysisFeatures {
+/** Temps de l'IA exploitables ? (assez nombreux, tempo plausible, régulier). */
+export function usableRhythm(r: Rhythm | undefined, duration: number): Rhythm | undefined {
+  if (!r) return undefined;
+  const beats = r.beats.filter((t) => t >= 0 && t <= duration);
+  if (beats.length < 8) return undefined;
+  const ibi: number[] = [];
+  for (let i = 1; i < beats.length; i++) ibi.push(beats[i] - beats[i - 1]);
+  const m = median(ibi);
+  if (!(m > 0.24 && m < 1.6)) return undefined;
+  const regular = ibi.filter((d) => Math.abs(d - m) < m * 0.3).length / ibi.length;
+  if (regular < 0.5) return undefined;
+  return { beats, downbeats: r.downbeats.filter((t) => t >= 0 && t <= duration) };
+}
+
+/** Indique, pour chaque temps, s'il ouvre une mesure. */
+function downbeatFlags(beats: number[], downbeats: number[] | undefined): boolean[] {
+  if (!downbeats || downbeats.length < 2) return beats.map((_, i) => i % 4 === 0);
+  const flags = beats.map(() => false);
+  let j = 0;
+  for (let i = 0; i < beats.length; i++) {
+    while (j < downbeats.length && downbeats[j] < beats[i] - 0.03) j++;
+    if (j < downbeats.length && Math.abs(downbeats[j] - beats[i]) <= 0.03) flags[i] = true;
+  }
+  return flags;
+}
+
+export function extractFeatures(
+  samples: Float32Array,
+  sr: number,
+  progress: ProgressFn = () => {},
+  rhythm?: Rhythm,
+): AnalysisFeatures {
   const duration = samples.length / sr;
   progress(0.03, 'Analyse du rythme…');
   const env = onsetEnvelope(samples, sr, progress);
@@ -300,11 +343,18 @@ export function extractFeatures(samples: Float32Array, sr: number, progress: Pro
 
   progress(0.47, 'Détection du tempo…');
   const onsets = pickOnsets(odf, hopT, t0);
+  const ai = usableRhythm(rhythm, duration);
   const period = estimatePeriod(odf, hopT);
-  progress(0.52, 'Suivi des battements…');
-  const beatFrames = trackBeats(odf, period);
-  const loud = percentile(env.rms, 0.9);
-  const beats = beatFrames.filter((f) => env.rms[Math.min(env.frames - 1, f)] > loud * 0.05).map((f) => t0 + f * hopT);
+  let beats: number[];
+  if (ai) {
+    beats = ai.beats;
+  } else {
+    progress(0.52, 'Suivi des battements…');
+    const beatFrames = trackBeats(odf, period);
+    const loud = percentile(env.rms, 0.9);
+    beats = beatFrames.filter((f) => env.rms[Math.min(env.frames - 1, f)] > loud * 0.05).map((f) => t0 + f * hopT);
+  }
+  const isDown = downbeatFlags(beats, ai?.downbeats);
   if (beats.length < 4 && onsets.length < 8) {
     throw new AnalysisError('Analyse impossible : aucun rythme exploitable n’a été trouvé.');
   }
@@ -387,7 +437,7 @@ export function extractFeatures(samples: Float32Array, sr: number, progress: Pro
       pitch: pitched[i],
       sustain: sustains[i],
       onBeat: s.onBeat,
-      downBeat: s.onBeat && s.beatIndex % 4 === 0,
+      downBeat: s.onBeat && !!isDown[s.beatIndex],
       beatIndex: s.beatIndex,
       priority: 0,
     });
@@ -396,7 +446,7 @@ export function extractFeatures(samples: Float32Array, sr: number, progress: Pro
     // Repli rythmique : on suit principalement les battements et accents.
     beats.forEach((t, b) => {
       const f = Math.max(0, Math.min(env.frames - 1, Math.round((t - t0) / hopT)));
-      raw.push({ t, strength: odf[f] * 0.8 + 0.2, onBeat: true, downBeat: b % 4 === 0, beatIndex: b, priority: 0 });
+      raw.push({ t, strength: odf[f] * 0.8 + 0.2, onBeat: true, downBeat: !!isDown[b], beatIndex: b, priority: 0 });
     });
   }
   raw.sort((a, b) => a.t - b.t);
@@ -425,6 +475,8 @@ export function extractFeatures(samples: Float32Array, sr: number, progress: Pro
     candidates: candidates.filter((c) => c.t >= 0.6 && c.t <= duration - 0.15),
     duration,
     beatEnergy,
+    isDown,
+    rhythmSource: ai ? 'ai' : 'classic',
   };
 }
 
@@ -473,6 +525,36 @@ function thin(cands: Candidate[], minGap: number): Candidate[] {
   return accepted.sort((a, b) => a.t - b.t);
 }
 
+/** Position en temps (fractionnaire) d'un instant, d'après la grille des battements. */
+function beatPosition(beats: number[], fallbackLen: number) {
+  return (t: number): number => {
+    const n = beats.length;
+    if (n < 2) return t / fallbackLen;
+    if (t <= beats[0]) return (t - beats[0]) / (beats[1] - beats[0]);
+    if (t >= beats[n - 1]) return n - 1 + (t - beats[n - 1]) / (beats[n - 1] - beats[n - 2]);
+    let lo = 0;
+    let hi = n - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] <= t) lo = mid;
+      else hi = mid;
+    }
+    return lo + (t - beats[lo]) / (beats[lo + 1] - beats[lo]);
+  };
+}
+
+/** Tolérance (en temps) pour reconnaître « la même place » dans deux refrains. */
+const SAME_POS = 0.13;
+
+interface TemplateNote {
+  rel: number;
+  lanes: Lane[];
+  pitch?: number;
+  size: number;
+}
+
+const pitchCompatible = (a?: number, b?: number) => a === undefined || b === undefined || Math.abs(a - b) < 0.5;
+
 export function buildChart(features: AnalysisFeatures, level: Level, seed: number, withChords = true): Note[] {
   const params = LEVEL_PARAMS[level];
   const rand = rng(seed ^ 0x9e3779b9);
@@ -482,7 +564,55 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
     const b = Math.max(0, Math.min(beats.length - 2, bi));
     return beats[b + 1] - beats[b];
   };
-  const cands = thin(features.candidates, params.minGap);
+
+  // Structure : chaque refrain reprend le motif du premier (mêmes colonnes,
+  // même rythme) là où la musique se répète vraiment.
+  const secs = features.sections && features.sections.length ? features.sections : undefined;
+  const posOf = beatPosition(beats, 60 / Math.max(1, features.bpm));
+  const secIndexOf = (t: number) => {
+    if (!secs) return -1;
+    for (let i = 0; i < secs.length; i++) if (t >= secs[i].t && t < secs[i].end) return i;
+    return -1;
+  };
+  const copyOk = !!secs && (features.structureConfidence ?? 0) >= 0.4;
+  const templateOf = new Map<number, number>();
+  secs?.forEach((sec, i) => {
+    if (sec.kind === 'refrain' && !templateOf.has(sec.group)) templateOf.set(sec.group, i);
+  });
+  const isTemplate = (si: number) => copyOk && si >= 0 && templateOf.get(secs![si].group) === si;
+  const isRepeat = (si: number) => {
+    if (!copyOk || si < 0) return false;
+    const sec = secs![si];
+    const tpl = templateOf.get(sec.group);
+    return sec.kind === 'refrain' && tpl !== undefined && tpl !== si && sec.sim >= 0.35;
+  };
+  const relOf = (t: number, si: number) => posOf(t) - posOf(secs![si].t);
+
+  let cands = thin(features.candidates, params.minGap);
+  if (copyOk && secs!.some((_, i) => isRepeat(i))) {
+    // 2e passage : on favorise, dans les refrains répétés, les attaques
+    // placées comme celles retenues dans le premier refrain.
+    const tplPos = new Map<number, number[]>();
+    const chosen = new Set(cands.map((c) => c.t));
+    for (const c of cands) {
+      const si = secIndexOf(c.t);
+      if (!isTemplate(si)) continue;
+      const g = secs![si].group;
+      if (!tplPos.has(g)) tplPos.set(g, []);
+      tplPos.get(g)!.push(relOf(c.t, si));
+    }
+    const boosted = features.candidates.map((c) => {
+      const si = secIndexOf(c.t);
+      let bonus = 0;
+      if (isTemplate(si) && chosen.has(c.t)) bonus = 2;
+      else if (isRepeat(si)) {
+        const r = relOf(c.t, si);
+        if ((tplPos.get(secs![si].group) ?? []).some((q) => Math.abs(q - r) < SAME_POS)) bonus = 2;
+      }
+      return bonus ? { ...c, priority: c.priority + bonus } : c;
+    });
+    cands = thin(boosted, params.minGap);
+  }
 
   // Tuiles longues
   type Planned = Candidate & { dur?: number; beats?: number; size: number };
@@ -532,6 +662,25 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
     }
   }
 
+  // Même taille d'accord qu'au premier refrain, à la même place.
+  const tplSizes = new Map<number, { rel: number; size: number; pitch?: number }[]>();
+  if (copyOk) {
+    for (const p of filtered) {
+      const si = secIndexOf(p.t);
+      if (!isTemplate(si)) continue;
+      const g = secs![si].group;
+      if (!tplSizes.has(g)) tplSizes.set(g, []);
+      tplSizes.get(g)!.push({ rel: relOf(p.t, si), size: p.size, pitch: p.pitch });
+    }
+    for (const p of filtered) {
+      const si = secIndexOf(p.t);
+      if (!isRepeat(si)) continue;
+      const r = relOf(p.t, si);
+      const m = (tplSizes.get(secs![si].group) ?? []).find((q) => Math.abs(q.rel - r) < SAME_POS && pitchCompatible(q.pitch, p.pitch));
+      if (m) p.size = p.dur || !withChords ? 1 : m.size;
+    }
+  }
+
   // Attribution des voies
   const notes: Note[] = [];
   const lastUse = [-9, -9, -9, -9];
@@ -544,23 +693,52 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
   let phrase = -1;
   let step = 0;
   let pattern = PATTERNS[seed % PATTERNS.length];
+  const tplNotes = new Map<number, TemplateNote[]>();
 
   const free = (l: number, t: number) => holdUntil[l] < t - 0.05 && t - lastUse[l] >= params.laneGap;
 
   for (const p of filtered) {
-    // Motif par phrase de 16 temps, choisi selon l'énergie de la section
-    const ph = Math.floor(p.beatIndex / 16);
-    if (ph !== phrase) {
-      phrase = ph;
-      step = 0;
-      const e = features.beatEnergy.slice(ph * 16, ph * 16 + 16);
-      const avg = e.length ? e.reduce((a, b) => a + b, 0) / e.length : energyRef;
-      const cls = avg > energyRef * 1.25 ? 2 : avg < energyRef * 0.75 ? 0 : 1;
-      pattern = PATTERNS[(seed + cls * 3 + (ph % 2)) % PATTERNS.length];
+    const si = secIndexOf(p.t);
+    if (si >= 0) {
+      // Un motif par section, le même pour toutes les sections d'un même groupe.
+      if (si !== phrase) {
+        phrase = si;
+        step = 0;
+        const sec = secs![si];
+        const cls = sec.energy > 0.65 ? 2 : sec.energy < 0.35 ? 0 : 1;
+        pattern = PATTERNS[(seed + cls * 3 + sec.group) % PATTERNS.length];
+      }
+    } else {
+      // Motif par phrase de 16 temps, choisi selon l'énergie de la section
+      const ph = 100000 + Math.floor(p.beatIndex / 16);
+      if (ph !== phrase) {
+        phrase = ph;
+        step = 0;
+        const k = ph - 100000;
+        const e = features.beatEnergy.slice(k * 16, k * 16 + 16);
+        const avg = e.length ? e.reduce((a, b) => a + b, 0) / e.length : energyRef;
+        const cls = avg > energyRef * 1.25 ? 2 : avg < energyRef * 0.75 ? 0 : 1;
+        pattern = PATTERNS[(seed + cls * 3 + (k % 2)) % PATTERNS.length];
+      }
     }
 
+    // Place équivalente dans le premier refrain ?
+    let match: TemplateNote | undefined;
+    const rel = si >= 0 && copyOk ? relOf(p.t, si) : 0;
+    if (isRepeat(si)) {
+      match = (tplNotes.get(secs![si].group) ?? []).find((q) => Math.abs(q.rel - rel) < SAME_POS && pitchCompatible(q.pitch, p.pitch));
+    }
+    const record = (lanes: Lane[]) => {
+      if (!isTemplate(si)) return;
+      const g = secs![si].group;
+      if (!tplNotes.has(g)) tplNotes.set(g, []);
+      tplNotes.get(g)!.push({ rel, lanes, pitch: p.pitch, size: lanes.length });
+    };
+
     let desired: Lane;
-    if (melodic && p.pitch !== undefined) {
+    if (match) {
+      desired = match.lanes[0];
+    } else if (melodic && p.pitch !== undefined) {
       const win = pitchedTimes.filter((q) => Math.abs(q.t - p.t) <= 3).map((q) => q.pitch as number);
       const uniq = [...new Set(win)].sort((a, b) => a - b);
       const idx = uniq.indexOf(p.pitch);
@@ -577,18 +755,21 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
     if (p.size > 1) {
       const sets = p.size === 3 ? TRIPLES : PAIRS;
       const startIdx = Math.floor(rand() * sets.length);
+      const tries: Lane[][] = [];
+      if (match && match.lanes.length === p.size) tries.push(match.lanes);
+      for (let k = 0; k < sets.length; k++) tries.push(sets[(startIdx + k) % sets.length]);
       let placed = false;
-      for (let k = 0; k < sets.length && !placed; k++) {
-        const set = sets[(startIdx + k) % sets.length];
-        if (set.every((l) => free(l, p.t))) {
-          const id = chordId++;
-          for (const l of set) {
-            notes.push({ t: p.t, lane: l, chord: id });
-            lastUse[l] = p.t;
-          }
-          prevLane = set[0];
-          placed = true;
+      for (const set of tries) {
+        if (!set.every((l) => free(l, p.t))) continue;
+        const id = chordId++;
+        for (const l of set) {
+          notes.push({ t: p.t, lane: l, chord: id });
+          lastUse[l] = p.t;
         }
+        prevLane = set[0];
+        record(set);
+        placed = true;
+        break;
       }
       if (placed) continue;
     }
@@ -596,8 +777,8 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
     // Recherche d'une voie libre, de préférence dans le sens de la mélodie.
     const dir = prevPitch !== undefined && p.pitch !== undefined ? Math.sign(p.pitch - prevPitch) : 0;
     const order: Lane[] = ([0, 1, 2, 3] as Lane[]).sort((a, b) => {
-      const da = Math.abs(a - desired) + (dir !== 0 && Math.sign(a - desired) === -dir ? 0.5 : 0);
-      const db = Math.abs(b - desired) + (dir !== 0 && Math.sign(b - desired) === -dir ? 0.5 : 0);
+      const da = Math.abs(a - desired) + (dir !== 0 && !match && Math.sign(a - desired) === -dir ? 0.5 : 0);
+      const db = Math.abs(b - desired) + (dir !== 0 && !match && Math.sign(b - desired) === -dir ? 0.5 : 0);
       return da - db;
     });
     const lane = order.find((l) => free(l, p.t));
@@ -610,6 +791,7 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
     }
     lastUse[lane] = p.dur ? p.t + p.dur : p.t;
     notes.push(note);
+    record([lane]);
     prevLane = lane;
     if (p.pitch !== undefined) prevPitch = p.pitch;
   }
@@ -625,6 +807,8 @@ export interface VoiceFeatures extends AnalysisFeatures {
   voiceRatio: number;
   /** true si le parcours suit la voix. */
   followsVoice: boolean;
+  /** Passages chantés (s). */
+  voiceSpans?: [number, number][];
 }
 
 const rmsOf = (x: Float32Array) => {
@@ -644,10 +828,11 @@ export function extractFeaturesVoice(
   accomp: Float32Array,
   sr: number,
   progress: ProgressFn = () => {},
+  rhythm?: Rhythm,
 ): VoiceFeatures {
   // Rythme : l'accompagnement seul donne une pulsation plus propre (sauf a cappella).
   const rhythmSrc = rmsOf(accomp) > rmsOf(mix) * 0.12 ? accomp : mix;
-  const base = extractFeatures(rhythmSrc, sr, (p, l) => progress(p * 0.55, l));
+  const base = extractFeatures(rhythmSrc, sr, (p, l) => progress(p * 0.55, l), rhythm);
   const none: VoiceFeatures = { ...base, voiceRatio: 0, followsVoice: false };
   if (rmsOf(vocals) < rmsOf(mix) * 0.03) return none;
 
@@ -677,7 +862,7 @@ export function extractFeaturesVoice(
       pitch: n.midi,
       sustain: n.dur >= 0.4 && n.stable ? n.dur : undefined,
       onBeat: s.onBeat,
-      downBeat: s.onBeat && s.beatIndex % 4 === 0,
+      downBeat: s.onBeat && !!base.isDown[s.beatIndex],
       beatIndex: s.beatIndex,
       priority: 0,
     };
@@ -726,7 +911,29 @@ export function extractFeaturesVoice(
     candidates: candidates.filter((c) => c.t >= 0.6 && c.t <= base.duration - 0.15),
     voiceRatio: voice.ratio,
     followsVoice: true,
+    voiceSpans: voice.spans,
   };
+}
+
+const r3 = (t: number) => Math.round(t * 1000) / 1000;
+
+/** Ajoute la structure (sur le mix complet) aux caractéristiques. */
+function withStructure<T extends AnalysisFeatures>(
+  f: T,
+  mix: Float32Array,
+  sr: number,
+  progress: ProgressFn,
+  voiceSpans?: [number, number][],
+): T {
+  progress(0.9, 'Repérage des refrains…');
+  try {
+    const downs = f.beats.filter((_, i) => f.isDown[i]);
+    const st = detectStructure(mix, sr, f.beats, f.rhythmSource === 'ai' ? downs : undefined, { voiceSpans });
+    if (st) return { ...f, sections: st.sections, structureConfidence: st.confidence };
+  } catch {
+    /* structure facultative */
+  }
+  return f;
 }
 
 function finishChart(
@@ -751,13 +958,24 @@ function finishChart(
     level,
     stats: computeStats(notes),
     source: features.melodic ? 'melody' : 'rhythm',
+    beats: features.beats.map(r3),
+    downbeats: features.beats.filter((_, i) => features.isDown[i]).map(r3),
+    rhythmSource: features.rhythmSource,
+    ...(features.sections ? { sections: features.sections, structureConfidence: features.structureConfidence } : {}),
     ...extra,
   };
 }
 
 /** Analyse complète : caractéristiques → niveau → parcours final. */
-export function analyzeSong(samples: Float32Array, sr: number, seed: number, progress: ProgressFn = () => {}): Chart {
-  return finishChart(extractFeatures(samples, sr, progress), seed, progress);
+export function analyzeSong(
+  samples: Float32Array,
+  sr: number,
+  seed: number,
+  progress: ProgressFn = () => {},
+  rhythm?: Rhythm,
+): Chart {
+  const f = withStructure(extractFeatures(samples, sr, progress, rhythm), samples, sr, progress);
+  return finishChart(f, seed, progress);
 }
 
 /** Analyse avancée à partir des pistes séparées (voix / accompagnement). */
@@ -768,8 +986,10 @@ export function analyzeSongWithVoice(
   sr: number,
   seed: number,
   progress: ProgressFn = () => {},
+  rhythm?: Rhythm,
 ): Chart {
-  const f = extractFeaturesVoice(mix, vocals, accomp, sr, progress);
+  const fv = extractFeaturesVoice(mix, vocals, accomp, sr, progress, rhythm);
+  const f = withStructure(fv, mix, sr, progress, fv.followsVoice ? fv.voiceSpans : undefined);
   return finishChart(f, seed, progress, {
     voiceRatio: Math.round(f.voiceRatio * 100) / 100,
     ...(f.followsVoice ? { source: 'voice' as const } : {}),

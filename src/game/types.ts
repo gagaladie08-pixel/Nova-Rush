@@ -48,6 +48,28 @@ export interface Chart {
   source?: 'voice' | 'melody' | 'rhythm';
   /** Part du morceau chantée (analyse avancée). */
   voiceRatio?: number;
+  /** Temps et premiers temps de mesure (s) ; « ai » si donnés par Beat This!. */
+  beats?: number[];
+  downbeats?: number[];
+  rhythmSource?: 'ai' | 'classic';
+  /** Structure du morceau (intro, couplets, refrains…). */
+  sections?: Section[];
+  structureConfidence?: number;
+}
+
+export type SectionKind = 'intro' | 'couplet' | 'refrain' | 'pont' | 'solo' | 'outro';
+
+export interface Section {
+  t: number;
+  end: number;
+  kind: SectionKind;
+  /** Passages semblables = même groupe ; rep = numéro de la répétition (0 = première). */
+  group: number;
+  rep: number;
+  /** Ressemblance avec la première occurrence du groupe (0..1). */
+  sim: number;
+  /** Énergie relative 0..1. */
+  energy: number;
 }
 
 export type ThemeId = 'cyber' | 'survivor' | 'african';

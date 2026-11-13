@@ -32,6 +32,7 @@ export function runAnalysis(
   onProgress: (p: number, label: string) => void,
   signal?: AbortSignal,
   stems?: { vocals: Float32Array; accomp: Float32Array },
+  rhythm?: { beats: number[]; downbeats: number[] },
 ): Promise<Chart> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
@@ -56,6 +57,6 @@ export function runAnalysis(
     };
     const transfer: Transferable[] = [samples.buffer];
     if (stems) transfer.push(stems.vocals.buffer, stems.accomp.buffer);
-    worker.postMessage({ samples, sampleRate: ANALYSIS_RATE, seed: hashString(seedKey), ...stems }, transfer);
+    worker.postMessage({ samples, sampleRate: ANALYSIS_RATE, seed: hashString(seedKey), ...stems, rhythm }, transfer);
   });
 }
