@@ -29,13 +29,13 @@ jobs:
           COMMON="onnx onnxruntime numpy scipy soundfile einops tqdm pyyaml julius openunmix dora-search lameenc"
           python3 -m venv /tmp/vexp
           /tmp/vexp/bin/pip install -q $TORCH
-          /tmp/vexp/bin/pip install -q $COMMON rotary_embedding_torch==0.6.4 soxr
+          /tmp/vexp/bin/pip install -q $COMMON diffq rotary_embedding_torch==0.6.4 soxr
           /tmp/vexp/bin/pip install -q --no-deps https://github.com/CPJKU/beat_this/archive/main.zip
           git clone -q --depth 1 https://github.com/sevagh/demucs.onnx /tmp/dox
           /tmp/vexp/bin/pip install -q --no-deps /tmp/dox/demucs-for-onnx
           python3 -m venv /tmp/vref
           /tmp/vref/bin/pip install -q $TORCH
-          /tmp/vref/bin/pip install -q $COMMON
+          /tmp/vref/bin/pip install -q $COMMON diffq
           /tmp/vref/bin/pip install -q --no-deps demucs==4.0.1
 
       - name: Audio de test (libre de droits)
@@ -47,12 +47,17 @@ jobs:
           curl -fsSL -o vibeace.ogg "$L/Kevin_MacLeod_-_Vibe_Ace.hq.ogg"
 
       - name: Export Demucs (htdemucs)
-        run: /tmp/vexp/bin/python tools/ai/export.py $AI/models demucs
+        id: s1
+        continue-on-error: true
+        run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/export.py $AI/models demucs
 
       - name: Export Beat This! (small et final)
-        run: /tmp/vexp/bin/python tools/ai/export.py $AI/models beat
+        id: s2
+        continue-on-error: true
+        run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/export.py $AI/models beat
 
       - name: CREPE, Basic Pitch, UVR (modèles déjà en ONNX)
+        id: dl
         run: |
           set -e
           cd $AI/models
@@ -68,24 +73,37 @@ jobs:
           ls -la
 
       - name: Demucs officiel (référence PyTorch)
-        run: /tmp/vref/bin/python tools/ai/check.py demucs-ref $AI/audio/fishin.ogg $AI/demucs_ref.npy
+        id: s3
+        continue-on-error: true
+        run: tools/ai/run.sh /tmp/vref/bin/python tools/ai/check.py demucs-ref $AI/audio/fishin.ogg $AI/demucs_ref.npy
 
       - name: Vérification Demucs (ONNX + spectre hors réseau)
-        run: /tmp/vexp/bin/python tools/ai/check.py demucs $AI/models $AI/audio/fishin.ogg $AI/demucs_ref.npy
+        id: s4
+        continue-on-error: true
+        run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py demucs $AI/models $AI/audio/fishin.ogg $AI/demucs_ref.npy
 
       - name: Vérification Beat This!
-        run: /tmp/vexp/bin/python tools/ai/check.py beat $AI/models $AI/audio/fishin.ogg
+        id: s5
+        continue-on-error: true
+        run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py beat $AI/models $AI/audio/fishin.ogg
 
       - name: Vérification CREPE
-        run: /tmp/vexp/bin/python tools/ai/check.py crepe $AI/models $AI/audio/fishin.ogg
+        id: s6
+        continue-on-error: true
+        run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py crepe $AI/models $AI/audio/fishin.ogg
 
       - name: Vérification Basic Pitch
-        run: /tmp/vexp/bin/python tools/ai/check.py basicpitch $AI/models $AI/audio/fishin.ogg
+        id: s7
+        continue-on-error: true
+        run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py basicpitch $AI/models $AI/audio/fishin.ogg
 
       - name: Vérification UVR en float16
-        run: /tmp/vexp/bin/python tools/ai/check.py uvr16 $AI/models $AI/audio/fishin.ogg
+        id: s8
+        continue-on-error: true
+        run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py uvr16 $AI/models $AI/audio/fishin.ogg
 
       - name: Publication des modèles (release ai-models-v1)
+        if: ${{ !contains(join(steps.*.outcome, ','), 'failure') }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -99,3 +117,7 @@ jobs:
           fi
           gh release upload ai-models-v1 --clobber htdemucs.onnx beat_this_small0.onnx beat_this_final0.onnx \
             crepe_tiny.onnx crepe_small.onnx basic_pitch.onnx uvr_1_9703.onnx SHA256SUMS
+
+      - name: Bilan
+        if: ${{ contains(join(steps.*.outcome, ','), 'failure') }}
+        run: exit 1
