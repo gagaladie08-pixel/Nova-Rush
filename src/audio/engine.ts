@@ -108,10 +108,11 @@ class AudioEngine {
     return when;
   }
 
-  /** Extrait d'écoute (~15 s) pris vers le premier tiers du morceau. */
-  playSnippet(song: { id: string; title: string }, buffer: AudioBuffer) {
+  /** Extrait d'écoute (~15 s) : le refrain s'il est connu, sinon vers le premier tiers. */
+  playSnippet(song: { id: string; title: string }, buffer: AudioBuffer, from?: number) {
     const dur = Math.min(15, buffer.duration);
-    const start = Math.max(0, Math.min(buffer.duration - dur, buffer.duration * 0.33));
+    const wanted = from ?? buffer.duration * 0.33;
+    const start = Math.max(0, Math.min(buffer.duration - dur, wanted));
     this.play(song, buffer, start, 0.05, dur);
   }
 

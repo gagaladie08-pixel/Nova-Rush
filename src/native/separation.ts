@@ -11,6 +11,8 @@ export interface NativeJob {
   error?: string;
   vocals?: string;
   accomp?: string;
+  /** Temps et mesures de l'IA Beat This! (float32 : nb, nd, temps…, premiers temps…). */
+  beats?: string;
   sampleRate?: number;
   seconds?: number;
 }

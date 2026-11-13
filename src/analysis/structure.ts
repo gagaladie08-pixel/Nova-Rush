@@ -380,10 +380,3 @@ export function detectStructure(
   }
   return { sections, confidence: Math.round(confidence * 100) / 100, bars };
 }
-
-/** Section contenant l'instant t (ou undefined). */
-export function sectionAt(sections: Section[] | undefined, t: number): Section | undefined {
-  if (!sections) return undefined;
-  for (const s of sections) if (t >= s.t && t < s.end) return s;
-  return undefined;
-}

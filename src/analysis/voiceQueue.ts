@@ -147,6 +147,24 @@ async function handle(job: NativeJob): Promise<void> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Décode beats.f32 : [nb, nd, temps…, premiers temps…]. */
+export function parseBeats(data: Float32Array): { beats: number[]; downbeats: number[] } | undefined {
+  if (data.length < 2) return undefined;
+  const nb = data[0];
+  const nd = data[1];
+  if (!Number.isInteger(nb) || !Number.isInteger(nd) || nb < 0 || nd < 0 || 2 + nb + nd !== data.length) return undefined;
+  return { beats: Array.from(data.subarray(2, 2 + nb)), downbeats: Array.from(data.subarray(2 + nb)) };
+}
+
+async function readBeats(path: string | undefined) {
+  if (!path) return undefined;
+  try {
+    return parseBeats(await readFloatFile(path));
+  } catch {
+    return undefined; // rythme classique
+  }
+}
+
 /** Refait le parcours avec les pistes séparées (une seule finalisation à la fois). */
 async function finish(job: NativeJob): Promise<void> {
   const id = job.id;
@@ -157,15 +175,20 @@ async function finish(job: NativeJob): Promise<void> {
     const blob = await db.getAudio(id);
     if (!song || !blob || !job.vocals || !job.accomp) throw new Error('données manquantes');
     if ((job.sampleRate ?? ANALYSIS_RATE) !== ANALYSIS_RATE) throw new Error('fréquence inattendue');
-    const [{ samples }, vocals, accomp] = await Promise.all([
+    const [{ samples }, vocals, accomp, rhythm] = await Promise.all([
       decodeForAnalysis(await blob.arrayBuffer()),
       readFloatFile(job.vocals),
       readFloatFile(job.accomp),
+      readBeats(job.beats),
     ]);
-    const chart = await runAnalysis(samples, `${song.title}|${song.artist}|${Math.round(song.duration)}`, () => {}, undefined, {
-      vocals,
-      accomp,
-    });
+    const chart = await runAnalysis(
+      samples,
+      `${song.title}|${song.artist}|${Math.round(song.duration)}`,
+      () => {},
+      undefined,
+      { vocals, accomp },
+      rhythm,
+    );
     const fresh = await db.getSong(id);
     if (!fresh || !fresh.hasAudio) throw new Error('morceau supprimé');
     await db.putSong({

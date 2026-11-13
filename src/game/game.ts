@@ -3,7 +3,8 @@ import { LEVEL_PARAMS } from '../analysis/difficulty';
 import { AutoCalibrator } from './calibration';
 import { JUDGE_LABEL, ScoreKeeper, WINDOWS, judgeOffset, type Judge, type ScoreEvent } from './scoring';
 import { THEMES, type GameTheme } from './themes';
-import type { Note, SongMeta, ThemeId } from './types';
+import { sectionAt, sectionIntensity } from './sections';
+import type { Note, Section, SongMeta, ThemeId } from './types';
 
 export interface GameResult {
   score: number;
@@ -99,6 +100,14 @@ export class Game {
   private bg: HTMLCanvasElement | null = null;
   private lineSprite: HTMLCanvasElement | null = null;
   private laneFlash = [0, 0, 0, 0];
+  /** Effets liés à la musique : premiers temps et sections (refrains). */
+  private sections: Section[] | undefined;
+  private downbeats: number[] = [];
+  private dbIdx = 0;
+  private pulse = 0;
+  private intensity = 0.3;
+  private lastSection: Section | undefined;
+  private sweepT0 = -9;
   private pointerLane = new Map<number, number>();
   private particles: Particle[] = [];
   private fades: Fade[] = [];
@@ -137,6 +146,9 @@ export class Game {
       this.maxDur = Math.max(this.maxDur, n.dur ?? 0);
     }
     this.minLaneGap = this.computeMinLaneGap();
+    const chart = opts.song.chart;
+    this.sections = (chart.structureConfidence ?? 0) >= 0.3 ? chart.sections : undefined;
+    this.downbeats = chart.downbeats ?? [];
     this.keeper = new ScoreKeeper(this.notes);
 
     const stars = [1, 2, 3, 4, 5]
@@ -706,6 +718,7 @@ export class Game {
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const wall = performance.now() / 1000;
 
+    this.drawMusic(g, now, wall, reduce);
     if (!reduce) this.drawAmbient(g, wall);
 
     // Éclairs des voies après un toucher
@@ -778,6 +791,83 @@ export class Game {
       const k = Math.min(1, (raw - this.frozenAt) * 2);
       g.fillStyle = `rgba(0,0,0,${0.45 * Math.max(0, k)})`;
       g.fillRect(0, 0, this.w, this.h);
+    }
+  }
+
+  /**
+   * Pulsation sur chaque premier temps de mesure, ambiance plus intense
+   * pendant les refrains et balayage lumineux à l'entrée d'un refrain.
+   */
+  private drawMusic(g: CanvasRenderingContext2D, now: number, wall: number, reduce: boolean) {
+    const th = this.theme;
+    const live = this.state === 'playing' || this.state === 'countdown' || this.state === 'resuming';
+    // Premiers temps
+    const db = this.downbeats;
+    while (this.dbIdx > 0 && db[this.dbIdx - 1] > now + 0.1) this.dbIdx--;
+    let hit = false;
+    while (this.dbIdx < db.length && db[this.dbIdx] <= now) {
+      if (now - db[this.dbIdx] < 0.1) hit = true;
+      this.dbIdx++;
+    }
+    if (hit && live && this.state !== 'countdown') this.pulse = 1;
+    // Section en cours
+    const sec = sectionAt(this.sections, now);
+    if (sec !== this.lastSection) {
+      if (sec?.kind === 'refrain' && this.lastSection?.kind !== 'refrain' && now > 0.5) this.sweepT0 = wall;
+      this.lastSection = sec;
+    }
+    if (live) this.intensity += (sectionIntensity(sec) - this.intensity) * 0.04;
+    const k = this.intensity;
+    const refrain = sec?.kind === 'refrain' ? 1 : 0;
+
+    // Teinte des voies (plus vive aux refrains)
+    const tint = reduce ? 0.04 * refrain : 0.03 + 0.09 * k;
+    if (tint > 0.005) {
+      const grad = g.createLinearGradient(0, 0, 0, this.lineY);
+      grad.addColorStop(0, this.alpha(th.accents[0], 0));
+      grad.addColorStop(1, this.alpha(th.accents[0], tint));
+      g.fillStyle = grad;
+      g.fillRect(this.fieldX, 0, this.fieldW, this.lineY);
+    }
+    if (reduce) return;
+
+    // Lueurs sur les bords du terrain, qui battent avec la mesure
+    const edge = (0.08 + 0.3 * k) * (0.55 + 0.45 * this.pulse);
+    if (edge > 0.02) {
+      const w = Math.max(10, this.laneW * 0.22);
+      for (const [x0, x1, col] of [
+        [this.fieldX, this.fieldX + w, th.accents[1]],
+        [this.fieldX + this.fieldW, this.fieldX + this.fieldW - w, th.accents[3]],
+      ] as [number, number, string][]) {
+        const grad = g.createLinearGradient(x0, 0, x1, 0);
+        grad.addColorStop(0, this.alpha(col, edge));
+        grad.addColorStop(1, this.alpha(col, 0));
+        g.fillStyle = grad;
+        g.fillRect(Math.min(x0, x1), 0, w, this.h);
+      }
+    }
+
+    // Pulsation de la ligne de jugement
+    if (this.pulse > 0.02 && this.lineSprite) {
+      g.save();
+      g.globalAlpha = Math.min(1, this.pulse * (0.35 + 0.65 * k));
+      const grow = 10 + 18 * this.pulse;
+      g.drawImage(this.lineSprite, this.fieldX - 24 - grow, this.lineY - 26 - grow, this.fieldW + 48 + grow * 2, 52 + grow * 2);
+      g.restore();
+    }
+    this.pulse *= 0.88;
+
+    // Balayage à l'entrée d'un refrain
+    const age = wall - this.sweepT0;
+    if (age >= 0 && age < 0.7) {
+      const y = (age / 0.7) * this.lineY;
+      const a = 0.28 * (1 - age / 0.7);
+      const grad = g.createLinearGradient(0, y - 90, 0, y + 10);
+      grad.addColorStop(0, this.alpha(th.fill, 0));
+      grad.addColorStop(0.85, this.alpha(th.fill, a));
+      grad.addColorStop(1, this.alpha(th.fill, 0));
+      g.fillStyle = grad;
+      g.fillRect(this.fieldX, y - 90, this.fieldW, 100);
     }
   }
 

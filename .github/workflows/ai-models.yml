@@ -102,21 +102,35 @@ jobs:
         continue-on-error: true
         run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py uvr16 $AI/models $AI/audio/fishin.ogg
 
-      - name: Publication des modèles (release ai-models-v1)
+      - name: Empreintes des modèles
+        id: sums
         if: ${{ !contains(join(steps.*.outcome, ','), 'failure') }}
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -e
           cd $AI/models
           sha256sum htdemucs.onnx beat_this_small0.onnx beat_this_final0.onnx crepe_tiny.onnx crepe_small.onnx basic_pitch.onnx uvr_1_9703.onnx | tee SHA256SUMS
-          if ! gh release view ai-models-v1 >/dev/null 2>&1; then
-            gh release create ai-models-v1 --prerelease --target "$GITHUB_SHA" \
-              --title "Modèles IA de Nova Rush (pas à installer)" \
-              --notes "Modèles open source convertis pour le téléphone (Demucs MIT, Beat This! MIT, CREPE MIT, Basic Pitch Apache 2.0, UVR-MDX via sherpa-onnx Apache 2.0). Utilisés automatiquement par la compilation de l'APK."
-          fi
-          gh release upload ai-models-v1 --clobber htdemucs.onnx beat_this_small0.onnx beat_this_final0.onnx \
-            crepe_tiny.onnx crepe_small.onnx basic_pitch.onnx uvr_1_9703.onnx SHA256SUMS
+
+      - name: Publication des modèles (release ai-models-v1)
+        if: ${{ steps.sums.outcome == 'success' }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ai-models-v1
+          target_commitish: ${{ github.sha }}
+          name: Modèles IA de Nova Rush (pas à installer)
+          body: >-
+            Modèles open source convertis pour le téléphone : Demucs (MIT), Beat This! (MIT),
+            CREPE via onnxcrepe (MIT), Basic Pitch (Apache 2.0), UVR-MDX via sherpa-onnx (Apache 2.0).
+            Utilisés automatiquement par la compilation de l'APK ; rien à installer.
+          prerelease: true
+          make_latest: false
+          files: |
+            /tmp/ai/models/htdemucs.onnx
+            /tmp/ai/models/beat_this_small0.onnx
+            /tmp/ai/models/beat_this_final0.onnx
+            /tmp/ai/models/crepe_tiny.onnx
+            /tmp/ai/models/crepe_small.onnx
+            /tmp/ai/models/basic_pitch.onnx
+            /tmp/ai/models/uvr_1_9703.onnx
+            /tmp/ai/models/SHA256SUMS
 
       - name: Bilan
         if: ${{ contains(join(steps.*.outcome, ','), 'failure') }}

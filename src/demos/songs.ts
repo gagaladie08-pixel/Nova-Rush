@@ -1,5 +1,5 @@
 import { LEVEL_PARAMS, computeStats } from '../analysis/difficulty';
-import type { Chart, Lane, Level, Note, SongMeta } from '../game/types';
+import type { Chart, Lane, Level, Note, Section as ChartSection, SectionKind, SongMeta } from '../game/types';
 
 /**
  * Morceaux de démonstration originaux, composés pour Nova Rush et synthétisés
@@ -359,7 +359,48 @@ export function demoChart(def: DemoDef): Chart {
     prev = { lane, midi: n.midi };
   }
   notes.sort((a, b) => a.t - b.t || a.lane - b.lane);
-  return { notes, bpm: def.bpm, duration: demoDuration(def), melodic: true, level: def.level, stats: computeStats(notes) };
+  return {
+    notes,
+    bpm: def.bpm,
+    duration: demoDuration(def),
+    melodic: true,
+    level: def.level,
+    stats: computeStats(notes),
+    downbeats: flat.map((_, bi) => Math.round((DEMO_LEAD_IN + bi * 4 * beat) * 1000) / 1000),
+    sections: demoSections(def),
+    structureConfidence: 1,
+  };
+}
+
+/** Structure connue de la démo : batterie complète = refrain, début et fin calmes = intro et outro. */
+function demoSections(def: DemoDef): ChartSection[] {
+  const beat = 60 / def.bpm;
+  const out: ChartSection[] = [];
+  const groups: Section[] = [];
+  const reps = new Map<number, number>();
+  let bar = 0;
+  def.sections.forEach((s, i) => {
+    const len = s.bars.length * (s.repeat ?? 1);
+    let g = groups.findIndex((o) => o.bars === s.bars || (o.chords.join() === s.chords.join() && o.drums === s.drums));
+    if (g < 0) g = groups.push(s) - 1;
+    const calm = s.drums === 'none' || s.drums === 'light';
+    const kind: SectionKind =
+      s.drums === 'full' ? 'refrain' : i === 0 && calm ? 'intro' : i === def.sections.length - 1 && calm ? 'outro' : s.drums === 'build' ? 'pont' : 'couplet';
+    const rep = reps.get(g) ?? 0;
+    reps.set(g, rep + 1);
+    out.push({
+      t: i === 0 ? 0 : DEMO_LEAD_IN + bar * 4 * beat,
+      end: DEMO_LEAD_IN + (bar + len) * 4 * beat,
+      kind,
+      group: g,
+      rep,
+      sim: 1,
+      energy: s.drums === 'full' ? 0.85 : s.drums === 'build' ? 0.6 : s.drums === 'light' ? 0.4 : 0.2,
+    });
+    bar += len;
+  });
+  if (out.length) out[out.length - 1].end = demoDuration(def);
+  return out;
 }
 
 let cached: SongMeta[] | null = null;

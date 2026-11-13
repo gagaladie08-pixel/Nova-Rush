@@ -35,6 +35,8 @@ public class SeparationService extends Service {
     private static final int NOTIF_ID = 4201;
     /** Modèle embarqué (assets/separation/). */
     static final String MODEL_ASSET = "separation/model.onnx";
+    /** Beat This! (temps et mesures), facultatif. */
+    static final String BEAT_ASSET = "ai/beat_this.onnx";
     /** Au-delà, le téléphone est jugé trop lent : on garde l'analyse classique. */
     private static final double MAX_MINUTES = 25;
 
@@ -183,10 +185,24 @@ public class SeparationService extends Service {
 
     /** Copie le modèle des assets vers le stockage interne (une fois par version de l'appli). */
     private File modelFile() throws Exception {
+        return modelFile(MODEL_ASSET, "model");
+    }
+
+    /** Modèle facultatif : null s'il n'est pas embarqué. */
+    private File optionalModel(String asset, String name) {
+        try {
+            return modelFile(asset, name);
+        } catch (Exception e) {
+            Log.w(TAG, "modèle absent : " + asset);
+            return null;
+        }
+    }
+
+    private File modelFile(String asset, String name) throws Exception {
         File dir = new File(getFilesDir(), "models");
         if (!dir.exists()) dir.mkdirs();
-        File f = new File(dir, "model.onnx");
-        File stamp = new File(dir, "model.stamp");
+        File f = new File(dir, name + ".onnx");
+        File stamp = new File(dir, name + ".stamp");
         long version = getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime;
         String want = Long.toString(version);
         if (f.exists() && stamp.exists()) {
@@ -197,8 +213,8 @@ public class SeparationService extends Service {
             }
             if (r > 0 && new String(b, 0, r, "UTF-8").equals(want)) return f;
         }
-        File tmp = new File(dir, "model.onnx.tmp");
-        try (InputStream in = getAssets().open(MODEL_ASSET); OutputStream out = new FileOutputStream(tmp)) {
+        File tmp = new File(dir, name + ".onnx.tmp");
+        try (InputStream in = getAssets().open(asset); OutputStream out = new FileOutputStream(tmp)) {
             byte[] buf = new byte[1 << 16];
             int r;
             while ((r = in.read(buf)) > 0) out.write(buf, 0, r);
@@ -242,7 +258,18 @@ public class SeparationService extends Service {
             boolean center = c == null || !(c.trim().equals("0") || c.trim().equalsIgnoreCase("false"));
             model.setShape(new long[] {1, 4, dimF, dimT});
             UvrSeparator sep = new UvrSeparator(model, nFft, hop, dimF, dimT, center);
-            SeparationJob.run(dir, sep, (fraction, stage) -> {
+            File beatFile = optionalModel(BEAT_ASSET, "beat_this");
+            BeatThis.OrtNet beatNet = null;
+            if (beatFile != null) {
+                try {
+                    beatNet = new BeatThis.OrtNet(beatFile.getAbsolutePath(), threads);
+                } catch (Throwable t) {
+                    Log.w(TAG, "Beat This! indisponible : " + t);
+                }
+            }
+            final BeatThis.OrtNet beats = beatNet;
+            try {
+            SeparationJob.run(dir, sep, beats, (fraction, stage) -> {
                 String cid = cancelId;
                 if (cid != null && (cid.equals(id) || cid.equals("*"))) return false;
                 long now = SystemClock.elapsedRealtime();
@@ -267,13 +294,18 @@ public class SeparationService extends Service {
                 if (now - lastUi[0] > 1000 || fraction >= 1) {
                     lastUi[0] = now;
                     int pct = (int) Math.floor(fraction * 100);
-                    String text = eta >= 0 ? "Voix isolée · environ " + formatEta(eta) + " restantes" : "Voix isolée par l’IA de l’appareil";
+                    String text = "beats".equals(stage)
+                            ? "Rythme et mesures analysés par l’IA"
+                            : eta >= 0 ? "Voix isolée · environ " + formatEta(eta) + " restantes" : "Voix isolée par l’IA de l’appareil";
                     nm.notify(NOTIF_ID, buildProgress("Analyse de " + title + "… " + pct + " %", text, pct, false));
                     JobStore.update(this, id, JobStore.RUNNING, fraction, null, eta);
                     emit(id);
                 }
                 return true;
             });
+            } finally {
+                if (beats != null) beats.close();
+            }
             JSONObject j = JobStore.read(this, id);
             if (j == null) j = new JSONObject();
             j.put("state", JobStore.DONE);
@@ -282,6 +314,9 @@ public class SeparationService extends Service {
             j.put("vocals", new File(dir, "vocals.f32").getAbsolutePath());
             j.put("accomp", new File(dir, "accomp.f32").getAbsolutePath());
             j.put("sampleRate", SeparationJob.OUT_SR);
+            File beatsOut = new File(dir, "beats.f32");
+            if (beatsOut.exists()) j.put("beats", beatsOut.getAbsolutePath());
+            else j.remove("beats");
             j.put("threads", threads);
             JobStore.write(this, id, j);
             emit(id);

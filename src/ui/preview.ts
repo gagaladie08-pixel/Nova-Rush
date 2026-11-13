@@ -1,4 +1,5 @@
 import { audio } from '../audio/engine';
+import { previewStart } from '../game/sections';
 import { cancelVoice, onVoiceChange, voiceLive } from '../analysis/voiceQueue';
 import { LEVEL_LABEL, type SongMeta } from '../game/types';
 import { db } from '../storage/db';
@@ -122,7 +123,7 @@ export function previewScreen(song: SongMeta): Screen {
         snippetBtn.textContent = 'Préparation…';
         try {
           const buf = await audio.load(song);
-          audio.playSnippet(song, buf);
+          audio.playSnippet(song, buf, previewStart(song.chart));
         } catch (e) {
           toast(e instanceof Error ? e.message : 'Lecture impossible');
         } finally {
