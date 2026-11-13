@@ -57,7 +57,7 @@ jobs:
       - name: Temps et mesures (Beat This!)
         continue-on-error: true
         run: |
-          curl -fsSL -o /tmp/beat_this.onnx https://github.com/${{ github.repository }}/releases/download/ai-models-v1/beat_this_small0.onnx
+          curl -fsSL -o /tmp/beat_this.onnx https://github.com/${{ github.repository }}/releases/download/ai-models-v1/beat_this_final0.int8.onnx
           /tmp/venv/bin/python tools/ai/beats.py /tmp/beat_this.onnx $SEP_DATA/stems
 
       - uses: actions/setup-node@v7

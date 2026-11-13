@@ -52,17 +52,23 @@ jobs:
       - name: Synchronisation Capacitor
         run: npx cap sync android
 
-      # Modèle de séparation de la voix (open source, Apache 2.0, via sherpa-onnx),
-      # embarqué dans l'APK : l'analyse se fait entièrement sur le téléphone.
-      - name: Modèle de séparation de la voix
+      # Modèles d'IA open source embarqués dans l'APK (l'analyse se fait
+      # entièrement sur le téléphone), convertis et vérifiés par ai-models.yml :
+      # - voix : UVR-MDX (Apache 2.0, via sherpa-onnx), poids en float16 ;
+      # - temps et mesures : Beat This! « final » (MIT), poids int8.
+      - name: Modèles d'IA
         run: |
           set -e
-          mkdir -p android/app/src/main/assets/separation
-          curl -fsSL --retry 3 -o android/app/src/main/assets/separation/model.onnx \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/${SEP_MODEL}"
-          size=$(stat -c %s android/app/src/main/assets/separation/model.onnx)
-          echo "modèle ${SEP_MODEL} : ${size} octets"
-          test "$size" -gt 20000000
+          A=android/app/src/main/assets
+          R=https://github.com/${{ github.repository }}/releases/download/ai-models-v1
+          mkdir -p $A/separation $A/ai
+          curl -fsSL --retry 3 -o $A/separation/model.onnx $R/uvr_1_9703.onnx
+          curl -fsSL --retry 3 -o $A/ai/beat_this.onnx $R/beat_this_final0.int8.onnx
+          curl -fsSL --retry 3 -o /tmp/SHA256SUMS $R/SHA256SUMS
+          (cd /tmp && grep -E ' (uvr_1_9703|beat_this_final0.int8).onnx$' SHA256SUMS > want.txt)
+          echo "$(awk '/uvr_1_9703/{print $1}' /tmp/want.txt)  $A/separation/model.onnx" | sha256sum -c
+          echo "$(awk '/beat_this_final0.int8/{print $1}' /tmp/want.txt)  $A/ai/beat_this.onnx" | sha256sum -c
+          ls -la $A/separation $A/ai
 
       - name: Tests Java (FFT, STFT, découpage, rééchantillonnage)
         working-directory: android

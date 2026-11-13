@@ -5,3 +5,4 @@ dist/
 .vite/
 coverage/
 android/app/src/main/assets/separation/
+android/app/src/main/assets/ai/
