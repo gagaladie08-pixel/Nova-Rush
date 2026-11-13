@@ -3,7 +3,7 @@ name: APK Android
 on:
   push:
     branches: ['main', 'arena/**']
-    paths-ignore: ['tools/**', '.github/workflows/separation-eval.yml']
+    paths-ignore: ['tools/**', '.github/workflows/separation-eval.yml', '.github/workflows/ai-models.yml']
   pull_request:
   workflow_dispatch:
 

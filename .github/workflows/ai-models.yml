@@ -1,0 +1,101 @@
+name: Modèles IA (export et vérification)
+
+# Phase 0 : exporte les IA en ONNX pour le téléphone, vérifie qu'elles donnent
+# les mêmes résultats que les originaux, mesure vitesse et taille, puis publie
+# les fichiers dans la release « ai-models-v1 » (utilisée par la compilation de l'APK).
+on:
+  push:
+    branches: ['arena/**']
+    paths: ['tools/ai/**', '.github/workflows/ai-models.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  models:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      AI: /tmp/ai
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Environnements Python (export + Demucs officiel)
+        run: |
+          set -e
+          TORCH="torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu"
+          COMMON="onnx onnxruntime numpy scipy soundfile einops tqdm pyyaml julius openunmix dora-search lameenc"
+          python3 -m venv /tmp/vexp
+          /tmp/vexp/bin/pip install -q $TORCH
+          /tmp/vexp/bin/pip install -q $COMMON rotary_embedding_torch==0.6.4 soxr
+          /tmp/vexp/bin/pip install -q --no-deps https://github.com/CPJKU/beat_this/archive/main.zip
+          git clone -q --depth 1 https://github.com/sevagh/demucs.onnx /tmp/dox
+          /tmp/vexp/bin/pip install -q --no-deps /tmp/dox/demucs-for-onnx
+          python3 -m venv /tmp/vref
+          /tmp/vref/bin/pip install -q $TORCH
+          /tmp/vref/bin/pip install -q $COMMON
+          /tmp/vref/bin/pip install -q --no-deps demucs==4.0.1
+
+      - name: Audio de test (libre de droits)
+        run: |
+          set -e
+          mkdir -p $AI/models $AI/audio && cd $AI/audio
+          L=https://raw.githubusercontent.com/librosa/data/main/audio
+          curl -fsSL -o fishin.ogg "$L/Karissa_Hobbs_-_Lets_Go_Fishin.hq.ogg"
+          curl -fsSL -o vibeace.ogg "$L/Kevin_MacLeod_-_Vibe_Ace.hq.ogg"
+
+      - name: Export Demucs (htdemucs)
+        run: /tmp/vexp/bin/python tools/ai/export.py $AI/models demucs
+
+      - name: Export Beat This! (small et final)
+        run: /tmp/vexp/bin/python tools/ai/export.py $AI/models beat
+
+      - name: CREPE, Basic Pitch, UVR (modèles déjà en ONNX)
+        run: |
+          set -e
+          cd $AI/models
+          C=https://github.com/yqzhishen/onnxcrepe/releases/download/v1.1.0
+          curl -fsSL -o crepe_tiny.onnx $C/tiny.onnx
+          curl -fsSL -o crepe_small.onnx $C/small.onnx
+          /tmp/vexp/bin/pip download -q basic-pitch==0.4.0 --no-deps -d /tmp/bp
+          unzip -q -o /tmp/bp/basic_pitch-0.4.0-py2.py3-none-any.whl 'basic_pitch/saved_models/icassp_2022/nmp.onnx' -d /tmp/bp
+          cp /tmp/bp/basic_pitch/saved_models/icassp_2022/nmp.onnx basic_pitch.onnx
+          curl -fsSL -o uvr.fp32.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/UVR_MDXNET_1_9703.onnx
+          /tmp/vexp/bin/python $GITHUB_WORKSPACE/tools/ai/export.py /tmp/uvr16 fp16 uvr.fp32.onnx
+          mv /tmp/uvr16/uvr.fp32.onnx uvr_1_9703.onnx
+          ls -la
+
+      - name: Demucs officiel (référence PyTorch)
+        run: /tmp/vref/bin/python tools/ai/check.py demucs-ref $AI/audio/fishin.ogg $AI/demucs_ref.npy
+
+      - name: Vérification Demucs (ONNX + spectre hors réseau)
+        run: /tmp/vexp/bin/python tools/ai/check.py demucs $AI/models $AI/audio/fishin.ogg $AI/demucs_ref.npy
+
+      - name: Vérification Beat This!
+        run: /tmp/vexp/bin/python tools/ai/check.py beat $AI/models $AI/audio/fishin.ogg
+
+      - name: Vérification CREPE
+        run: /tmp/vexp/bin/python tools/ai/check.py crepe $AI/models $AI/audio/fishin.ogg
+
+      - name: Vérification Basic Pitch
+        run: /tmp/vexp/bin/python tools/ai/check.py basicpitch $AI/models $AI/audio/fishin.ogg
+
+      - name: Vérification UVR en float16
+        run: /tmp/vexp/bin/python tools/ai/check.py uvr16 $AI/models $AI/audio/fishin.ogg
+
+      - name: Publication des modèles (release ai-models-v1)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          cd $AI/models
+          sha256sum htdemucs.onnx beat_this_small0.onnx beat_this_final0.onnx crepe_tiny.onnx crepe_small.onnx basic_pitch.onnx uvr_1_9703.onnx | tee SHA256SUMS
+          if ! gh release view ai-models-v1 >/dev/null 2>&1; then
+            gh release create ai-models-v1 --prerelease --target "$GITHUB_SHA" \
+              --title "Modèles IA de Nova Rush (pas à installer)" \
+              --notes "Modèles open source convertis pour le téléphone (Demucs MIT, Beat This! MIT, CREPE MIT, Basic Pitch Apache 2.0, UVR-MDX via sherpa-onnx Apache 2.0). Utilisés automatiquement par la compilation de l'APK."
+          fi
+          gh release upload ai-models-v1 --clobber htdemucs.onnx beat_this_small0.onnx beat_this_final0.onnx \
+            crepe_tiny.onnx crepe_small.onnx basic_pitch.onnx uvr_1_9703.onnx SHA256SUMS
