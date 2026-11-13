@@ -9,11 +9,12 @@
  */
 import type { SongMeta, VoiceAnalysis } from '../game/types';
 import { db } from '../storage/db';
-import { ANALYSIS_RATE, decodeForAnalysis, runAnalysis } from './client';
+import { ANALYSIS_RATE, decodeForAnalysis, runAnalysisFull } from './client';
 import { parseBeats, parsePitch } from './beatsFile';
 import {
   VoiceSeparation,
   nativeSeparationPossible,
+  readByteFile,
   readFloatFile,
   uploadInput,
   type NativeJob,
@@ -166,6 +167,16 @@ async function readBeats(path: string | undefined) {
   }
 }
 
+/** Fichier facultatif d'une IA : absent ou illisible → la source est simplement ignorée. */
+async function optional<T>(path: string | undefined, read: (p: string) => Promise<T>): Promise<T | undefined> {
+  if (!path) return undefined;
+  try {
+    return await read(path);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Refait le parcours avec les pistes séparées (une seule finalisation à la fois). */
 async function finish(job: NativeJob): Promise<void> {
   const id = job.id;
@@ -176,14 +187,17 @@ async function finish(job: NativeJob): Promise<void> {
     const blob = await db.getAudio(id);
     if (!song || !blob || !job.vocals || !job.accomp) throw new Error('données manquantes');
     if ((job.sampleRate ?? ANALYSIS_RATE) !== ANALYSIS_RATE) throw new Error('fréquence inattendue');
-    const [{ samples }, vocals, accomp, rhythm, pitch] = await Promise.all([
+    const [{ samples }, vocals, accomp, rhythm, pitch, drums, bpBass, bpOther] = await Promise.all([
       decodeForAnalysis(await blob.arrayBuffer()),
       readFloatFile(job.vocals),
       readFloatFile(job.accomp),
       readBeats(job.beats),
       readPitch(job.pitch),
+      optional(job.drums, readFloatFile),
+      optional(job.bpBass, readByteFile),
+      optional(job.bpOther, readByteFile),
     ]);
-    const chart = await runAnalysis(
+    const { chart, lagSec } = await runAnalysisFull(
       samples,
       `${song.title}|${song.artist}|${Math.round(song.duration)}`,
       () => {},
@@ -191,6 +205,7 @@ async function finish(job: NativeJob): Promise<void> {
       { vocals, accomp },
       rhythm,
       pitch,
+      { drums, bpBass, bpOther },
     );
     const fresh = await db.getSong(id);
     if (!fresh || !fresh.hasAudio) throw new Error('morceau supprimé');
@@ -198,7 +213,11 @@ async function finish(job: NativeJob): Promise<void> {
       ...fresh,
       chart,
       level: chart.level,
-      voice: { state: 'done', seconds: job.seconds ? Math.round(job.seconds) : undefined },
+      voice: {
+        state: 'done',
+        seconds: job.seconds ? Math.round(job.seconds) : undefined,
+        ...(lagSec !== undefined ? { lagSec: Math.round(lagSec * 1000) / 1000 } : {}),
+      },
     });
     live.delete(id);
     emit();

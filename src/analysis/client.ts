@@ -1,6 +1,14 @@
 import type { Chart } from '../game/types';
 import { hashString } from './dsp';
 import type { ExternalPitch } from './beatsFile';
+import type { MusicSummary } from './conductor';
+
+/** Sorties des IA sur les instruments (fichiers du service Android). */
+export interface InstrumentFiles {
+  drums?: Float32Array;
+  bpBass?: Uint8Array;
+  bpOther?: Uint8Array;
+}
 
 export class ImportError extends Error {}
 
@@ -36,6 +44,20 @@ export function runAnalysis(
   rhythm?: { beats: number[]; downbeats: number[] },
   pitch?: ExternalPitch,
 ): Promise<Chart> {
+  return runAnalysisFull(samples, seedKey, onProgress, signal, stems, rhythm, pitch).then((r) => r.chart);
+}
+
+/** Comme runAnalysis, avec le résumé des IA (analyse avancée) pour reconstruire le parcours plus tard. */
+export function runAnalysisFull(
+  samples: Float32Array,
+  seedKey: string,
+  onProgress: (p: number, label: string) => void,
+  signal?: AbortSignal,
+  stems?: { vocals: Float32Array; accomp: Float32Array },
+  rhythm?: { beats: number[]; downbeats: number[] },
+  pitch?: ExternalPitch,
+  inst: InstrumentFiles = {},
+): Promise<{ chart: Chart; summary?: MusicSummary; lagSec?: number }> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     signal?.addEventListener('abort', () => {
@@ -47,7 +69,7 @@ export function runAnalysis(
       if (msg.type === 'progress') onProgress(msg.p, msg.label);
       else if (msg.type === 'done') {
         worker.terminate();
-        resolve(msg.chart as Chart);
+        resolve({ chart: msg.chart as Chart, summary: msg.summary as MusicSummary | undefined, lagSec: msg.lagSec });
       } else if (msg.type === 'error') {
         worker.terminate();
         reject(new ImportError(msg.message));
@@ -60,6 +82,10 @@ export function runAnalysis(
     const transfer: Transferable[] = [samples.buffer];
     if (stems) transfer.push(stems.vocals.buffer, stems.accomp.buffer);
     if (pitch) transfer.push(pitch.f0.buffer, pitch.conf.buffer);
-    worker.postMessage({ samples, sampleRate: ANALYSIS_RATE, seed: hashString(seedKey), ...stems, rhythm, pitch }, transfer);
+    for (const a of [inst.drums, inst.bpBass, inst.bpOther]) if (a) transfer.push(a.buffer);
+    worker.postMessage(
+      { samples, sampleRate: ANALYSIS_RATE, seed: hashString(seedKey), ...stems, rhythm, pitch, ...inst },
+      transfer,
+    );
   });
 }

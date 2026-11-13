@@ -21,7 +21,7 @@ interface Onset {
   strength: number;
 }
 
-interface Candidate {
+export interface Candidate {
   t: number;
   strength: number;
   pitch?: number;
@@ -31,6 +31,12 @@ interface Candidate {
   downBeat: boolean;
   beatIndex: number;
   priority: number;
+  /** Coup de cymbale sur un temps : accord appuyé (chef d'orchestre). */
+  accent?: boolean;
+  /** Intensité de la section 0..1 (monte jusqu'au dernier refrain). */
+  lift?: number;
+  /** Colonne imposée (batterie : grosse caisse à gauche, caisse claire à droite). */
+  lane?: Lane;
 }
 
 export interface AnalysisFeatures {
@@ -266,7 +272,7 @@ class PitchProbe {
 }
 
 /** Cale un instant sur la grille (quarts de temps) s'il en est assez proche. */
-function makeSnap(beats: number[], beatLen: number, maxTol: number, relTol: number) {
+export function makeSnap(beats: number[], beatLen: number, maxTol: number, relTol: number) {
   return (t: number) => {
     if (beats.length < 2) return { t, beatIndex: 0, onBeat: false };
     let lo = 0;
@@ -679,14 +685,16 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
   // Accords : accents forts sur les temps.
   if (withChords && params.chordRate > 0) {
     const eligible = filtered.filter((p) => p.onBeat && !p.dur);
-    const sorted = [...eligible].sort((a, b) => b.strength - a.strength);
+    // Cymbales d'abord, puis les accents forts — davantage quand l'intensité monte.
+    const weight = (p: Planned) => (p.accent ? 10 : 0) + p.strength * (0.7 + 0.6 * (p.lift ?? 0.5));
+    const sorted = [...eligible].sort((a, b) => weight(b) - weight(a));
     const quota = Math.round(filtered.length * params.chordRate);
     const tripleQuota = params.maxChord >= 3 ? Math.round(quota * 0.2) : 0;
     let lastChordBeat = -999;
     let made = 0;
     const chosen = new Set<Planned>();
     for (const p of sorted) {
-      if (made >= quota) break;
+      if (made >= quota && !p.accent) break;
       if (Math.abs(p.beatIndex - lastChordBeat) < 2) continue;
       chosen.add(p);
       lastChordBeat = p.beatIndex;
@@ -715,7 +723,8 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
       if (!isRepeat(si)) continue;
       const r = relOf(p.t, si);
       const m = (tplSizes.get(secs![si].group) ?? []).find((q) => Math.abs(q.rel - r) < SAME_POS && pitchCompatible(q.pitch, p.pitch));
-      if (m) p.size = p.dur || !withChords ? 1 : m.size;
+      // Dernier refrain : une cymbale peut ajouter un accord (intensité), les colonnes restent celles du motif.
+      if (m) p.size = p.dur || !withChords ? 1 : Math.max(m.size, p.accent && (p.lift ?? 0) >= 0.95 ? p.size : 1);
     }
   }
 
@@ -776,8 +785,13 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
     let desired: Lane;
     if (match) {
       desired = match.lanes[0];
+    } else if (p.lane !== undefined) {
+      desired = p.lane;
     } else if (melodic && p.pitch !== undefined) {
-      const win = pitchedTimes.filter((q) => Math.abs(q.t - p.t) <= 3).map((q) => q.pitch as number);
+      // Colonnes stables : hauteurs comparées dans la même section seulement.
+      const win = pitchedTimes
+        .filter((q) => Math.abs(q.t - p.t) <= 3 && (si < 0 || secIndexOf(q.t) === si))
+        .map((q) => q.pitch as number);
       const uniq = [...new Set(win)].sort((a, b) => a - b);
       const idx = uniq.indexOf(p.pitch);
       const u = uniq.length;
@@ -847,6 +861,10 @@ export interface VoiceFeatures extends AnalysisFeatures {
   followsVoice: boolean;
   /** Passages chantés (s). */
   voiceSpans?: [number, number][];
+  /** Sources séparées, pour le chef d'orchestre : notes chantées, notes tenues, attaques de l'accompagnement. */
+  voiceCands?: Candidate[];
+  noteSpans?: [number, number][];
+  accompCands?: Candidate[];
 }
 
 const rmsOf = (x: Float32Array) => {
@@ -951,13 +969,16 @@ export function extractFeaturesVoice(
     voiceRatio: voice.ratio,
     followsVoice: true,
     voiceSpans: voice.spans,
+    voiceCands,
+    noteSpans,
+    accompCands: base.candidates,
   };
 }
 
 const r3 = (t: number) => Math.round(t * 1000) / 1000;
 
 /** Ajoute la structure (sur le mix complet) aux caractéristiques. */
-function withStructure<T extends AnalysisFeatures>(
+export function withStructure<T extends AnalysisFeatures>(
   f: T,
   mix: Float32Array,
   sr: number,
@@ -975,7 +996,7 @@ function withStructure<T extends AnalysisFeatures>(
   return f;
 }
 
-function finishChart(
+export function finishChart(
   features: AnalysisFeatures,
   seed: number,
   progress: ProgressFn,

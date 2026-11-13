@@ -31,6 +31,12 @@ final class SeparationJob {
      */
     static void separateStream(Resampler.Source r, UvrSeparator sep, int chunk, int margin,
             RawAudio.Writer wv, RawAudio.Writer wa, Listener.Fraction progress) throws Exception {
+        separateStream(r, sep, chunk, margin, wv, wa, null, progress);
+    }
+
+    /** Idem, et écrit aussi l'accompagnement stéréo (gauche − voix, droite − voix) si `was` est donné. */
+    static void separateStream(Resampler.Source r, UvrSeparator sep, int chunk, int margin,
+            RawAudio.Writer wv, RawAudio.Writer wa, RawAudio.Writer was, Listener.Fraction progress) throws Exception {
         final long n = r.frames();
         if (n < chunk) chunk = (int) n;
         margin = Math.min(margin, chunk);
@@ -59,9 +65,14 @@ final class SeparationJob {
                 float mm = 0.5f * (left[i] + right[i]);
                 wv.put(vm);
                 wa.put(mm - vm);
+                if (was != null) {
+                    was.put(left[i] - v[0][i]);
+                    was.put(right[i] - v[1][i]);
+                }
             }
             wv.addFrames(hi - lo);
             wa.addFrames(hi - lo);
+            if (was != null) was.addFrames(hi - lo);
             index++;
             if (last) break;
             skip += chunk;
@@ -152,55 +163,144 @@ final class SeparationJob {
         }
     }
 
-    static void run(File dir, UvrSeparator sep, Listener listener) throws Exception {
-        run(dir, sep, null, null, listener);
+    /** Les IA d'une analyse ; seule la séparation de la voix est obligatoire. */
+    static final class Models {
+        UvrSeparator sep;
+        BeatThis.Net beat;
+        CrepePitch.Net crepe;
+        /** Demucs est gros : ouvert seulement au moment de son étape. */
+        Opener<DemucsSeparator.OrtNet> demucs;
+        BasicPitch.Net basicPitch;
     }
 
-    static void run(File dir, UvrSeparator sep, BeatThis.Net beatNet, CrepePitch.Net crepeNet, Listener listener)
-            throws Exception {
+    interface Opener<T> {
+        T open() throws Exception;
+    }
+
+    /** Durée maximale de la séparation de la voix (au-delà : téléphone jugé trop lent). */
+    static final double MAX_SEP_MINUTES = 22;
+    /** Demucs est sauté si son temps estimé dépasse cette durée. */
+    static final double MAX_DEMUCS_MINUTES = 45;
+    /** Demucs ≈ 2,9 × le temps de la séparation de la voix (mesuré en CI : ×0,55 contre ×0,2). */
+    static final double DEMUCS_VS_UVR = 2.9;
+
+    /** Répartition de la progression selon le coût de chaque étape. */
+    static final class Plan {
+        private final String[] names;
+        private final double[] from;
+        private final double[] to;
+
+        Plan(String[] names, double[] weights) {
+            this.names = names;
+            from = new double[names.length];
+            to = new double[names.length];
+            double total = 0;
+            for (double w : weights) total += w;
+            double acc = 0;
+            for (int i = 0; i < names.length; i++) {
+                from[i] = acc / total;
+                acc += weights[i];
+                to[i] = acc / total;
+            }
+        }
+
+        static Plan of(Models m) {
+            java.util.List<String> n = new java.util.ArrayList<>();
+            java.util.List<Double> w = new java.util.ArrayList<>();
+            n.add("decode"); w.add(3.0);
+            if (m.beat != null) { n.add("beats"); w.add(2.0); }
+            n.add("separate"); w.add(25.0);
+            if (m.crepe != null) { n.add("pitch"); w.add(3.0); }
+            if (m.demucs != null) { n.add("demucs"); w.add(57.0); }
+            n.add("finish"); w.add(4.0);
+            if (m.demucs != null && m.basicPitch != null) { n.add("notes"); w.add(6.0); }
+            double[] ws = new double[w.size()];
+            for (int i = 0; i < ws.length; i++) ws[i] = w.get(i);
+            return new Plan(n.toArray(new String[0]), ws);
+        }
+
+        private int idx(String stage) {
+            for (int i = 0; i < names.length; i++) if (names[i].equals(stage)) return i;
+            throw new IllegalArgumentException(stage);
+        }
+
+        /** Progression globale d'une étape avancée à `f` (0..1). */
+        double at(String stage, double f) {
+            int i = idx(stage);
+            return from[i] + (to[i] - from[i]) * Math.max(0, Math.min(1, f));
+        }
+
+        Listener.Fraction stage(Listener l, String stage) {
+            return (f) -> l.onProgress(at(stage, f), stage);
+        }
+    }
+
+    static void run(File dir, UvrSeparator sep, Listener listener) throws Exception {
+        Models m = new Models();
+        m.sep = sep;
+        run(dir, m, listener);
+    }
+
+    static void run(File dir, Models models, Listener listener) throws Exception {
+        final Plan plan = Plan.of(models);
         File input = new File(dir, "input.bin");
         File src = new File(dir, "decoded.raw");
         File pcm = new File(dir, "pcm44.raw");
         File voc44 = new File(dir, "voc44.raw");
         File acc44 = new File(dir, "acc44.raw");
+        File accSt = new File(dir, "accst44.raw");
+        File[] inst44 = {new File(dir, "drums44.raw"), new File(dir, "bass44.raw"), new File(dir, "other44.raw")};
+        File bass22 = new File(dir, "bass22.raw");
+        File other22 = new File(dir, "other22.raw");
         try {
-            // 1. Décodage (0 → 6 %)
-            AudioDecoder.Result dec = AudioDecoder.decode(input, src, (f) -> listener.onProgress(0.06 * f, "decode"));
-            // 2. 44,1 kHz (6 → 9 %)
-            if (dec.sampleRate != SR) {
+            // 1. Décodage et 44,1 kHz stéréo
+            Listener.Fraction dec = plan.stage(listener, "decode");
+            AudioDecoder.Result d = AudioDecoder.decode(input, src, (f) -> dec.onProgress(0.6 * f));
+            if (d.sampleRate != SR) {
                 try (RawAudio.Reader r = new RawAudio.Reader(src, 2); RawAudio.Writer w = new RawAudio.Writer(pcm, 2)) {
-                    new Resampler(dec.sampleRate, SR).run(r, w, (f) -> listener.onProgress(0.06 + 0.03 * f, "decode"));
+                    new Resampler(d.sampleRate, SR).run(r, w, (f) -> dec.onProgress(0.6 + 0.4 * f));
                 }
                 src.delete();
             } else if (!src.renameTo(pcm)) {
                 throw new IllegalStateException("renommage impossible");
             }
-            // 3. Rythme par l'IA (9 → 12 %) — facultatif : en cas d'échec, rythme classique.
-            double sepFrom = 0.09;
-            if (beatNet != null) {
+            // 2. Rythme par l'IA — facultatif : en cas d'échec, rythme classique.
+            if (models.beat != null) {
                 try {
-                    computeBeats(pcm, dir, beatNet, (f) -> listener.onProgress(0.09 + 0.03 * f, "beats"));
+                    computeBeats(pcm, dir, models.beat, plan.stage(listener, "beats"));
                 } catch (UvrSeparator.Cancelled c) {
                     throw c;
                 } catch (Throwable t) {
                     Log.w("NovaRushSep", "Beat This! : " + t, t);
                     new File(dir, "beats.f32").delete();
                 }
-                sepFrom = 0.12;
             }
-            // 4. Séparation (→ 90 % avec CREPE, sinon 96 %)
-            final double from = sepFrom;
-            final double sepTo = crepeNet != null ? 0.90 : 0.96;
+            // 3. Voix / accompagnement (+ accompagnement stéréo pour Demucs)
+            final Listener.Fraction sp = plan.stage(listener, "separate");
+            final long sepT0 = System.nanoTime();
+            final boolean[] played = {SeparationService.gameActive};
+            final boolean[] checked = {false};
             try (RawAudio.Reader r = new RawAudio.Reader(pcm, 2);
                     RawAudio.Writer wv = new RawAudio.Writer(voc44, 1);
-                    RawAudio.Writer wa = new RawAudio.Writer(acc44, 1)) {
-                separateStream(r, sep, 15 * SR, SR, wv, wa, (f) -> listener.onProgress(from + (sepTo - from) * f, "separate"));
+                    RawAudio.Writer wa = new RawAudio.Writer(acc44, 1);
+                    RawAudio.Writer ws = models.demucs != null ? new RawAudio.Writer(accSt, 2) : null) {
+                separateStream(r, models.sep, 15 * SR, SR, wv, wa, ws, (f) -> {
+                    if (SeparationService.gameActive) played[0] = true;
+                    if (!checked[0] && f > 0.1 && !played[0]) {
+                        // Vérifié une seule fois, hors partie (le mode léger fausserait la mesure).
+                        checked[0] = true;
+                        double total = (System.nanoTime() - sepT0) / 1e9 / f;
+                        if (total > MAX_SEP_MINUTES * 60) throw new SeparationService.TooSlowException(total);
+                    }
+                    return sp.onProgress(f);
+                });
             }
+            final double sepSeconds = (System.nanoTime() - sepT0) / 1e9;
             pcm.delete();
-            // 5. Hauteur de la voix par l'IA (90 → 96 %) — facultatif : sinon suivi classique (YIN).
-            if (crepeNet != null) {
+            // 4. Hauteur de la voix par l'IA — facultatif : sinon suivi classique (YIN).
+            if (models.crepe != null) {
                 try {
-                    computePitch(voc44, dir, crepeNet, (f) -> listener.onProgress(0.90 + 0.06 * f, "pitch"));
+                    computePitch(voc44, dir, models.crepe, plan.stage(listener, "pitch"));
                 } catch (UvrSeparator.Cancelled c) {
                     throw c;
                 } catch (Throwable t) {
@@ -208,25 +308,117 @@ final class SeparationJob {
                     new File(dir, "pitch.f32").delete();
                 }
             }
-            // 6. 22 050 Hz mono (96 → 100 %)
+            // 5. Batterie / basse / autres (Demucs sur l'accompagnement) — facultatif.
+            boolean instruments = false;
+            if (models.demucs != null) {
+                boolean tooSlow = !played[0] && sepSeconds * DEMUCS_VS_UVR > MAX_DEMUCS_MINUTES * 60;
+                if (tooSlow) {
+                    Log.w("NovaRushSep", "Demucs sauté : environ " + Math.round(sepSeconds * DEMUCS_VS_UVR / 60) + " min estimées");
+                } else {
+                    try {
+                        computeInstruments(accSt, inst44, models.demucs, plan.stage(listener, "demucs"));
+                        instruments = true;
+                    } catch (UvrSeparator.Cancelled c) {
+                        throw c;
+                    } catch (Throwable t) {
+                        Log.w("NovaRushSep", "Demucs : " + t, t);
+                    }
+                }
+                accSt.delete();
+            }
+            // 6. 22 050 Hz mono pour l'appli
+            Listener.Fraction fin = plan.stage(listener, "finish");
             Resampler down = new Resampler(SR, OUT_SR);
             File vocOut = new File(dir, "vocals.f32.tmp");
             File accOut = new File(dir, "accomp.f32.tmp");
             try (RawAudio.Reader r = new RawAudio.Reader(voc44, 1); RawAudio.Writer w = new RawAudio.Writer(vocOut, 1)) {
-                down.run(r, w, (f) -> listener.onProgress(0.96 + 0.02 * f, "finish"));
+                down.run(r, w, (f) -> fin.onProgress(0.3 * f));
             }
             try (RawAudio.Reader r = new RawAudio.Reader(acc44, 1); RawAudio.Writer w = new RawAudio.Writer(accOut, 1)) {
-                down.run(r, w, (f) -> listener.onProgress(0.98 + 0.02 * f, "finish"));
+                down.run(r, w, (f) -> fin.onProgress(0.3 + 0.3 * f));
             }
             if (!vocOut.renameTo(new File(dir, "vocals.f32")) || !accOut.renameTo(new File(dir, "accomp.f32"))) {
                 throw new IllegalStateException("renommage impossible");
+            }
+            if (instruments) {
+                try {
+                    File drumsOut = new File(dir, "drums.f32.tmp");
+                    try (RawAudio.Reader r = new RawAudio.Reader(inst44[0], 1); RawAudio.Writer w = new RawAudio.Writer(drumsOut, 1)) {
+                        down.run(r, w, (f) -> fin.onProgress(0.6 + 0.14 * f));
+                    }
+                    if (!drumsOut.renameTo(new File(dir, "drums.f32"))) throw new IllegalStateException("renommage impossible");
+                    try (RawAudio.Reader r = new RawAudio.Reader(inst44[1], 1); RawAudio.Writer w = new RawAudio.Writer(bass22, 1)) {
+                        down.run(r, w, (f) -> fin.onProgress(0.74 + 0.13 * f));
+                    }
+                    try (RawAudio.Reader r = new RawAudio.Reader(inst44[2], 1); RawAudio.Writer w = new RawAudio.Writer(other22, 1)) {
+                        down.run(r, w, (f) -> fin.onProgress(0.87 + 0.13 * f));
+                    }
+                } catch (UvrSeparator.Cancelled c) {
+                    throw c;
+                } catch (Throwable t) {
+                    Log.w("NovaRushSep", "pistes instruments : " + t, t);
+                    instruments = false;
+                    new File(dir, "drums.f32").delete();
+                }
+                for (File f : inst44) f.delete();
+            }
+            // 7. Notes des instruments (Basic Pitch sur la basse et les autres) — facultatif.
+            if (instruments && models.basicPitch != null) {
+                Listener.Fraction nt = plan.stage(listener, "notes");
+                try {
+                    computeNotes(bass22, new File(dir, "bp_bass.u8"), models.basicPitch, (f) -> nt.onProgress(0.5 * f));
+                    computeNotes(other22, new File(dir, "bp_other.u8"), models.basicPitch, (f) -> nt.onProgress(0.5 + 0.5 * f));
+                } catch (UvrSeparator.Cancelled c) {
+                    throw c;
+                } catch (Throwable t) {
+                    Log.w("NovaRushSep", "Basic Pitch : " + t, t);
+                    new File(dir, "bp_bass.u8").delete();
+                    new File(dir, "bp_other.u8").delete();
+                }
             }
         } finally {
             src.delete();
             pcm.delete();
             voc44.delete();
             acc44.delete();
+            accSt.delete();
+            for (File f : inst44) f.delete();
+            bass22.delete();
+            other22.delete();
         }
         input.delete();
+    }
+
+    /** Demucs sur l'accompagnement stéréo → batterie, basse, autres (mono 44,1 kHz). */
+    static void computeInstruments(File accSt, File[] out44, Opener<DemucsSeparator.OrtNet> opener, Listener.Fraction progress)
+            throws Exception {
+        try (DemucsSeparator.OrtNet net = opener.open();
+                RawAudio.Reader r = new RawAudio.Reader(accSt, 2);
+                RawAudio.Writer d = new RawAudio.Writer(out44[0], 1);
+                RawAudio.Writer b = new RawAudio.Writer(out44[1], 1);
+                RawAudio.Writer o = new RawAudio.Writer(out44[2], 1)) {
+            if (r.frames() > (long) MAX_BEAT_SECONDS * SR) throw new IllegalStateException("morceau trop long pour Demucs");
+            new DemucsSeparator(net).separate(r, new RawAudio.Writer[] {d, b, o}, 1e-4f, new DemucsSeparator.Progress() {
+                @Override
+                public boolean onProgress(double f) {
+                    return progress.onProgress(f);
+                }
+
+                @Override
+                public boolean paused() {
+                    return SeparationService.gameActive;
+                }
+            });
+        }
+    }
+
+    /** Basic Pitch sur une piste mono 22 050 Hz → matrices attaques / notes. */
+    static void computeNotes(File in22, File out, BasicPitch.Net net, Listener.Fraction progress) throws Exception {
+        float[] x;
+        try (RawAudio.Reader r = new RawAudio.Reader(in22, 1)) {
+            x = new float[(int) r.frames()];
+            r.read(0, x.length, x);
+        }
+        BasicPitch.write(out, BasicPitch.run(net, x, progress));
     }
 }

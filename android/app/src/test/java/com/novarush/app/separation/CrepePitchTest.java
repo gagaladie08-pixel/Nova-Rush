@@ -44,4 +44,25 @@ public class CrepePitchTest {
         assertEquals(10 * Math.pow(2, (20 * 120 + 1997.3794084376191) / 1200), fc[0][50], 1e-2);
         assertEquals(1f, fc[1][50], 0);
     }
+
+    @Test
+    public void silentPassagesSkipTheNetwork() throws Exception {
+        float[] x = new float[16000 * 6];
+        // Voix seulement entre 4 et 5 s.
+        for (int i = 64000; i < 80000; i++) x[i] = (float) (0.3 * Math.sin(2 * Math.PI * 220 * i / 16000.0));
+        final int[] frames = {0};
+        CrepePitch.Net net = (f, n) -> {
+            frames[0] += n;
+            float[] p = new float[n * CrepePitch.BINS];
+            for (int k = 0; k < n; k++) p[k * CrepePitch.BINS + 100] = 0.9f;
+            return p;
+        };
+        float[][] fc = CrepePitch.track(net, x, null);
+        int n = CrepePitch.frameCount(x.length);
+        org.junit.Assert.assertEquals(n, fc[0].length);
+        org.junit.Assert.assertTrue("lots muets sautés : " + frames[0] + " / " + n, frames[0] < n);
+        org.junit.Assert.assertEquals(0f, fc[1][50], 0f);
+        org.junit.Assert.assertEquals(0.9f, fc[1][450], 1e-6f);
+    }
 }
+

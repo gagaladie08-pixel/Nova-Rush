@@ -39,6 +39,8 @@ def main() -> None:
         acc = mix - voc
         for suffix, arr in (("mix", mix), ("voc", voc), ("acc", acc)):
             arr.astype("<f4").tofile(os.path.join(out, f"{name}.{suffix}.f32"))
+        # Accompagnement stéréo 44,1 kHz (entrelacé) pour Demucs, comme sur le téléphone.
+        (x - v).T.astype("<f4").tofile(os.path.join(out, f"{name}.acc44.f32"))
         e_v = float(np.sqrt(np.mean(voc**2)))
         e_a = float(np.sqrt(np.mean(acc**2)))
         annotate(

@@ -39,8 +39,10 @@ public class SeparationService extends Service {
     static final String BEAT_ASSET = "ai/beat_this.onnx";
     /** CREPE (hauteur de la voix), facultatif. */
     static final String CREPE_ASSET = "ai/crepe.onnx";
-    /** Au-delà, le téléphone est jugé trop lent : on garde l'analyse classique. */
-    private static final double MAX_MINUTES = 25;
+    /** Demucs (batterie, basse, autres), facultatif. */
+    static final String DEMUCS_ASSET = "ai/demucs.onnx";
+    /** Basic Pitch (notes des instruments), facultatif. */
+    static final String BASIC_PITCH_ASSET = "ai/basic_pitch.onnx";
 
     /** Écouteur (le plugin) pour prévenir l'appli. */
     interface Events {
@@ -160,7 +162,7 @@ public class SeparationService extends Service {
             while (true) {
                 JSONObject job = nextQueued();
                 if (job == null) break;
-                wl.acquire(45 * 60 * 1000L);
+                wl.acquire(120 * 60 * 1000L);
                 runJob(job);
             }
         } finally {
@@ -247,9 +249,7 @@ public class SeparationService extends Service {
         cancelId = null;
         final long t0 = SystemClock.elapsedRealtime();
         final long[] lastUi = {0};
-        final double[] sepStart = {-1, 0};
-        final boolean[] slowChecked = {false};
-        final boolean[] playedDuring = {false};
+        final double[] etaStart = {-1, 0};
         final int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
         try (OrtModel model = new OrtModel(modelFile().getAbsolutePath(), threads)) {
             int nFft = model.metaInt("n_fft");
@@ -280,37 +280,45 @@ public class SeparationService extends Service {
                 }
             }
             final CrepePitch.OrtNet crepe = crepeNet;
+            File bpFile = optionalModel(BASIC_PITCH_ASSET, "basic_pitch");
+            BasicPitch.OrtNet bpNet = null;
+            if (bpFile != null) {
+                try {
+                    bpNet = new BasicPitch.OrtNet(bpFile.getAbsolutePath(), threads);
+                } catch (Throwable t) {
+                    Log.w(TAG, "Basic Pitch indisponible : " + t);
+                }
+            }
+            final BasicPitch.OrtNet basicPitch = bpNet;
+            final File demucsFile = optionalModel(DEMUCS_ASSET, "demucs");
+            SeparationJob.Models models = new SeparationJob.Models();
+            models.sep = sep;
+            models.beat = beats;
+            models.crepe = crepe;
+            models.basicPitch = basicPitch;
+            if (demucsFile != null) models.demucs = () -> new DemucsSeparator.OrtNet(demucsFile.getAbsolutePath(), threads);
             try {
-            SeparationJob.run(dir, sep, beats, crepe, (fraction, stage) -> {
+            SeparationJob.run(dir, models, (fraction, stage) -> {
                 String cid = cancelId;
                 if (cid != null && (cid.equals(id) || cid.equals("*"))) return false;
                 long now = SystemClock.elapsedRealtime();
                 double elapsed = (now - t0) / 1000.0;
                 long eta = -1;
-                if (gameActive) playedDuring[0] = true;
-                if ("separate".equals(stage)) {
-                    if (sepStart[0] < 0) {
-                        sepStart[0] = elapsed;
-                        sepStart[1] = fraction;
-                    } else if (fraction - sepStart[1] > 0.05) {
-                        double rate = (elapsed - sepStart[0]) / (fraction - sepStart[1]);
-                        double total = sepStart[0] + rate * (1 - sepStart[1]);
-                        eta = Math.round(total - elapsed);
-                        // Vérifié une seule fois, hors partie (le mode léger fausserait la mesure).
-                        if (!slowChecked[0] && fraction - sepStart[1] > 0.1 && !gameActive && !playedDuring[0]) {
-                            slowChecked[0] = true;
-                            if (total > MAX_MINUTES * 60) throw new TooSlowException(total);
-                        }
+                // Temps restant : la progression est répartie selon le coût de chaque étape.
+                if (etaStart[0] < 0) {
+                    if (fraction > 0.03) {
+                        etaStart[0] = elapsed;
+                        etaStart[1] = fraction;
                     }
+                } else if (fraction - etaStart[1] > 0.03) {
+                    double rate = (elapsed - etaStart[0]) / (fraction - etaStart[1]);
+                    eta = Math.round(rate * (1 - fraction));
                 }
                 if (now - lastUi[0] > 1000 || fraction >= 1) {
                     lastUi[0] = now;
                     int pct = (int) Math.floor(fraction * 100);
-                    String text = "beats".equals(stage)
-                            ? "Rythme et mesures analysés par l’IA"
-                            : "pitch".equals(stage)
-                            ? "Mélodie chantée suivie par l’IA"
-                            : eta >= 0 ? "Voix isolée · environ " + formatEta(eta) + " restantes" : "Voix isolée par l’IA de l’appareil";
+                    String what = stageText(stage);
+                    String text = eta >= 0 ? what + " · environ " + formatEta(eta) + " restantes" : what;
                     nm.notify(NOTIF_ID, buildProgress("Analyse de " + title + "… " + pct + " %", text, pct, false));
                     JobStore.update(this, id, JobStore.RUNNING, fraction, null, eta);
                     emit(id);
@@ -320,6 +328,7 @@ public class SeparationService extends Service {
             } finally {
                 if (beats != null) beats.close();
                 if (crepe != null) crepe.close();
+                if (basicPitch != null) basicPitch.close();
             }
             JSONObject j = JobStore.read(this, id);
             if (j == null) j = new JSONObject();
@@ -332,9 +341,12 @@ public class SeparationService extends Service {
             File beatsOut = new File(dir, "beats.f32");
             if (beatsOut.exists()) j.put("beats", beatsOut.getAbsolutePath());
             else j.remove("beats");
-            File pitchOut = new File(dir, "pitch.f32");
-            if (pitchOut.exists()) j.put("pitch", pitchOut.getAbsolutePath());
-            else j.remove("pitch");
+            String[][] extra = {{"pitch", "pitch.f32"}, {"drums", "drums.f32"}, {"bpBass", "bp_bass.u8"}, {"bpOther", "bp_other.u8"}};
+            for (String[] e : extra) {
+                File f = new File(dir, e[1]);
+                if (f.exists()) j.put(e[0], f.getAbsolutePath());
+                else j.remove(e[0]);
+            }
             j.put("threads", threads);
             JobStore.write(this, id, j);
             emit(id);
@@ -353,6 +365,18 @@ public class SeparationService extends Service {
             }
             emit(id);
             new File(dir, "input.bin").delete();
+        }
+    }
+
+    static String stageText(String stage) {
+        switch (stage) {
+            case "decode": return "Préparation du morceau";
+            case "beats": return "Rythme et mesures analysés par l’IA";
+            case "separate": return "Voix isolée par l’IA";
+            case "pitch": return "Mélodie chantée suivie par l’IA";
+            case "demucs": return "Batterie, basse et instruments séparés par l’IA";
+            case "notes": return "Notes des instruments relevées par l’IA";
+            default: return "Préparation des pistes";
         }
     }
 

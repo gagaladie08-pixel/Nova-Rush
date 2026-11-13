@@ -103,6 +103,13 @@ export class Game {
   /** Effets liés à la musique : premiers temps et sections (refrains). */
   private sections: Section[] | undefined;
   private downbeats: number[] = [];
+  /** Batterie isolée (Demucs) : grosse caisse = petite pulsation, cymbale = éclair. */
+  private kicks: number[] = [];
+  private crashes: number[] = [];
+  private kickIdx = 0;
+  private crashIdx = 0;
+  private kickPulse = 0;
+  private flash = 0;
   private dbIdx = 0;
   private pulse = 0;
   private intensity = 0.3;
@@ -149,6 +156,8 @@ export class Game {
     const chart = opts.song.chart;
     this.sections = (chart.structureConfidence ?? 0) >= 0.3 ? chart.sections : undefined;
     this.downbeats = chart.downbeats ?? [];
+    this.kicks = chart.kicks ?? [];
+    this.crashes = chart.crashes ?? [];
     this.keeper = new ScoreKeeper(this.notes);
 
     const stars = [1, 2, 3, 4, 5]
@@ -810,6 +819,22 @@ export class Game {
       this.dbIdx++;
     }
     if (hit && live && this.state !== 'countdown') this.pulse = 1;
+    // Batterie : chaque grosse caisse fait battre le terrain, chaque cymbale l'illumine.
+    const passed = (list: number[], idx: number): [number, boolean] => {
+      while (idx > 0 && list[idx - 1] > now + 0.1) idx--;
+      let on = false;
+      while (idx < list.length && list[idx] <= now) {
+        if (now - list[idx] < 0.1) on = true;
+        idx++;
+      }
+      return [idx, on];
+    };
+    const playing = live && this.state !== 'countdown';
+    let on: boolean;
+    [this.kickIdx, on] = passed(this.kicks, this.kickIdx);
+    if (on && playing) this.kickPulse = 1;
+    [this.crashIdx, on] = passed(this.crashes, this.crashIdx);
+    if (on && playing) this.flash = 1;
     // Section en cours
     const sec = sectionAt(this.sections, now);
     if (sec !== this.lastSection) {
@@ -831,8 +856,9 @@ export class Game {
     }
     if (reduce) return;
 
-    // Lueurs sur les bords du terrain, qui battent avec la mesure
-    const edge = (0.08 + 0.3 * k) * (0.55 + 0.45 * this.pulse);
+    // Lueurs sur les bords du terrain, qui battent avec la mesure (et la grosse caisse)
+    const beat = Math.max(this.pulse, 0.6 * this.kickPulse);
+    const edge = (0.08 + 0.3 * k) * (0.55 + 0.45 * beat);
     if (edge > 0.02) {
       const w = Math.max(10, this.laneW * 0.22);
       for (const [x0, x1, col] of [
@@ -856,6 +882,17 @@ export class Game {
       g.restore();
     }
     this.pulse *= 0.88;
+    this.kickPulse *= 0.8;
+
+    // Éclair sur un coup de cymbale
+    if (this.flash > 0.02) {
+      const grad = g.createRadialGradient(this.w / 2, this.lineY, 0, this.w / 2, this.lineY, this.h * 0.8);
+      grad.addColorStop(0, this.alpha(th.fill, 0.22 * this.flash * (0.5 + 0.5 * k)));
+      grad.addColorStop(1, this.alpha(th.fill, 0));
+      g.fillStyle = grad;
+      g.fillRect(this.fieldX, 0, this.fieldW, this.h);
+    }
+    this.flash *= 0.9;
 
     // Balayage à l'entrée d'un refrain
     const age = wall - this.sweepT0;

@@ -20,6 +20,8 @@ final class CrepePitch {
     static final int WIN = 1024;
     static final int BINS = 360;
     static final int BATCH = 256;
+    /** En dessous (≈ −66 dB), le lot est considéré muet : hauteur 0, confiance 0. */
+    static final double SILENT_RMS = 5e-4;
 
     private CrepePitch() {}
 
@@ -58,6 +60,14 @@ final class CrepePitch {
         float[] batch = new float[BATCH * WIN];
         for (int a = 0; a < n; a += BATCH) {
             int m = Math.min(BATCH, n - a);
+            // Passage muet (voix absente) : inutile d'appeler le réseau.
+            int s0 = Math.max(0, a * HOP - WIN / 2), s1 = Math.min(x.length, (a + m - 1) * HOP + WIN / 2);
+            double e = 0;
+            for (int i = s0; i < s1; i++) e += x[i] * x[i];
+            if (s1 <= s0 || Math.sqrt(e / (s1 - s0)) < SILENT_RMS) {
+                if (progress != null && !progress.onProgress((a + m) / (double) n)) throw new UvrSeparator.Cancelled();
+                continue;
+            }
             for (int k = 0; k < m; k++) {
                 int start = (a + k) * HOP - WIN / 2;
                 int o = k * WIN;

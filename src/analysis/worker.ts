@@ -1,7 +1,10 @@
 /// <reference lib="webworker" />
 import { alignStems } from './align';
-import { AnalysisError, analyzeSong, analyzeSongWithVoice, type Rhythm } from './analyzer';
+import { AnalysisError, analyzeSong, type Rhythm } from './analyzer';
 import type { ExternalPitch } from './beatsFile';
+import { analyzeSongAdvanced, type Instruments } from './conductor';
+import { drumHits } from './drums';
+import { instrumentNotes, parsePosteriors, type InstrNote } from './instruments';
 
 export interface AnalyzeRequest {
   samples: Float32Array;
@@ -14,10 +17,26 @@ export interface AnalyzeRequest {
   rhythm?: Rhythm;
   /** Hauteur de la voix par l'IA CREPE, sur l'horloge des pistes séparées. */
   pitch?: ExternalPitch;
+  /** Batterie isolée (Demucs), même horloge et fréquence que les pistes séparées. */
+  drums?: Float32Array;
+  /** Sorties de Basic Pitch (basse, autres instruments). */
+  bpBass?: Uint8Array;
+  bpOther?: Uint8Array;
+}
+
+/** Notes d'un fichier Basic Pitch, recalées sur le mix ; rien si illisible. */
+function notesOf(bytes: Uint8Array | undefined, lag: number): InstrNote[] | undefined {
+  if (!bytes) return undefined;
+  try {
+    const p = parsePosteriors(bytes);
+    return p ? instrumentNotes(p).map((n) => ({ ...n, t: n.t - lag })) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 self.onmessage = (e: MessageEvent<AnalyzeRequest>) => {
-  const { samples, sampleRate, seed, vocals, accomp, rhythm, pitch } = e.data;
+  const { samples, sampleRate, seed, vocals, accomp, rhythm, pitch, drums, bpBass, bpOther } = e.data;
   try {
     let last = 0;
     const progress = (p: number, label: string) => {
@@ -35,8 +54,17 @@ self.onmessage = (e: MessageEvent<AnalyzeRequest>) => {
         downbeats: rhythm.downbeats.map((t) => t - a.lagSec),
       };
       const p = pitch && { ...pitch, t0: pitch.t0 - a.lagSec };
-      const chart = analyzeSongWithVoice(samples, a.vocals, a.accomp, sampleRate, seed, progress, r, p);
-      self.postMessage({ type: 'done', chart, lagSec: a.lagSec });
+      progress(0.01, 'Écoute des instruments…');
+      const inst: Instruments = {};
+      try {
+        if (drums) inst.drums = drumHits(drums, sampleRate).map((h) => ({ ...h, t: h.t - a.lagSec }));
+      } catch {
+        /* batterie facultative */
+      }
+      inst.bass = notesOf(bpBass, a.lagSec);
+      inst.other = notesOf(bpOther, a.lagSec);
+      const { chart, summary } = analyzeSongAdvanced(samples, a.vocals, a.accomp, sampleRate, seed, progress, r, p, inst);
+      self.postMessage({ type: 'done', chart, summary, lagSec: a.lagSec });
     } else {
       self.postMessage({ type: 'done', chart: analyzeSong(samples, sampleRate, seed, progress, rhythm) });
     }

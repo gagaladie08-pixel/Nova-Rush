@@ -57,6 +57,19 @@ export interface Chart {
   /** Structure du morceau (intro, couplets, refrains…). */
   sections?: Section[];
   structureConfidence?: number;
+  /** Chef d'orchestre : confiance de chaque IA et source suivie par section. */
+  conductor?: ConductorReport;
+  /** Coups de grosse caisse et de cymbale (effets visuels). */
+  kicks?: number[];
+  crashes?: number[];
+}
+
+/** Source qui mène une section : voix, instrument mélodique, basse + batterie, batterie, accompagnement. */
+export type Lead = 'voice' | 'instrument' | 'groove' | 'drums' | 'accomp';
+
+export interface ConductorReport {
+  conf: { voice: number; drums: number; instrument: number; bass: number };
+  leads: { t: number; end: number; lead: Lead }[];
 }
 
 export type SectionKind = 'intro' | 'couplet' | 'refrain' | 'pont' | 'solo' | 'outro';

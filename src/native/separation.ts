@@ -15,6 +15,11 @@ export interface NativeJob {
   beats?: string;
   /** Hauteur de la voix par l'IA CREPE (float32 : n, f0…, confiance…). */
   pitch?: string;
+  /** Batterie isolée par Demucs (float32 mono, même fréquence que la voix). */
+  drums?: string;
+  /** Basic Pitch sur la basse et les autres instruments (octets : attaques puis notes, images × 88). */
+  bpBass?: string;
+  bpOther?: string;
   sampleRate?: number;
   seconds?: number;
 }
@@ -38,12 +43,21 @@ export const VoiceSeparation = registerPlugin<VoiceSeparationPlugin>('VoiceSepar
 export const nativeSeparationPossible = () =>
   Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('VoiceSeparation');
 
-/** Lit un fichier float32 produit par le service (servi par le WebView, sans base64). */
-export async function readFloatFile(path: string): Promise<Float32Array> {
+async function readBytes(path: string): Promise<ArrayBuffer> {
   const url = Capacitor.convertFileSrc(path.startsWith('file://') ? path : `file://${path}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`lecture impossible (${res.status})`);
-  return new Float32Array(await res.arrayBuffer());
+  return res.arrayBuffer();
+}
+
+/** Lit un fichier float32 produit par le service (servi par le WebView, sans base64). */
+export async function readFloatFile(path: string): Promise<Float32Array> {
+  return new Float32Array(await readBytes(path));
+}
+
+/** Lit un fichier d'octets produit par le service. */
+export async function readByteFile(path: string): Promise<Uint8Array> {
+  return new Uint8Array(await readBytes(path));
 }
 
 function toBase64(bytes: Uint8Array): string {

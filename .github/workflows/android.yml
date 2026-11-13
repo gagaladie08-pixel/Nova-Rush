@@ -56,7 +56,10 @@ jobs:
       # entièrement sur le téléphone), convertis et vérifiés par ai-models.yml :
       # - voix : UVR-MDX (Apache 2.0, via sherpa-onnx), poids en float16 ;
       # - temps et mesures : Beat This! « final » (MIT), poids int8 ;
-      # - hauteur de la voix : CREPE « tiny » (MIT, via onnxcrepe).
+      # - hauteur de la voix : CREPE « tiny » (MIT, via onnxcrepe) ;
+      # - batterie / basse / autres : Demucs v4 htdemucs (MIT), poids float16
+      #   (pleine qualité) ;
+      # - notes des instruments : Basic Pitch (Spotify, Apache 2.0).
       - name: Modèles d'IA
         run: |
           set -e
@@ -66,11 +69,15 @@ jobs:
           curl -fsSL --retry 3 -o $A/separation/model.onnx $R/uvr_1_9703.onnx
           curl -fsSL --retry 3 -o $A/ai/beat_this.onnx $R/beat_this_final0.int8.onnx
           curl -fsSL --retry 3 -o $A/ai/crepe.onnx $R/crepe_tiny.onnx
+          curl -fsSL --retry 3 -o $A/ai/demucs.onnx $R/htdemucs.onnx
+          curl -fsSL --retry 3 -o $A/ai/basic_pitch.onnx $R/basic_pitch.onnx
           curl -fsSL --retry 3 -o /tmp/SHA256SUMS $R/SHA256SUMS
-          (cd /tmp && grep -E ' (uvr_1_9703|beat_this_final0.int8|crepe_tiny).onnx$' SHA256SUMS > want.txt)
+          (cd /tmp && grep -E ' (uvr_1_9703|beat_this_final0.int8|crepe_tiny|htdemucs|basic_pitch).onnx$' SHA256SUMS > want.txt)
           echo "$(awk '/uvr_1_9703/{print $1}' /tmp/want.txt)  $A/separation/model.onnx" | sha256sum -c
           echo "$(awk '/beat_this_final0.int8/{print $1}' /tmp/want.txt)  $A/ai/beat_this.onnx" | sha256sum -c
           echo "$(awk '/crepe_tiny/{print $1}' /tmp/want.txt)  $A/ai/crepe.onnx" | sha256sum -c
+          echo "$(awk '/ htdemucs.onnx$/{print $1}' /tmp/want.txt)  $A/ai/demucs.onnx" | sha256sum -c
+          echo "$(awk '/basic_pitch/{print $1}' /tmp/want.txt)  $A/ai/basic_pitch.onnx" | sha256sum -c
           ls -la $A/separation $A/ai
 
       - name: Tests Java (FFT, STFT, découpage, rééchantillonnage)
