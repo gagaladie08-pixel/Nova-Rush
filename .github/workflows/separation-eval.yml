@@ -45,5 +45,20 @@ jobs:
           find models -type f -exec ls -la {} \;
           lscpu | head -20
 
-      - name: Évaluation
+      # Comparaison complète des modèles (longue) : seulement si le commit contient [compare].
+      - name: Comparaison des modèles
+        if: contains(github.event.head_commit.message, '[compare]')
         run: /tmp/venv/bin/python tools/separation/eval.py
+
+      - name: Séparation de vraies chansons (modèle retenu)
+        run: /tmp/venv/bin/python tools/separation/stems.py
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Analyse de la voix sur les pistes séparées
+        run: |
+          npm ci
+          npx vitest run tools/separation/real.test.ts

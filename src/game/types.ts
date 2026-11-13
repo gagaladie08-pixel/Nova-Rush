@@ -44,6 +44,10 @@ export interface Chart {
   melodic: boolean;
   level: Level;
   stats?: DifficultyStats;
+  /** Ce que suivent les tuiles : la voix (séparation), la mélodie ou le rythme. */
+  source?: 'voice' | 'melody' | 'rhythm';
+  /** Part du morceau chantée (analyse avancée). */
+  voiceRatio?: number;
 }
 
 export type ThemeId = 'cyber' | 'survivor' | 'african';

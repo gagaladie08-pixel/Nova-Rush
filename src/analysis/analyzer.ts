@@ -1,5 +1,6 @@
 import { fft, hann, magnitudeAt, median, midiToHz, movingAverage, percentile, rng } from './dsp';
 import { LEVEL_PARAMS, computeStats, levelFromScore } from './difficulty';
+import { inSpans, trackVoice } from './voice';
 import type { Chart, Lane, Level, Note } from '../game/types';
 
 export type ProgressFn = (p: number, label: string) => void;
@@ -44,7 +45,7 @@ const MIDI_MAX = 88;
 /* 1. Fonction de détection d'attaques (flux spectral)                 */
 /* ------------------------------------------------------------------ */
 
-function onsetEnvelope(samples: Float32Array, sr: number, progress: ProgressFn) {
+export function onsetEnvelope(samples: Float32Array, sr: number, progress: ProgressFn) {
   const n = nextPow2((sr * 1024) / 22050);
   const hop = Math.max(64, Math.round((sr * 256) / 22050));
   const hopT = hop / sr;
@@ -87,7 +88,7 @@ function onsetEnvelope(samples: Float32Array, sr: number, progress: ProgressFn) 
   return { flux, rms, hopT, t0, frames };
 }
 
-function pickOnsets(odf: Float32Array, hopT: number, t0: number): Onset[] {
+export function pickOnsets(odf: Float32Array, hopT: number, t0: number): Onset[] {
   const avg = movingAverage(odf, Math.round(0.25 / hopT));
   const half = Math.max(1, Math.round(0.035 / hopT));
   const minDist = 0.06;
@@ -251,6 +252,38 @@ class PitchProbe {
   }
 }
 
+/** Cale un instant sur la grille (quarts de temps) s'il en est assez proche. */
+function makeSnap(beats: number[], beatLen: number, maxTol: number, relTol: number) {
+  return (t: number) => {
+    if (beats.length < 2) return { t, beatIndex: 0, onBeat: false };
+    let lo = 0;
+    let hi = beats.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] <= t) lo = mid;
+      else hi = mid;
+    }
+    const b = t < beats[0] ? 0 : lo;
+    const len = (beats[b + 1] ?? beats[b] + beatLen) - beats[b];
+    const q = Math.round(((t - beats[b]) / len) * 4) / 4;
+    const snapped = beats[b] + q * len;
+    const tt = Math.abs(snapped - t) < Math.min(maxTol, len * relTol) ? snapped : t;
+    const beatIndex = b + Math.floor(q + 1e-6);
+    const onBeat = Math.abs(q - Math.round(q)) < 1e-6 && Math.abs(snapped - t) < 0.05;
+    return { t: tt, beatIndex, onBeat };
+  };
+}
+
+/** Fonction de détection d'attaques normalisée (p95 = 1) et légèrement lissée. */
+function normalizedOdf(flux: Float32Array): Float32Array | null {
+  const odf = new Float32Array(flux.length);
+  for (let i = 1; i < odf.length - 1; i++) odf[i] = (flux[i - 1] + 2 * flux[i] + flux[i + 1]) / 4;
+  const p95 = percentile(odf.filter((_, i) => i % 4 === 0), 0.95);
+  if (!(p95 > 1e-6)) return null;
+  for (let i = 0; i < odf.length; i++) odf[i] /= p95;
+  return odf;
+}
+
 /* ------------------------------------------------------------------ */
 /* 4. Extraction des caractéristiques                                  */
 /* ------------------------------------------------------------------ */
@@ -262,11 +295,8 @@ export function extractFeatures(samples: Float32Array, sr: number, progress: Pro
   const { hopT, t0 } = env;
 
   // Fonction de détection normalisée et légèrement lissée.
-  const odf = new Float32Array(env.frames);
-  for (let i = 1; i < odf.length - 1; i++) odf[i] = (env.flux[i - 1] + 2 * env.flux[i] + env.flux[i + 1]) / 4;
-  const p95 = percentile(odf.filter((_, i) => i % 4 === 0), 0.95);
-  if (!(p95 > 1e-6)) throw new AnalysisError('Aucun son exploitable n’a été détecté dans ce fichier.');
-  for (let i = 0; i < odf.length; i++) odf[i] /= p95;
+  const odf = normalizedOdf(env.flux);
+  if (!odf) throw new AnalysisError('Aucun son exploitable n’a été détecté dans ce fichier.');
 
   progress(0.47, 'Détection du tempo…');
   const onsets = pickOnsets(odf, hopT, t0);
@@ -344,24 +374,7 @@ export function extractFeatures(samples: Float32Array, sr: number, progress: Pro
 
   // Candidats calés sur la grille rythmique.
   progress(0.88, 'Construction du parcours…');
-  const snap = (t: number) => {
-    if (beats.length < 2) return { t, beatIndex: 0, onBeat: false };
-    let lo = 0;
-    let hi = beats.length - 1;
-    while (hi - lo > 1) {
-      const mid = (lo + hi) >> 1;
-      if (beats[mid] <= t) lo = mid;
-      else hi = mid;
-    }
-    const b = t < beats[0] ? 0 : lo;
-    const len = (beats[b + 1] ?? beats[b] + beatLen) - beats[b];
-    const q = Math.round(((t - beats[b]) / len) * 4) / 4;
-    const snapped = beats[b] + q * len;
-    const tt = Math.abs(snapped - t) < Math.min(0.03, len * 0.12) ? snapped : t;
-    const beatIndex = b + Math.floor(q + 1e-6);
-    const onBeat = Math.abs(q - Math.round(q)) < 1e-6 && Math.abs(snapped - t) < 0.05;
-    return { t: tt, beatIndex, onBeat };
-  };
+  const snap = makeSnap(beats, beatLen, 0.03, 0.12);
 
   const strongThreshold = melodic ? percentile(strengths, 0.25) : percentile(strengths, 0.45);
   const raw: Candidate[] = [];
@@ -603,9 +616,125 @@ export function buildChart(features: AnalysisFeatures, level: Level, seed: numbe
   return notes.sort((a, b) => a.t - b.t || a.lane - b.lane);
 }
 
-/** Analyse complète : caractéristiques → niveau → parcours final. */
-export function analyzeSong(samples: Float32Array, sr: number, seed: number, progress: ProgressFn = () => {}): Chart {
-  const features = extractFeatures(samples, sr, progress);
+/* ------------------------------------------------------------------ */
+/* 6. Analyse avec la voix isolée (séparation de sources)              */
+/* ------------------------------------------------------------------ */
+
+export interface VoiceFeatures extends AnalysisFeatures {
+  /** Part du morceau chantée (0..1) ; 0 si aucune voix exploitable. */
+  voiceRatio: number;
+  /** true si le parcours suit la voix. */
+  followsVoice: boolean;
+}
+
+const rmsOf = (x: Float32Array) => {
+  let s = 0;
+  for (let i = 0; i < x.length; i += 4) s += x[i] * x[i];
+  return Math.sqrt(s / Math.max(1, Math.ceil(x.length / 4)));
+};
+
+/**
+ * Pendant le chant, les tuiles suivent les notes de la voix (hauteur suivie
+ * en continu, syllabes, notes tenues). Pendant les passages instrumentaux,
+ * elles suivent l'accompagnement (rythme, accents, mélodie instrumentale).
+ */
+export function extractFeaturesVoice(
+  mix: Float32Array,
+  vocals: Float32Array,
+  accomp: Float32Array,
+  sr: number,
+  progress: ProgressFn = () => {},
+): VoiceFeatures {
+  // Rythme : l'accompagnement seul donne une pulsation plus propre (sauf a cappella).
+  const rhythmSrc = rmsOf(accomp) > rmsOf(mix) * 0.12 ? accomp : mix;
+  const base = extractFeatures(rhythmSrc, sr, (p, l) => progress(p * 0.55, l));
+  const none: VoiceFeatures = { ...base, voiceRatio: 0, followsVoice: false };
+  if (rmsOf(vocals) < rmsOf(mix) * 0.03) return none;
+
+  progress(0.56, 'Écoute de la voix…');
+  let vOnsets: Onset[] = [];
+  try {
+    const venv = onsetEnvelope(vocals, sr, () => {});
+    const vodf = normalizedOdf(venv.flux);
+    if (vodf) vOnsets = pickOnsets(vodf, venv.hopT, venv.t0);
+  } catch {
+    return none;
+  }
+  progress(0.62, 'Suivi de la mélodie chantée…');
+  const voice = trackVoice(vocals, sr, vOnsets, (p) => progress(0.62 + 0.26 * p, 'Suivi de la mélodie chantée…'));
+  if (voice.notes.length < 12 || voice.ratio < 0.04) return { ...none, voiceRatio: voice.ratio };
+
+  progress(0.89, 'Construction du parcours…');
+  const { beats } = base;
+  const beatLen = base.bpm > 0 ? 60 / base.bpm : 0.5;
+  // Les chanteurs sont plus libres que la batterie : calage un peu plus large.
+  const snap = makeSnap(beats, beatLen, 0.05, 0.15);
+  const voiceCands: Candidate[] = voice.notes.map((n) => {
+    const s = snap(n.t);
+    return {
+      t: s.t,
+      strength: 0.6 + Math.min(1, n.strength),
+      pitch: n.midi,
+      sustain: n.dur >= 0.4 && n.stable ? n.dur : undefined,
+      onBeat: s.onBeat,
+      downBeat: s.onBeat && s.beatIndex % 4 === 0,
+      beatIndex: s.beatIndex,
+      priority: 0,
+    };
+  });
+  for (const c of voiceCands) {
+    c.priority = c.strength + 0.9 + (c.onBeat ? 0.6 : 0) + (c.downBeat ? 0.3 : 0);
+  }
+  const vt = voiceCands.map((c) => c.t);
+  const nearestVoice = (t: number) => {
+    let lo = 0;
+    let hi = vt.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (vt[mid] < t) lo = mid + 1;
+      else hi = mid;
+    }
+    let d = Infinity;
+    if (lo < vt.length) d = Math.min(d, Math.abs(vt[lo] - t));
+    if (lo > 0) d = Math.min(d, Math.abs(vt[lo - 1] - t));
+    return d;
+  };
+  // Instants où la voix tient une note (pas de tuile de remplissage par-dessus).
+  const noteSpans: [number, number][] = voice.notes.map((n) => [n.t, n.t + n.dur]);
+  const other: Candidate[] = [];
+  for (const c of base.candidates) {
+    if (!inSpans(voice.spans, c.t, 0.2)) {
+      other.push(c); // passage instrumental
+    } else if (c.onBeat && !inSpans(noteSpans, c.t, 0.1) && nearestVoice(c.t) > beatLen * 0.6) {
+      other.push({ ...c, sustain: undefined, priority: c.priority - 0.4 }); // respiration du chant
+    }
+  }
+  const all = [...voiceCands, ...other].sort((a, b) => a.t - b.t);
+  const candidates: Candidate[] = [];
+  for (const c of all) {
+    const last = candidates[candidates.length - 1];
+    if (last && c.t - last.t < 0.07) {
+      if (c.priority > last.priority) candidates[candidates.length - 1] = c;
+      continue;
+    }
+    candidates.push(c);
+  }
+  return {
+    ...base,
+    melodic: true,
+    melodyConfidence: Math.max(base.melodyConfidence, voice.ratio),
+    candidates: candidates.filter((c) => c.t >= 0.6 && c.t <= base.duration - 0.15),
+    voiceRatio: voice.ratio,
+    followsVoice: true,
+  };
+}
+
+function finishChart(
+  features: AnalysisFeatures,
+  seed: number,
+  progress: ProgressFn,
+  extra: Partial<Chart> = {},
+): Chart {
   progress(0.92, 'Estimation de la difficulté…');
   // Le niveau est mesuré sur le parcours le plus complet jouable du morceau
   // (sans les accords, qui dépendent eux-mêmes du niveau).
@@ -621,5 +750,28 @@ export function analyzeSong(samples: Float32Array, sr: number, seed: number, pro
     melodic: features.melodic,
     level,
     stats: computeStats(notes),
+    source: features.melodic ? 'melody' : 'rhythm',
+    ...extra,
   };
+}
+
+/** Analyse complète : caractéristiques → niveau → parcours final. */
+export function analyzeSong(samples: Float32Array, sr: number, seed: number, progress: ProgressFn = () => {}): Chart {
+  return finishChart(extractFeatures(samples, sr, progress), seed, progress);
+}
+
+/** Analyse avancée à partir des pistes séparées (voix / accompagnement). */
+export function analyzeSongWithVoice(
+  mix: Float32Array,
+  vocals: Float32Array,
+  accomp: Float32Array,
+  sr: number,
+  seed: number,
+  progress: ProgressFn = () => {},
+): Chart {
+  const f = extractFeaturesVoice(mix, vocals, accomp, sr, progress);
+  return finishChart(f, seed, progress, {
+    voiceRatio: Math.round(f.voiceRatio * 100) / 100,
+    ...(f.followsVoice ? { source: 'voice' as const } : {}),
+  });
 }
