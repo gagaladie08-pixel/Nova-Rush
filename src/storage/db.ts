@@ -1,11 +1,14 @@
 import type { SongMeta, SongRecord } from '../game/types';
+import type { MusicSummary } from '../analysis/conductor';
 
 /**
- * Stockage local (IndexedDB) : métadonnées et parcours, copie audio, records.
+ * Stockage local (IndexedDB) : métadonnées et parcours, copie audio, records,
+ * résumé des IA (notes, temps, sections : quelques centaines de Ko) pour
+ * reconstruire un parcours sans relancer l'analyse.
  * Rien ne quitte l'appareil.
  */
 const DB_NAME = 'nova-rush';
-const VERSION = 1;
+const VERSION = 2;
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function open(): Promise<IDBDatabase> {
@@ -16,6 +19,7 @@ function open(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('songs')) db.createObjectStore('songs', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio');
       if (!db.objectStoreNames.contains('records')) db.createObjectStore('records', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('summaries')) db.createObjectStore('summaries');
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -56,6 +60,9 @@ export const db = {
   listRecords: () => tx<SongRecord[]>('records', 'readonly', (s) => s.getAll()),
   getRecord: (id: string) => tx<SongRecord | undefined>('records', 'readonly', (s) => s.get(id)),
   putRecord: (r: SongRecord) => tx('records', 'readwrite', (s) => s.put(r)),
+  getSummary: (id: string) => tx<MusicSummary | undefined>('summaries', 'readonly', (s) => s.get(id)),
+  putSummary: (id: string, summary: MusicSummary) => tx('summaries', 'readwrite', (s) => s.put(summary, id)),
+  listSummaryIds: () => tx<IDBValidKey[]>('summaries', 'readonly', (s) => s.getAllKeys()),
 };
 
 /** Met à jour le meilleur score / combo ; renvoie ce qui a été battu. */

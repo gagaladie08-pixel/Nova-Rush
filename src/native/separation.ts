@@ -22,6 +22,8 @@ export interface NativeJob {
   bpOther?: string;
   sampleRate?: number;
   seconds?: number;
+  /** Voix, accompagnement, temps et hauteur prêts ; instruments (Demucs) encore en cours. */
+  partial?: boolean;
 }
 
 interface VoiceSeparationPlugin {

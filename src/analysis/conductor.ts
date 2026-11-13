@@ -70,6 +70,9 @@ export interface MusicSummary {
 
 type Confidence = ConductorReport['conf'];
 
+/** À augmenter quand le chef d'orchestre change : les parcours sont reconstruits depuis leur résumé. */
+export const CONDUCTOR_VERSION = 1;
+
 const r3 = (t: number) => Math.round(t * 1000) / 1000;
 const r2 = (t: number) => Math.round(t * 100) / 100;
 
@@ -430,6 +433,7 @@ export function chartFromSummary(s: MusicSummary, seed: number, progress: Progre
     ...(s.voice ? { pitchSource: s.voice.pitchSource, source: 'voice' as const } : {}),
     voiceRatio: s.voice ? r2(s.voice.ratio) : 0,
     conductor: report,
+    conductorVersion: CONDUCTOR_VERSION,
     ...(drums
       ? {
           kicks: drums.filter((h) => h.k === KICK).map((h) => h.t),

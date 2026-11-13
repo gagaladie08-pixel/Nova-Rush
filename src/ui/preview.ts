@@ -1,6 +1,6 @@
 import { audio } from '../audio/engine';
 import { previewStart } from '../game/sections';
-import { cancelVoice, onVoiceChange, voiceLive } from '../analysis/voiceQueue';
+import { cancelVoice, isVoiceAvailable, onVoiceChange, relaunchVoice, voiceLive } from '../analysis/voiceQueue';
 import { LEVEL_LABEL, type SongMeta } from '../game/types';
 import { db } from '../storage/db';
 import { coverFor } from './covers';
@@ -49,6 +49,8 @@ export function previewScreen(song: SongMeta): Screen {
           <p class="muted preview-mode">${
             song.demo
               ? 'Parcours préparé à la main.'
+              : song.chart.conductor
+                ? conductorText(song)
               : song.chart.source === 'voice'
                 ? 'Voix isolée par l’IA de l’appareil : les tuiles suivent la mélodie chantée, l’accompagnement remplit les passages instrumentaux.'
                 : song.chart.melodic
@@ -64,6 +66,7 @@ export function previewScreen(song: SongMeta): Screen {
               : `<p class="warning">Le fichier audio a été supprimé. Le titre et les records sont conservés.</p>
                  <button class="btn btn-primary btn-wide" data-reimport>Réimporter le fichier</button>`
           }
+          ${!song.demo && song.hasAudio ? '<button class="btn btn-ghost btn-wide" data-relaunch hidden>↻ Relancer l’analyse avancée</button>' : ''}
           ${!song.demo && song.hasAudio ? '<button class="btn btn-ghost btn-wide btn-danger-text" data-delete>Supprimer le morceau</button>' : ''}
         </div>`;
 
@@ -79,9 +82,14 @@ export function previewScreen(song: SongMeta): Screen {
 
       // État de l'analyse avancée.
       const voiceEl = root.querySelector<HTMLElement>('.preview-voice')!;
+      const relaunchBtn = root.querySelector<HTMLButtonElement>('[data-relaunch]');
+      let voiceOk = false;
       const renderVoice = () => {
         const v = voiceLive(song.id);
-        if (v) {
+        if (relaunchBtn) relaunchBtn.hidden = !voiceOk || !!v;
+        if (v && v.state === 'running' && song.voice?.stage) {
+          voiceEl.textContent = `Premier parcours prêt : il suit la voix. Batterie, basse et instruments en cours d’analyse : ${Math.floor(v.progress * 100)} %${v.eta ? ` · environ ${Math.max(1, Math.ceil(v.eta / 60))} min` : ''}.`;
+        } else if (v) {
           voiceEl.textContent =
             v.state === 'queued'
               ? 'Analyse avancée (voix isolée) en attente — tu peux déjà jouer avec le parcours actuel.'
@@ -89,22 +97,38 @@ export function previewScreen(song: SongMeta): Screen {
                 ? 'Analyse avancée : finalisation du parcours…'
                 : `Analyse avancée en cours : ${Math.floor(v.progress * 100)} %${v.eta ? ` · environ ${Math.max(1, Math.ceil(v.eta / 60))} min` : ''}. Tu peux déjà jouer avec le parcours actuel.`;
         } else if (song.voice?.state === 'failed') {
+          const kept = song.voice.stage ? 'premier parcours (voix) conservé' : 'parcours classique conservé';
           voiceEl.textContent =
             song.voice.reason === 'trop lent'
-              ? 'Analyse avancée trop longue sur cet appareil : parcours classique conservé.'
-              : 'Analyse avancée impossible : parcours classique conservé.';
+              ? `Analyse avancée trop longue sur cet appareil : ${kept}.`
+              : `Analyse avancée impossible : ${kept}.`;
         } else voiceEl.textContent = '';
       };
       renderVoice();
-      offVoice = onVoiceChange(() => {
-        const was = voiceLive(song.id);
+      void isVoiceAvailable().then((ok) => {
+        voiceOk = ok;
         renderVoice();
-        // Analyse terminée (ou échouée) : on recharge l'aperçu avec le nouveau parcours.
-        if (!was) {
-          void db.getSong(song.id).then((fresh) => {
-            if (fresh && fresh.voice?.state !== song.voice?.state && fresh.hasAudio) void nav.preview(fresh);
-          });
-        }
+      });
+      // Nouveau parcours (premier parcours, final, reconstruction) : on recharge l'aperçu.
+      const sig = (s: SongMeta) => `${s.voice?.state}|${s.voice?.stage}|${s.chart.notes.length}|${s.level}|${s.chart.conductorVersion}`;
+      offVoice = onVoiceChange(() => {
+        renderVoice();
+        void db.getSong(song.id).then((fresh) => {
+          if (fresh && fresh.hasAudio && sig(fresh) !== sig(song)) void nav.preview(fresh);
+        });
+      });
+      relaunchBtn?.addEventListener('click', async () => {
+        const ok = await confirmDialog(
+          'Relancer l’analyse avancée ?',
+          'Voix, rythme, batterie, basse et instruments seront de nouveau analysés sur l’appareil (cela peut prendre plusieurs dizaines de minutes). Le parcours actuel reste jouable pendant ce temps.',
+          'Relancer',
+        );
+        if (!ok) return;
+        relaunchBtn.disabled = true;
+        if (await relaunchVoice(song)) toast('Analyse avancée relancée');
+        else toast('Impossible de relancer l’analyse pour le moment');
+        relaunchBtn.disabled = false;
+        renderVoice();
       });
 
       const snippetBtn = root.querySelector<HTMLButtonElement>('[data-snippet]');
@@ -151,4 +175,23 @@ export function previewScreen(song: SongMeta): Screen {
       });
     },
   };
+}
+
+const LEAD_TEXT: Record<string, string> = {
+  voice: 'la voix quand on chante',
+  instrument: 'l’instrument principal (intros, solos)',
+  groove: 'la basse et la batterie',
+  drums: 'la batterie dans les breaks',
+  accomp: 'l’accompagnement',
+};
+
+/** Ce que suit le parcours construit par le chef d'orchestre. */
+function conductorText(song: SongMeta): string {
+  const c = song.chart.conductor!;
+  const leads = [...new Set(c.leads.map((l) => l.lead))].sort(
+    (a, b) => Object.keys(LEAD_TEXT).indexOf(a) - Object.keys(LEAD_TEXT).indexOf(b),
+  );
+  const parts = leads.map((l) => LEAD_TEXT[l]).filter(Boolean);
+  const extra = song.chart.crashes?.length ? ' Accords appuyés sur les coups de cymbale.' : '';
+  return `Analyse complète par les IA de l’appareil : les tuiles suivent ${parts.join(', ')}.${extra}`;
 }

@@ -285,6 +285,11 @@ final class DemucsSeparator {
         private final FloatBuffer waveOut;
         private final OnnxTensor specOutT;
         private final OnnxTensor waveOutT;
+        /** Entrées natives réutilisées : pas de nouvelle copie de 22 Mo à chaque segment. */
+        private final FloatBuffer mixBuf;
+        private final FloatBuffer specBuf;
+        private final OnnxTensor mixT;
+        private final OnnxTensor specT;
 
         OrtNet(String path, int threads) throws Exception {
             OrtSession.SessionOptions so = new OrtSession.SessionOptions();
@@ -292,6 +297,10 @@ final class DemucsSeparator {
             so.setInterOpNumThreads(1);
             so.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
             so.addConfigEntry("session.intra_op.allow_spinning", "0");
+            // Mémoire : sans réserve (arena) ni plan pré-alloué, la mémoire de chaque couche est rendue
+            // aussitôt (pic bien plus bas, mesuré en CI ; vitesse quasi identique).
+            so.setCPUArenaAllocator(false);
+            so.setMemoryPatternOptimization(false);
             session = env.createSession(path, so);
             Iterator<String> in = session.getInputNames().iterator();
             String a = in.next(), b = in.next();
@@ -305,6 +314,10 @@ final class DemucsSeparator {
             waveOut = direct(SOURCES * 2 * SEGMENT);
             specOutT = OnnxTensor.createTensor(env, specOut, new long[] {1, SOURCES, 4, BINS, LE});
             waveOutT = OnnxTensor.createTensor(env, waveOut, new long[] {1, SOURCES, 2, SEGMENT});
+            mixBuf = direct(2 * SEGMENT);
+            specBuf = direct(4 * BINS * LE);
+            mixT = OnnxTensor.createTensor(env, mixBuf, new long[] {1, 2, SEGMENT});
+            specT = OnnxTensor.createTensor(env, specBuf, new long[] {1, 4, BINS, LE});
         }
 
         private static FloatBuffer direct(int floats) {
@@ -317,13 +330,16 @@ final class DemucsSeparator {
             Map<String, OnnxValue> pinned = new HashMap<>();
             pinned.put(outSpecName, specOutT);
             pinned.put(outWaveName, waveOutT);
-            try (OnnxTensor m = OnnxTensor.createTensor(env, FloatBuffer.wrap(mix), new long[] {1, 2, SEGMENT});
-                    OnnxTensor s = OnnxTensor.createTensor(env, FloatBuffer.wrap(spec), new long[] {1, 4, BINS, LE})) {
-                inputs.put(mixName, m);
-                inputs.put(specName, s);
-                try (OrtSession.Result r = session.run(inputs, pinned)) {
-                    sink.accept(specOut, waveOut);
-                }
+            mixBuf.clear();
+            mixBuf.put(mix, 0, 2 * SEGMENT);
+            mixBuf.rewind();
+            specBuf.clear();
+            specBuf.put(spec, 0, 4 * BINS * LE);
+            specBuf.rewind();
+            inputs.put(mixName, mixT);
+            inputs.put(specName, specT);
+            try (OrtSession.Result r = session.run(inputs, pinned)) {
+                sink.accept(specOut, waveOut);
             }
         }
 
@@ -332,6 +348,8 @@ final class DemucsSeparator {
             try {
                 specOutT.close();
                 waveOutT.close();
+                mixT.close();
+                specT.close();
                 session.close();
             } catch (Exception ignored) {
                 // rien de plus

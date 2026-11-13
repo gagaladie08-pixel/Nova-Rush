@@ -11,6 +11,7 @@ on:
       - 'tools/ai/pitch.py'
       - 'tools/ai/demucs_stream.py'
       - 'tools/ai/notes.py'
+      - 'tools/ai/demucs_mem.py'
       - '.github/workflows/separation-eval.yml'
   workflow_dispatch:
 
@@ -77,6 +78,13 @@ jobs:
         run: |
           curl -fsSL -o /tmp/htdemucs.onnx https://github.com/${{ github.repository }}/releases/download/ai-models-v1/htdemucs.onnx
           /tmp/venv/bin/python tools/ai/demucs_stream.py /tmp/htdemucs.onnx $SEP_DATA/stems
+
+      - name: Mémoire de Demucs selon les options
+        continue-on-error: true
+        run: |
+          for cfg in "1 1" "0 1" "0 0"; do
+            /tmp/venv/bin/python tools/ai/demucs_mem.py /tmp/htdemucs.onnx $cfg || true
+          done
 
       - name: Notes des instruments (Basic Pitch)
         continue-on-error: true

@@ -241,6 +241,8 @@ public class SeparationService extends Service {
             job.put("attempts", attempts);
             job.put("state", JobStore.RUNNING);
             job.put("startedAt", System.currentTimeMillis());
+            // Reprise après interruption : l'éventuel premier parcours sera refait.
+            job.remove("partial");
             JobStore.write(this, id, job);
         } catch (Exception ignored) {
             // clés simples
@@ -298,6 +300,26 @@ public class SeparationService extends Service {
             models.basicPitch = basicPitch;
             if (demucsFile != null) models.demucs = () -> new DemucsSeparator.OrtNet(demucsFile.getAbsolutePath(), threads);
             try {
+            // Premier parcours (voix) dès que possible, sans attendre Demucs.
+            Runnable voiceReady = () -> {
+                JSONObject p = JobStore.read(this, id);
+                if (p == null) return;
+                try {
+                    p.put("partial", true);
+                    p.put("vocals", new File(dir, "vocals.f32").getAbsolutePath());
+                    p.put("accomp", new File(dir, "accomp.f32").getAbsolutePath());
+                    p.put("sampleRate", SeparationJob.OUT_SR);
+                    for (String[] e : new String[][] {{"beats", "beats.f32"}, {"pitch", "pitch.f32"}}) {
+                        File f = new File(dir, e[1]);
+                        if (f.exists()) p.put(e[0], f.getAbsolutePath());
+                        else p.remove(e[0]);
+                    }
+                    JobStore.write(this, id, p);
+                    emit(id);
+                } catch (Exception ignored) {
+                    // le parcours final arrivera quand même
+                }
+            };
             SeparationJob.run(dir, models, (fraction, stage) -> {
                 String cid = cancelId;
                 if (cid != null && (cid.equals(id) || cid.equals("*"))) return false;
@@ -324,7 +346,7 @@ public class SeparationService extends Service {
                     emit(id);
                 }
                 return true;
-            });
+            }, voiceReady);
             } finally {
                 if (beats != null) beats.close();
                 if (crepe != null) crepe.close();
@@ -333,6 +355,7 @@ public class SeparationService extends Service {
             JSONObject j = JobStore.read(this, id);
             if (j == null) j = new JSONObject();
             j.put("state", JobStore.DONE);
+            j.remove("partial");
             j.put("progress", 1);
             j.put("seconds", (SystemClock.elapsedRealtime() - t0) / 1000.0);
             j.put("vocals", new File(dir, "vocals.f32").getAbsolutePath());

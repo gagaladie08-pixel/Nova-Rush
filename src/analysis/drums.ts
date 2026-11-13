@@ -27,7 +27,13 @@ const BANDS: [number, number][] = [
   [5500, 11000],
 ];
 
+/** Batterie absente : piste Demucs sous −50 dB (bruit de séparation seulement). */
+const DRUMS_GATE = 0.00316;
+
 export function drumHits(x: Float32Array, sr: number): DrumHit[] {
+  let e2 = 0;
+  for (let i = 0; i < x.length; i += 4) e2 += x[i] * x[i];
+  if (Math.sqrt(e2 / Math.max(1, Math.ceil(x.length / 4))) < DRUMS_GATE) return [];
   const n = 1024;
   const hop = 256;
   const hopT = hop / sr;
@@ -105,8 +111,15 @@ export function drumHits(x: Float32Array, sr: number): DrumHit[] {
     return m;
   };
   const eHigh = energy[2];
+  // Coups trop faibles (queues, fuites d'autres instruments) : 26 dB sous les coups forts.
+  const total = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) total[f] = energy[0][f] + energy[1][f] + energy[2][f];
+  const loud = percentile(total.filter((_, i) => i % 2 === 0), 0.99);
   const hits: DrumHit[] = [];
   for (const i of onsets) {
+    let peakE = 0;
+    for (let j = i; j <= Math.min(frames - 1, i + lag); j++) peakE = Math.max(peakE, total[j]);
+    if (peakE < loud * 0.0025) continue;
     const lo = at(0, i);
     const md = at(1, i);
     const hi = at(2, i);

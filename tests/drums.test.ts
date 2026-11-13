@@ -80,3 +80,22 @@ describe('coups de batterie', () => {
     expect(beatAgreement(hits, beats.map((t) => t + beat / 4))).toBeLessThan(0.3);
   });
 });
+
+describe('batterie absente', () => {
+  it('ne trouve aucun coup dans le bruit d’une piste batterie vide', () => {
+    let s = 9;
+    const x = new Float32Array(SR * 20);
+    // Résidu de séparation à −65 dB, avec de petites bouffées.
+    for (let i = 0; i < x.length; i++) x[i] = ((s = (s * 16807) % 2147483647) / 2147483647 - 0.5) * 0.001 * (i % 11025 < 800 ? 3 : 1);
+    expect(drumHits(x, SR)).toEqual([]);
+  });
+
+  it('ignore les coups très faibles entre les vrais coups', () => {
+    const { x, truth } = drumTrack(12);
+    // Petites bouffées à −40 dB entre les temps.
+    for (let t = 0.62; t < 11; t += 0.5) for (let i = 0; i < 200; i++) x[Math.round(t * SR) + i] += 0.004 * Math.sin(i * 0.4);
+    const hits = drumHits(x, SR);
+    const stray = hits.filter((h) => !truth.some((w) => Math.abs(w.t - h.t) < 0.04));
+    expect(stray.length).toBeLessThanOrEqual(1);
+  });
+});

@@ -3,13 +3,17 @@
  *
  * 1. À l'import, le morceau est confié au service Android (file d'attente,
  *    un morceau à la fois, notification, continue appli fermée).
- * 2. Quand la séparation est finie, l'appli lit voix et accompagnement,
- *    refait le parcours (suivi de la voix) et remplace l'ancien.
- * En cas d'échec, le parcours classique reste en place.
+ * 2. Dès que la voix est prête (avant Demucs), un premier parcours qui suit
+ *    la voix remplace le parcours classique.
+ * 3. Quand tout est fini (batterie, basse, instruments), le chef d'orchestre
+ *    construit le parcours final ; les pistes sont supprimées, seul un résumé
+ *    (quelques centaines de Ko) est gardé pour reconstruire le parcours.
+ * En cas d'échec, le parcours en place est conservé.
  */
 import type { SongMeta, VoiceAnalysis } from '../game/types';
 import { db } from '../storage/db';
-import { ANALYSIS_RATE, decodeForAnalysis, runAnalysisFull } from './client';
+import { ANALYSIS_RATE, chartFromStoredSummary, decodeForAnalysis, runAnalysisFull } from './client';
+import { CONDUCTOR_VERSION } from './conductor';
 import { parseBeats, parsePitch } from './beatsFile';
 import {
   VoiceSeparation,
@@ -72,6 +76,7 @@ async function setSongVoice(id: string, voice: VoiceAnalysis | undefined, patch?
 /** À appeler au démarrage : reprend les analyses interrompues et finalise celles terminées. */
 export async function initVoiceQueue(isBusy: () => boolean): Promise<void> {
   busy = isBusy;
+  void rebuildOutdated();
   if (!(await isVoiceAvailable())) return;
   await VoiceSeparation.addListener('job', (job) => void handle(job));
   try {
@@ -107,6 +112,39 @@ export async function enqueueVoice(song: SongMeta, blob: Blob): Promise<boolean>
   }
 }
 
+/** Relance toute l'analyse avancée d'un morceau (le parcours actuel reste jouable pendant ce temps). */
+export async function relaunchVoice(song: SongMeta): Promise<boolean> {
+  if (live.has(song.id)) return false;
+  const blob = await db.getAudio(song.id);
+  if (!blob) return false;
+  return enqueueVoice(song, blob);
+}
+
+const seedKey = (s: SongMeta) => `${s.title}|${s.artist}|${Math.round(s.duration)}`;
+
+/**
+ * Parcours construits par une ancienne version du chef d'orchestre :
+ * reconstruits à partir du résumé enregistré (sans audio ni IA).
+ */
+async function rebuildOutdated(): Promise<void> {
+  try {
+    const ids = new Set((await db.listSummaryIds()).map(String));
+    if (!ids.size) return;
+    for (const song of await db.listSongs()) {
+      if (!ids.has(song.id) || song.chart.conductorVersion === CONDUCTOR_VERSION || live.has(song.id)) continue;
+      while (busy()) await sleep(3000);
+      const summary = await db.getSummary(song.id);
+      if (!summary) continue;
+      const chart = await chartFromStoredSummary(summary, seedKey(song));
+      const fresh = await db.getSong(song.id);
+      if (fresh) await db.putSong({ ...fresh, chart, level: chart.level });
+    }
+    emit();
+  } catch {
+    /* le parcours existant reste valable */
+  }
+}
+
 /** Annule l'analyse avancée d'un morceau (suppression de l'audio). */
 export async function cancelVoice(id: string): Promise<void> {
   live.delete(id);
@@ -127,14 +165,22 @@ async function handle(job: NativeJob): Promise<void> {
   }
   if (job.state === 'queued' || job.state === 'running') {
     const prev = live.get(id);
+    if (prev?.state === 'finishing') return;
     live.set(id, { state: job.state, progress: job.progress ?? 0, eta: job.eta });
-    if (song.voice?.state !== job.state && (!prev || prev.state !== job.state)) await setSongVoice(id, { state: job.state });
+    if (song.voice?.state !== job.state && (!prev || prev.state !== job.state)) {
+      await setSongVoice(id, { ...(song.voice?.stage && job.state === 'running' ? { stage: 1 as const } : {}), state: job.state });
+    }
+    // Premier parcours (voix) pendant que Demucs travaille.
+    if (job.state === 'running' && job.partial && !song.voice?.stage && !partials.has(id)) {
+      partials.add(id);
+      finishing = finishing.then(() => finishPartial(job)).catch(() => {});
+    }
     emit();
     return;
   }
   if (job.state === 'error') {
     live.delete(id);
-    await setSongVoice(id, { state: 'failed', reason: job.error ?? 'erreur' });
+    await failVoice(id, job.error ?? 'erreur');
     await VoiceSeparation.remove({ id }).catch(() => {});
     emit();
     return;
@@ -148,6 +194,13 @@ async function handle(job: NativeJob): Promise<void> {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Échec : le parcours en place (classique, ou premier parcours sur la voix) est gardé. */
+async function failVoice(id: string, reason: string) {
+  const stage = (await db.getSong(id))?.voice?.stage;
+  await setSongVoice(id, { state: 'failed', reason, ...(stage ? { stage } : {}) });
+}
+const partials = new Set<string>();
 
 async function readPitch(path: string | undefined) {
   if (!path) return undefined;
@@ -177,6 +230,38 @@ async function optional<T>(path: string | undefined, read: (p: string) => Promis
   }
 }
 
+/** Premier parcours avec la voix seule ; l'analyse des instruments continue. */
+async function finishPartial(job: NativeJob): Promise<void> {
+  const id = job.id;
+  while (busy()) await sleep(3000);
+  try {
+    if (live.get(id)?.state === 'finishing' || live.get(id) === undefined) return; // déjà fini ou annulé
+    const song = await db.getSong(id);
+    const blob = await db.getAudio(id);
+    if (!song || !blob || !job.vocals || !job.accomp) return;
+    if ((job.sampleRate ?? ANALYSIS_RATE) !== ANALYSIS_RATE) return;
+    const [{ samples }, vocals, accomp, rhythm, pitch] = await Promise.all([
+      decodeForAnalysis(await blob.arrayBuffer()),
+      readFloatFile(job.vocals),
+      readFloatFile(job.accomp),
+      readBeats(job.beats),
+      readPitch(job.pitch),
+    ]);
+    const { chart } = await runAnalysisFull(samples, seedKey(song), () => {}, undefined, { vocals, accomp }, rhythm, pitch);
+    const fresh = await db.getSong(id);
+    const now = live.get(id);
+    if (!fresh || !fresh.hasAudio || !now || now.state === 'finishing') return;
+    await db.putSong({ ...fresh, chart, level: chart.level, voice: { state: 'running', stage: 1 } });
+    emit();
+    const { toast } = await import('../ui/dom');
+    toast(`« ${fresh.title} » : premier parcours prêt (suit la voix) — batterie et instruments en cours d'analyse`);
+  } catch {
+    /* le parcours final arrivera quand même */
+  } finally {
+    partials.delete(id);
+  }
+}
+
 /** Refait le parcours avec les pistes séparées (une seule finalisation à la fois). */
 async function finish(job: NativeJob): Promise<void> {
   const id = job.id;
@@ -197,9 +282,9 @@ async function finish(job: NativeJob): Promise<void> {
       optional(job.bpBass, readByteFile),
       optional(job.bpOther, readByteFile),
     ]);
-    const { chart, lagSec } = await runAnalysisFull(
+    const { chart, lagSec, summary } = await runAnalysisFull(
       samples,
-      `${song.title}|${song.artist}|${Math.round(song.duration)}`,
+      seedKey(song),
       () => {},
       undefined,
       { vocals, accomp },
@@ -209,6 +294,8 @@ async function finish(job: NativeJob): Promise<void> {
     );
     const fresh = await db.getSong(id);
     if (!fresh || !fresh.hasAudio) throw new Error('morceau supprimé');
+    // Résumé des IA : le parcours pourra être reconstruit sans les pistes (supprimées ci-dessous).
+    if (summary) await db.putSummary(id, summary).catch(() => {});
     await db.putSong({
       ...fresh,
       chart,
@@ -225,7 +312,7 @@ async function finish(job: NativeJob): Promise<void> {
     toast(`« ${fresh.title} » : parcours mis à jour${chart.source === 'voice' ? ' (suit la voix)' : ''}`);
   } catch (e) {
     live.delete(id);
-    await setSongVoice(id, { state: 'failed', reason: e instanceof Error ? e.message : 'erreur' });
+    await failVoice(id, e instanceof Error ? e.message : 'erreur');
     emit();
   } finally {
     await VoiceSeparation.remove({ id }).catch(() => {});

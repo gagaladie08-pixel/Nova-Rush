@@ -59,6 +59,8 @@ export interface Chart {
   structureConfidence?: number;
   /** Chef d'orchestre : confiance de chaque IA et source suivie par section. */
   conductor?: ConductorReport;
+  /** Version du chef d'orchestre qui a construit ce parcours (reconstruit depuis le résumé si elle change). */
+  conductorVersion?: number;
   /** Coups de grosse caisse et de cymbale (effets visuels). */
   kicks?: number[];
   crashes?: number[];
@@ -114,6 +116,8 @@ export interface VoiceAnalysis {
   seconds?: number;
   /** Décalage mesuré entre décodeurs (s). */
   lagSec?: number;
+  /** 1 : premier parcours (voix) déjà en place, instruments encore en analyse. */
+  stage?: 1;
 }
 
 export interface SongRecord {

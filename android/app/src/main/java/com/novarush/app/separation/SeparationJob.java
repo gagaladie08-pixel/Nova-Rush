@@ -181,8 +181,8 @@ final class SeparationJob {
     static final double MAX_SEP_MINUTES = 22;
     /** Demucs est sauté si son temps estimé dépasse cette durée. */
     static final double MAX_DEMUCS_MINUTES = 45;
-    /** Demucs ≈ 2,9 × le temps de la séparation de la voix (mesuré en CI : ×0,55 contre ×0,2). */
-    static final double DEMUCS_VS_UVR = 2.9;
+    /** Demucs ≈ 2,2 × le temps de la séparation de la voix (mesuré en CI : ×0,27 contre ×0,13 du temps réel). */
+    static final double DEMUCS_VS_UVR = 2.2;
 
     /** Répartition de la progression selon le coût de chaque étape. */
     static final class Plan {
@@ -207,13 +207,14 @@ final class SeparationJob {
         static Plan of(Models m) {
             java.util.List<String> n = new java.util.ArrayList<>();
             java.util.List<Double> w = new java.util.ArrayList<>();
+            // Poids mesurés en CI (temps relatifs : voix 25, Demucs ≈ 2,2 × voix, CREPE ≈ 0,37 ×, Beat This! ≈ 0,2 ×).
             n.add("decode"); w.add(3.0);
-            if (m.beat != null) { n.add("beats"); w.add(2.0); }
+            if (m.beat != null) { n.add("beats"); w.add(5.0); }
             n.add("separate"); w.add(25.0);
-            if (m.crepe != null) { n.add("pitch"); w.add(3.0); }
-            if (m.demucs != null) { n.add("demucs"); w.add(57.0); }
-            n.add("finish"); w.add(4.0);
-            if (m.demucs != null && m.basicPitch != null) { n.add("notes"); w.add(6.0); }
+            if (m.crepe != null) { n.add("pitch"); w.add(9.0); }
+            n.add("finish"); w.add(2.0);
+            if (m.demucs != null) { n.add("demucs"); w.add(55.0); n.add("tracks"); w.add(2.0); }
+            if (m.demucs != null && m.basicPitch != null) { n.add("notes"); w.add(2.0); }
             double[] ws = new double[w.size()];
             for (int i = 0; i < ws.length; i++) ws[i] = w.get(i);
             return new Plan(n.toArray(new String[0]), ws);
@@ -242,6 +243,15 @@ final class SeparationJob {
     }
 
     static void run(File dir, Models models, Listener listener) throws Exception {
+        run(dir, models, listener, null);
+    }
+
+    /**
+     * @param voiceReady appelé dès que voix, accompagnement, temps et hauteur
+     *     sont prêts (avant Demucs) : l'appli construit alors un premier
+     *     parcours, amélioré à la fin par les instruments.
+     */
+    static void run(File dir, Models models, Listener listener, Runnable voiceReady) throws Exception {
         final Plan plan = Plan.of(models);
         File input = new File(dir, "input.bin");
         File src = new File(dir, "decoded.raw");
@@ -308,7 +318,24 @@ final class SeparationJob {
                     new File(dir, "pitch.f32").delete();
                 }
             }
-            // 5. Batterie / basse / autres (Demucs sur l'accompagnement) — facultatif.
+            // 5. Voix et accompagnement 22 050 Hz mono pour l'appli : premier parcours sans attendre Demucs.
+            Listener.Fraction fin = plan.stage(listener, "finish");
+            Resampler down = new Resampler(SR, OUT_SR);
+            File vocOut = new File(dir, "vocals.f32.tmp");
+            File accOut = new File(dir, "accomp.f32.tmp");
+            try (RawAudio.Reader r = new RawAudio.Reader(voc44, 1); RawAudio.Writer w = new RawAudio.Writer(vocOut, 1)) {
+                down.run(r, w, (f) -> fin.onProgress(0.5 * f));
+            }
+            try (RawAudio.Reader r = new RawAudio.Reader(acc44, 1); RawAudio.Writer w = new RawAudio.Writer(accOut, 1)) {
+                down.run(r, w, (f) -> fin.onProgress(0.5 + 0.5 * f));
+            }
+            if (!vocOut.renameTo(new File(dir, "vocals.f32")) || !accOut.renameTo(new File(dir, "accomp.f32"))) {
+                throw new IllegalStateException("renommage impossible");
+            }
+            voc44.delete();
+            acc44.delete();
+            if (voiceReady != null && models.demucs != null) voiceReady.run();
+            // 6. Batterie / basse / autres (Demucs sur l'accompagnement) — facultatif.
             boolean instruments = false;
             if (models.demucs != null) {
                 boolean tooSlow = !played[0] && sepSeconds * DEMUCS_VS_UVR > MAX_DEMUCS_MINUTES * 60;
@@ -326,32 +353,20 @@ final class SeparationJob {
                 }
                 accSt.delete();
             }
-            // 6. 22 050 Hz mono pour l'appli
-            Listener.Fraction fin = plan.stage(listener, "finish");
-            Resampler down = new Resampler(SR, OUT_SR);
-            File vocOut = new File(dir, "vocals.f32.tmp");
-            File accOut = new File(dir, "accomp.f32.tmp");
-            try (RawAudio.Reader r = new RawAudio.Reader(voc44, 1); RawAudio.Writer w = new RawAudio.Writer(vocOut, 1)) {
-                down.run(r, w, (f) -> fin.onProgress(0.3 * f));
-            }
-            try (RawAudio.Reader r = new RawAudio.Reader(acc44, 1); RawAudio.Writer w = new RawAudio.Writer(accOut, 1)) {
-                down.run(r, w, (f) -> fin.onProgress(0.3 + 0.3 * f));
-            }
-            if (!vocOut.renameTo(new File(dir, "vocals.f32")) || !accOut.renameTo(new File(dir, "accomp.f32"))) {
-                throw new IllegalStateException("renommage impossible");
-            }
+            // 7. Pistes des instruments en 22 050 Hz mono
             if (instruments) {
+                Listener.Fraction tr = plan.stage(listener, "tracks");
                 try {
                     File drumsOut = new File(dir, "drums.f32.tmp");
                     try (RawAudio.Reader r = new RawAudio.Reader(inst44[0], 1); RawAudio.Writer w = new RawAudio.Writer(drumsOut, 1)) {
-                        down.run(r, w, (f) -> fin.onProgress(0.6 + 0.14 * f));
+                        down.run(r, w, (f) -> tr.onProgress(0.4 * f));
                     }
                     if (!drumsOut.renameTo(new File(dir, "drums.f32"))) throw new IllegalStateException("renommage impossible");
                     try (RawAudio.Reader r = new RawAudio.Reader(inst44[1], 1); RawAudio.Writer w = new RawAudio.Writer(bass22, 1)) {
-                        down.run(r, w, (f) -> fin.onProgress(0.74 + 0.13 * f));
+                        down.run(r, w, (f) -> tr.onProgress(0.4 + 0.3 * f));
                     }
                     try (RawAudio.Reader r = new RawAudio.Reader(inst44[2], 1); RawAudio.Writer w = new RawAudio.Writer(other22, 1)) {
-                        down.run(r, w, (f) -> fin.onProgress(0.87 + 0.13 * f));
+                        down.run(r, w, (f) -> tr.onProgress(0.7 + 0.3 * f));
                     }
                 } catch (UvrSeparator.Cancelled c) {
                     throw c;
@@ -362,7 +377,7 @@ final class SeparationJob {
                 }
                 for (File f : inst44) f.delete();
             }
-            // 7. Notes des instruments (Basic Pitch sur la basse et les autres) — facultatif.
+            // 8. Notes des instruments (Basic Pitch sur la basse et les autres) — facultatif.
             if (instruments && models.basicPitch != null) {
                 Listener.Fraction nt = plan.stage(listener, "notes");
                 try {

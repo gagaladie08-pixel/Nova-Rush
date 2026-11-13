@@ -8,6 +8,13 @@ export interface InstrumentFiles {
   drums?: Float32Array;
   bpBass?: Uint8Array;
   bpOther?: Uint8Array;
+  /** Interne : reconstruction depuis un résumé. */
+  summary?: MusicSummary;
+}
+
+/** Parcours reconstruit à partir du résumé des IA (rapide, sans audio ni IA). */
+export function chartFromStoredSummary(summary: MusicSummary, seedKey: string): Promise<Chart> {
+  return runAnalysisFull(null, seedKey, () => {}, undefined, undefined, undefined, undefined, { summary }).then((r) => r.chart);
 }
 
 export class ImportError extends Error {}
@@ -49,7 +56,7 @@ export function runAnalysis(
 
 /** Comme runAnalysis, avec le résumé des IA (analyse avancée) pour reconstruire le parcours plus tard. */
 export function runAnalysisFull(
-  samples: Float32Array,
+  samples: Float32Array | null,
   seedKey: string,
   onProgress: (p: number, label: string) => void,
   signal?: AbortSignal,
@@ -79,6 +86,10 @@ export function runAnalysisFull(
       worker.terminate();
       reject(new ImportError('L’analyse n’a pas pu démarrer sur cet appareil.'));
     };
+    if (!samples) {
+      worker.postMessage({ seed: hashString(seedKey), summary: inst.summary });
+      return;
+    }
     const transfer: Transferable[] = [samples.buffer];
     if (stems) transfer.push(stems.vocals.buffer, stems.accomp.buffer);
     if (pitch) transfer.push(pitch.f0.buffer, pitch.conf.buffer);

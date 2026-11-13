@@ -2,7 +2,7 @@
 import { alignStems } from './align';
 import { AnalysisError, analyzeSong, type Rhythm } from './analyzer';
 import type { ExternalPitch } from './beatsFile';
-import { analyzeSongAdvanced, type Instruments } from './conductor';
+import { analyzeSongAdvanced, chartFromSummary, type Instruments, type MusicSummary } from './conductor';
 import { drumHits } from './drums';
 import { instrumentNotes, parsePosteriors, type InstrNote } from './instruments';
 
@@ -22,6 +22,8 @@ export interface AnalyzeRequest {
   /** Sorties de Basic Pitch (basse, autres instruments). */
   bpBass?: Uint8Array;
   bpOther?: Uint8Array;
+  /** Reconstruction : parcours à partir du résumé enregistré (sans audio). */
+  summary?: MusicSummary;
 }
 
 /** Notes d'un fichier Basic Pitch, recalées sur le mix ; rien si illisible. */
@@ -36,7 +38,7 @@ function notesOf(bytes: Uint8Array | undefined, lag: number): InstrNote[] | unde
 }
 
 self.onmessage = (e: MessageEvent<AnalyzeRequest>) => {
-  const { samples, sampleRate, seed, vocals, accomp, rhythm, pitch, drums, bpBass, bpOther } = e.data;
+  const { samples, sampleRate, seed, vocals, accomp, rhythm, pitch, drums, bpBass, bpOther, summary } = e.data;
   try {
     let last = 0;
     const progress = (p: number, label: string) => {
@@ -46,7 +48,9 @@ self.onmessage = (e: MessageEvent<AnalyzeRequest>) => {
         self.postMessage({ type: 'progress', p, label });
       }
     };
-    if (vocals && accomp) {
+    if (summary) {
+      self.postMessage({ type: 'done', chart: chartFromSummary(summary, seed, progress), summary });
+    } else if (vocals && accomp) {
       const a = alignStems(samples, vocals, accomp, sampleRate);
       // stems[i + lag] ≈ mix[i] : un instant t des pistes vaut t − lag sur le mix.
       const r = rhythm && {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildChart, type Candidate } from '../src/analysis/analyzer';
-import { chartFromSummary, conduct, type MusicSummary } from '../src/analysis/conductor';
+import { CONDUCTOR_VERSION, chartFromSummary, conduct, type MusicSummary } from '../src/analysis/conductor';
 import { CRASH, HAT, KICK, SNARE, type DrumHit, type DrumKind } from '../src/analysis/drums';
 import type { InstrNote } from '../src/analysis/instruments';
 import type { Section } from '../src/game/types';
@@ -180,6 +180,7 @@ describe("chef d'orchestre", () => {
     const b = chartFromSummary(JSON.parse(json) as MusicSummary, 11);
     expect(b.notes).toEqual(a.notes);
     expect(a.conductor?.leads.length).toBe(5);
+    expect(a.conductorVersion).toBe(CONDUCTOR_VERSION);
     expect(a.kicks?.length).toBeGreaterThan(50);
     expect(a.crashes).toEqual([24, 48]);
     expect(json.length).toBeLessThan(200_000);
