@@ -1,0 +1,85 @@
+name: APK Android
+
+on:
+  push:
+    branches: ['main', 'arena/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Tests et compilation de l'APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_VERSION: 0.1.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Tests (règles de score, analyse musicale)
+        run: npm test
+
+      - name: Build web
+        run: npm run build
+
+      - name: Synchronisation Capacitor
+        run: npx cap sync android
+
+      - name: Compilation de l'APK (release signé)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Renommage
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/release/app-release.apk "out/NovaRush-${APP_VERSION}.apk"
+          ls -la out
+
+      - name: Artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaRush-${{ env.APP_VERSION }}
+          path: out/*.apk
+          retention-days: 30
+
+      - name: Publication (release GitHub)
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ env.APP_VERSION }}
+          name: Nova Rush ${{ env.APP_VERSION }} (APK de test)
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
+          make_latest: ${{ github.ref == 'refs/heads/main' }}
+          files: out/*.apk
+          body: |
+            APK Android de test de Nova Rush, compilé automatiquement depuis `${{ github.ref_name }}` (${{ github.sha }}).
+
+            **Installation** : télécharge `NovaRush-${{ env.APP_VERSION }}.apk` sur ton téléphone Android, ouvre-le et autorise l'installation depuis cette source si Android le demande.
+
+            Signé avec la clé de test du dépôt : les versions suivantes s'installent par-dessus sans désinstaller.

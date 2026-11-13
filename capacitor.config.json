@@ -1,0 +1,9 @@
+{
+  "appId": "com.novarush.app",
+  "appName": "Nova Rush",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#050510",
+    "allowMixedContent": false
+  }
+}

@@ -1,0 +1,177 @@
+/* ---------- Cyber Nova (par défaut) ---------- */
+:root,
+html[data-theme='cyber'] {
+  --bg: #050510;
+  --surface: #0d0d2b;
+  --surface-2: #15153d;
+  --text: #f0f0ff;
+  --muted: #9a9ac8;
+  --line: rgba(0, 180, 255, 0.22);
+  --a1: #ff006e;
+  --a2: #00b4ff;
+  --a3: #bd00ff;
+  --a4: #00fff0;
+  --a1-glow: rgba(255, 0, 110, 0.45);
+  --radius: 6px;
+  --glow: 8px;
+  --trans: 280ms;
+  --font-title: 'Orbitron';
+  --font-body: 'Rajdhani';
+  --btn-primary: linear-gradient(135deg, #ff006e, #bd00ff);
+  --btn-primary-text: #fff;
+  --tab-active: linear-gradient(135deg, rgba(255, 0, 110, 0.35), rgba(189, 0, 255, 0.35));
+  --tab-anim: glitch;
+  --bg-decor:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
+    linear-gradient(transparent 55%, rgba(189, 0, 255, 0.08)),
+    radial-gradient(ellipse at 50% 120%, rgba(0, 180, 255, 0.18), transparent 60%);
+}
+
+html[data-theme='cyber'] .song-card,
+html[data-theme='cyber'] .card,
+html[data-theme='cyber'] .modal {
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+html[data-theme='cyber'] .section-title::before {
+  content: '▮ ';
+  color: var(--a1);
+}
+
+html[data-theme='cyber'] .logo {
+  font-family: 'Orbitron';
+}
+
+/* ---------- Survivor ---------- */
+html[data-theme='survivor'] {
+  --bg: #080808;
+  --surface: #121018;
+  --surface-2: #1d1a26;
+  --text: #ffffff;
+  --muted: #b3aec4;
+  --line: rgba(247, 127, 180, 0.22);
+  --a1: #f77fb4;
+  --a2: #5bcefa;
+  --a3: #9b4f96;
+  --a4: #26ceaa;
+  --a1-glow: rgba(247, 127, 180, 0.4);
+  --radius: 16px;
+  --glow: 10px;
+  --trans: 420ms;
+  --font-title: 'Righteous';
+  --font-body: 'Nunito';
+  --btn-primary: linear-gradient(120deg, #5bcefa, #f77fb4 50%, #9b4f96);
+  --btn-primary-text: #0b0b0b;
+  --tab-active: linear-gradient(120deg, rgba(91, 206, 250, 0.35), rgba(247, 127, 180, 0.35));
+  --tab-anim: slide-soft;
+  --bg-decor:
+    repeating-linear-gradient(
+      -35deg,
+      transparent 0 120px,
+      rgba(228, 3, 3, 0.07) 120px 128px,
+      rgba(255, 140, 0, 0.07) 128px 136px,
+      rgba(255, 237, 0, 0.07) 136px 144px,
+      rgba(0, 128, 38, 0.07) 144px 152px,
+      rgba(0, 77, 255, 0.07) 152px 160px,
+      rgba(117, 7, 135, 0.07) 160px 168px,
+      transparent 168px 300px,
+      rgba(91, 206, 250, 0.08) 300px 308px,
+      rgba(245, 169, 184, 0.08) 308px 316px,
+      rgba(255, 255, 255, 0.08) 316px 324px,
+      rgba(245, 169, 184, 0.08) 324px 332px,
+      rgba(91, 206, 250, 0.08) 332px 340px
+    ),
+    radial-gradient(circle at 15% 10%, rgba(247, 127, 180, 0.18), transparent 40%),
+    radial-gradient(circle at 85% 90%, rgba(91, 206, 250, 0.16), transparent 40%);
+}
+
+html[data-theme='survivor'] .logo span {
+  background: linear-gradient(90deg, #e40303, #ff8c00, #ffed00, #008026, #004dff, #750787);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html[data-theme='survivor'] .section-title::before {
+  content: '› ';
+  color: var(--a1);
+}
+
+html[data-theme='survivor'] body::before {
+  animation: breathe 6s ease-in-out infinite;
+}
+
+/* ---------- African Confessions ---------- */
+html[data-theme='african'] {
+  --bg: #120800;
+  --surface: #1e0e00;
+  --surface-2: #2b1606;
+  --text: #fff3e0;
+  --muted: #cfb897;
+  --line: rgba(212, 160, 23, 0.25);
+  --a1: #d4a017;
+  --a2: #c4622d;
+  --a3: #2d5a27;
+  --a4: #ffd24a;
+  --a1-glow: rgba(212, 160, 23, 0.35);
+  --radius: 8px;
+  --glow: 5px;
+  --trans: 320ms;
+  --font-title: 'Fraunces';
+  --font-body: 'Ubuntu';
+  --btn-primary: linear-gradient(135deg, #d4a017, #c4622d);
+  --btn-primary-text: #1a0b00;
+  --tab-active: linear-gradient(135deg, rgba(196, 98, 45, 0.45), rgba(45, 90, 39, 0.45));
+  --tab-anim: diag-grid;
+  --bg-decor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M24 2 46 24 24 46 2 24Z' fill='none' stroke='%23D4A017' stroke-opacity='.08'/%3E%3Cpath d='M24 12 36 24 24 36 12 24Z' fill='none' stroke='%23C4622D' stroke-opacity='.08'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 0%, rgba(196, 98, 45, 0.2), transparent 60%);
+}
+
+html[data-theme='african'] .section-title::before {
+  content: '◆ ';
+  color: var(--a1);
+}
+
+html[data-theme='african'] .song-card {
+  border-image: linear-gradient(135deg, rgba(212, 160, 23, 0.45), rgba(196, 98, 45, 0.25)) 1;
+  border-radius: 0;
+}
+
+/* ---------- Variables de la partie (thème de gameplay) ---------- */
+[data-game-theme='cyber'] {
+  --g-text: #f0f0ff;
+  --g-muted: #9a9ac8;
+  --g-combo: #00fff0;
+  --g-star: #00fff0;
+  --g-font-title: 'Orbitron';
+  --g-radius: 6px;
+}
+
+[data-game-theme='survivor'] {
+  --g-text: #ffffff;
+  --g-muted: #c9c3d9;
+  --g-combo: #f77fb4;
+  --g-star: #ffd84d;
+  --g-font-title: 'Righteous';
+  --g-radius: 16px;
+}
+
+[data-game-theme='african'] {
+  --g-text: #fff3e0;
+  --g-muted: #cfb897;
+  --g-combo: #ffd24a;
+  --g-star: #d4a017;
+  --g-font-title: 'Fraunces';
+  --g-radius: 8px;
+}
+
+.results-stars {
+  --g-star: var(--a4);
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.6;
+  }
+}

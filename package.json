@@ -1,0 +1,32 @@
+{
+  "name": "nova-rush",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Nova Rush — jeu mobile de rythme musical à tuiles",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "android:sync": "npm run build && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.2",
+    "@fontsource/fraunces": "^5.3.0",
+    "@fontsource/nunito": "^5.3.0",
+    "@fontsource/orbitron": "^5.3.0",
+    "@fontsource/rajdhani": "^5.3.0",
+    "@fontsource/righteous": "^5.3.0",
+    "@fontsource/ubuntu": "^5.3.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "typescript": "~5.9",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
