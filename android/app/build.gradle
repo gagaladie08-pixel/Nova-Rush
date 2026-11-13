@@ -32,6 +32,12 @@ android {
             storeType "pkcs12"
         }
     }
+    packaging {
+        // Bibliothèques natives (ONNX Runtime) compressées dans l'APK : téléchargement plus léger.
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
     androidResources {
         // Le modèle est copié tel quel (plus rapide à extraire).
         noCompress 'onnx'
