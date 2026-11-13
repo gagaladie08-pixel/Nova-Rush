@@ -125,6 +125,13 @@ if __name__ == "__main__":
         export_demucs(out)
     elif what == "beat":
         export_beat(out)
+    elif what == "int8":
+        # Quantification dynamique des produits matriciels (transformeurs) : poids int8.
+        from onnxruntime.quantization import QuantType, quantize_dynamic
+
+        src = Path(sys.argv[3])
+        quantize_dynamic(str(src), str(out / sys.argv[4]), op_types_to_quantize=["MatMul", "Gemm"], weight_type=QuantType.QInt8)
+        print("int8", src.name, (out / sys.argv[4]).stat().st_size)
     elif what == "fp16":
         fp16_storage(Path(sys.argv[3]), out / Path(sys.argv[3]).name)
     else:

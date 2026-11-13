@@ -56,6 +56,14 @@ jobs:
         continue-on-error: true
         run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/export.py $AI/models beat
 
+      - name: Variantes int8 (Beat This! final, Demucs)
+        id: q8
+        continue-on-error: true
+        run: |
+          tools/ai/run.sh /tmp/vexp/bin/python tools/ai/export.py $AI/models int8 $AI/models/beat_this_final0.fp32.onnx beat_this_final0.int8.onnx
+          tools/ai/run.sh /tmp/vexp/bin/python tools/ai/export.py $AI/models int8 $AI/models/htdemucs.fp32.onnx htdemucs.int8.onnx
+          ls -la $AI/models
+
       - name: CREPE, Basic Pitch, UVR (modèles déjà en ONNX)
         id: dl
         run: |
@@ -85,7 +93,9 @@ jobs:
       - name: Vérification Beat This!
         id: s5
         continue-on-error: true
-        run: tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py beat $AI/models $AI/audio/fishin.ogg
+        run: |
+          tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py beat $AI/models $AI/audio/fishin.ogg
+          tools/ai/run.sh /tmp/vexp/bin/python tools/ai/check.py beat $AI/models $AI/audio/vibeace.ogg
 
       - name: Vérification CREPE
         id: s6
@@ -107,7 +117,7 @@ jobs:
         if: ${{ !contains(join(steps.*.outcome, ','), 'failure') }}
         run: |
           cd $AI/models
-          sha256sum htdemucs.onnx beat_this_small0.onnx beat_this_final0.onnx crepe_tiny.onnx crepe_small.onnx basic_pitch.onnx uvr_1_9703.onnx | tee SHA256SUMS
+          sha256sum htdemucs.onnx htdemucs.int8.onnx beat_this_small0.onnx beat_this_final0.onnx beat_this_final0.int8.onnx crepe_tiny.onnx crepe_small.onnx basic_pitch.onnx uvr_1_9703.onnx | tee SHA256SUMS
 
       - name: Publication des modèles (release ai-models-v1)
         if: ${{ steps.sums.outcome == 'success' }}
@@ -126,6 +136,8 @@ jobs:
             /tmp/ai/models/htdemucs.onnx
             /tmp/ai/models/beat_this_small0.onnx
             /tmp/ai/models/beat_this_final0.onnx
+            /tmp/ai/models/beat_this_final0.int8.onnx
+            /tmp/ai/models/htdemucs.int8.onnx
             /tmp/ai/models/crepe_tiny.onnx
             /tmp/ai/models/crepe_small.onnx
             /tmp/ai/models/basic_pitch.onnx

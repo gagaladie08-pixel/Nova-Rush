@@ -5,7 +5,7 @@ name: Évaluation séparation voix
 on:
   push:
     branches: ['arena/**']
-    paths: ['tools/separation/**', '.github/workflows/separation-eval.yml']
+    paths: ['tools/separation/**', 'tools/ai/beats.py', '.github/workflows/separation-eval.yml']
   workflow_dispatch:
 
 jobs:
@@ -53,6 +53,12 @@ jobs:
 
       - name: Séparation de vraies chansons (modèle retenu)
         run: /tmp/venv/bin/python tools/separation/stems.py
+
+      - name: Temps et mesures (Beat This!)
+        continue-on-error: true
+        run: |
+          curl -fsSL -o /tmp/beat_this.onnx https://github.com/${{ github.repository }}/releases/download/ai-models-v1/beat_this_small0.onnx
+          /tmp/venv/bin/python tools/ai/beats.py /tmp/beat_this.onnx $SEP_DATA/stems
 
       - uses: actions/setup-node@v7
         with:

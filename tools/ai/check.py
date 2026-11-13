@@ -83,7 +83,9 @@ def check_demucs(models: str, audio: str, ref_npy: str) -> None:
     x = load_stereo44(audio)
     yref = np.load(ref_npy)
     dur = x.shape[1] / 44100
-    for name in ("htdemucs.fp32.onnx", "htdemucs.onnx"):
+    for name in ("htdemucs.fp32.onnx", "htdemucs.onnx", "htdemucs.int8.onnx"):
+        if not os.path.exists(os.path.join(models, name)):
+            continue
         p = os.path.join(models, name)
         s = session(p)
         t = time.time()
@@ -113,8 +115,10 @@ def check_beat(models: str, audio: str) -> None:
         mel_err = float(np.abs(spect_t - spect_np).max())
         tb, td = a2f.spect2frames(torch.tensor(spect_t))
         bt_ref, dt_ref = post(tb, td)
-        for suffix in ("fp32.onnx", "onnx"):
+        for suffix in ("fp32.onnx", "onnx", "int8.onnx"):
             p = os.path.join(models, f"beat_this_{name}.{suffix}")
+            if not os.path.exists(p):
+                continue
             s = session(p)
             t = time.time()
             ob, od = ref.beat_frames(s, spect_np)
@@ -128,7 +132,7 @@ def check_beat(models: str, audio: str) -> None:
             ibi = np.diff(bt)
             bpm = 60 / np.median(ibi) if len(ibi) else 0
             notice(
-                f"beat {name}.{suffix}",
+                f"beat {name}.{suffix} {os.path.basename(audio)}",
                 f"{size_mb(p):.1f} Mo | mel écart max {mel_err:.2e} | logits écart max {logit_err:.3f} (réseau seul {net_err:.3f}) | "
                 f"temps {len(bt)}/{len(bt_ref)} {'identiques' if same_b else 'DIFFÉRENTS'}, "
                 f"1ers temps {len(dtt)}/{len(dt_ref)} {'identiques' if same_d else 'DIFFÉRENTS'} | "
