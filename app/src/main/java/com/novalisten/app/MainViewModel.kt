@@ -43,6 +43,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val themes = app.themes
     val credentials = app.credentials
     val remote = app.remote
+    val lyricPreferences = app.lyricPreferences
+    val automaticLyrics = app.automaticLyrics
+    fun lyricsFor(id: String): SavedLyrics = resolveLyrics(id, repository.data.value.lyrics[id], automaticLyrics.state.value)
     val remoteImages = app.remoteImages
     val translation = app.translation
     private val _playback = MutableStateFlow(PlaybackUi())
@@ -77,7 +80,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun item(track: Track, source: String?): MediaItem = MediaItem.Builder().setMediaId(track.id).setUri(track.id)
         .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist).setAlbumTitle(track.album)
-            .setArtworkUri(android.net.Uri.parse(track.artwork)).setExtras(Bundle().apply { source?.let { putString(SOURCE_PLAYLIST, it) } }).build()).build()
+            .setArtworkUri(android.net.Uri.parse(track.artwork)).setExtras(Bundle().apply { putLong("duration_ms", track.durationMs); source?.let { putString(SOURCE_PLAYLIST, it) } }).build()).build()
 
     private fun eligible(tracks: List<Track>): List<Track> {
         val live = playableTracks(repository.library.value.tracks, repository.data.value.hidden).associateBy { it.id }

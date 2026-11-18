@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.novalisten.app.MainViewModel
 import com.novalisten.app.data.*
+import com.novalisten.app.enrichment.resolveLyrics
 import com.novalisten.app.ui.components.*
 import com.novalisten.app.ui.screens.*
 import com.novalisten.app.ui.theme.*
@@ -37,6 +38,8 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     val library by vm.repository.library.collectAsStateWithLifecycle()
     val data by vm.repository.data.collectAsStateWithLifecycle()
     val playback by vm.playback.collectAsStateWithLifecycle()
+    val automatic by vm.automaticLyrics.state.collectAsStateWithLifecycle()
+    fun lyricsFor(id: String) = resolveLyrics(id, data.lyrics[id], automatic)
     val settings by vm.themes.state.collectAsStateWithLifecycle()
     val visible = remember(library.tracks, data.hidden) { visibleTracks(library.tracks, data.hidden) }
     val playable = remember(library.tracks, data.hidden) { playableTracks(library.tracks, data.hidden) }
@@ -50,6 +53,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     var playerOpen by rememberSaveable { mutableStateOf(false) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var infoTrack by remember { mutableStateOf<Track?>(null) }
+    var lyricsInfo by remember { mutableStateOf<Track?>(null) }
     var addTracks by remember { mutableStateOf<List<Track>?>(null) }
     var deleteTracks by remember { mutableStateOf<List<Track>?>(null) }
     var editingLyrics by remember { mutableStateOf<Track?>(null) }
@@ -183,11 +187,17 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
             }
         }
         val current = playable.firstOrNull { it.id == playback.currentId }
-        if (playerOpen && current != null) FullPlayer(current, playback, data, playable, vm, { playerOpen = false }, { menuTrack = current }, { addTracks = listOf(current) }, { editingLyrics = current }, { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, current) }, { enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, current) }, menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || deleteTracks != null || enrichment != null)
-        menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { openArtist(track.artistKey) }, { openAlbum(track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }, onOnlineLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onCatalog = { enrichment = EnrichmentRequest(EnrichmentMode.CATALOG, track) }, onCover = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, track) }) }
+        if (playerOpen && current != null) FullPlayer(current, playback, data, playable, vm, lyricsFor(current.id), automatic,
+            onDismiss = { playerOpen = false }, onMenu = { menuTrack = current }, onAdd = { addTracks = listOf(current) },
+            onEditLyrics = { editingLyrics = current }, onLyricsInfo = { lyricsInfo = current },
+            blocked = menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || lyricsInfo != null || deleteTracks != null || enrichment != null)
+        menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { openArtist(track.artistKey) }, { openAlbum(track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }, onOnlineLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onCatalog = { enrichment = EnrichmentRequest(EnrichmentMode.CATALOG, track) }, onCover = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, track) },
+            hasLyrics = lyricsFor(track.id).original.isNotBlank(), onTranslateLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, track) },
+            onEditLyrics = { editingLyrics = track }, onLyricsInfo = { lyricsInfo = track }) }
         infoTrack?.let { TrackInfoDialog(it) { infoTrack = null } }
+        lyricsInfo?.let { LyricsDetailsDialog(it, lyricsFor(it.id), automatic) { lyricsInfo = null } }
         addTracks?.let { AddToPlaylistDialog(it, data.playlists, vm) { addTracks = null } }
-        editingLyrics?.let { track -> LyricsEditor(track, data.lyrics[track.id] ?: SavedLyrics(), vm, onDismiss = { editingLyrics = null }, onSearch = { editingLyrics = null; enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onTranslate = { editingLyrics = null; enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, track) }) }
+        editingLyrics?.let { track -> LyricsEditor(track, lyricsFor(track.id), vm, onDismiss = { editingLyrics = null }, onSearch = { editingLyrics = null; enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onTranslate = { editingLyrics = null; enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, track) }) }
         enrichment?.let { request -> EnrichmentDialog(request, vm, onDismiss = { enrichment = null }, onKeys = { enrichment = null; playerOpen = false; routeParent = "settings"; route = "api" }) }
         if (createPlaylist) CreatePlaylistDialog(vm, { createPlaylist = false }) { playlist, pick -> openPlaylist(playlist.id); if (pick) pickPlaylist = playlist.id }
         data.playlists.find { it.id == pickPlaylist }?.let { playlist -> TrackPickerDialog(playable, playlist, vm) { pickPlaylist = null } }

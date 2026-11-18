@@ -38,15 +38,18 @@ jobs:
       - name: Tests unitaires, lint et APK de test signé
         run: scripts/gradle-ci.sh testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
       - name: Préparer les livrables
+        id: apk
         run: |
+          version="$(python3 -c 'import json; print(json.load(open("app/build/outputs/apk/debug/output-metadata.json"))["elements"][0]["versionName"])')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           mkdir -p artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk artifacts/NovaListen-0.2.0-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "artifacts/NovaListen-$version-debug.apk"
           cd artifacts
-          sha256sum NovaListen-0.2.0-debug.apk > SHA256SUMS.txt
+          sha256sum "NovaListen-$version-debug.apk" > SHA256SUMS.txt
       - name: Publier l’APK installable
         uses: actions/upload-artifact@v7
         with:
-          name: NovaListen-0.2.0-debug
+          name: NovaListen-${{ steps.apk.outputs.version }}-debug
           path: artifacts/
           if-no-files-found: error
           retention-days: 30

@@ -13,6 +13,7 @@ import com.novalisten.app.data.SavedLyrics
 import com.novalisten.app.enrichment.*
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,6 +23,7 @@ class ApiIntegrationTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val app get() = context.applicationContext as NovaApplication
+    @Before fun keepFixturesOffline() { compose.runOnIdle { app.lyricPreferences.automatic(false) } }
     @Test fun settingsKeysAreEncryptedPersistentDeletableAndDoNotTriggerNetwork() {
         val onlyTestValue = "novalisten-fixture-not-a-real-key-927" // generated test data, never a provider credential
         val http = app.remote.transport as RemoteHttp
@@ -105,6 +107,44 @@ class ApiIntegrationTest {
                 assertTrue(db.snapshot().covers.isEmpty())
             }
         } finally { context.deleteDatabase(name) }
+    }
+    @Test fun databaseV2AddsWordTimingWithoutDroppingTheSavedVoVfOrCredits() {
+        val name = "lyrics_v2_migration_test.db"
+        context.deleteDatabase(name)
+        context.openOrCreateDatabase(name, Context.MODE_PRIVATE, null).use { db ->
+            db.execSQL("CREATE TABLE flags (track TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)")
+            db.execSQL("CREATE TABLE playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, tracks TEXT NOT NULL, created INTEGER NOT NULL, pinned INTEGER, cover TEXT)")
+            db.execSQL("CREATE TABLE listens (id INTEGER PRIMARY KEY AUTOINCREMENT, track TEXT NOT NULL, at INTEGER NOT NULL, zone TEXT NOT NULL, local_date TEXT NOT NULL, local_hour INTEGER NOT NULL)")
+            db.execSQL("CREATE TABLE lyrics (track TEXT PRIMARY KEY, original TEXT NOT NULL, french TEXT NOT NULL, original_source TEXT NOT NULL DEFAULT '', french_source TEXT NOT NULL DEFAULT '')")
+            db.execSQL("CREATE TABLE artists (id TEXT PRIMARY KEY, bio TEXT NOT NULL, source TEXT NOT NULL, portrait TEXT, portrait_source TEXT NOT NULL DEFAULT '')")
+            db.execSQL("CREATE TABLE album_covers (id TEXT PRIMARY KEY, uri TEXT NOT NULL, source TEXT NOT NULL)")
+            db.execSQL("CREATE TABLE identities (id TEXT PRIMARY KEY, mbid TEXT NOT NULL)")
+            db.execSQL("INSERT INTO lyrics VALUES ('fixture', '[00:01.000]Clarté nouvelle', 'VF choisie', 'Source VO', 'Source VF')")
+            db.version = 2
+        }
+        try { NovaDatabase(context, name).use { db ->
+            val old = db.snapshot().lyrics.getValue("fixture")
+            assertEquals("VF choisie", old.french); assertEquals("Source VO", old.originalSource); assertEquals("Source VF", old.frenchSource)
+            assertEquals("", old.originalTiming)
+            val line = com.novalisten.app.data.LyricTiming.line(1000, "Clarté nouvelle", listOf(com.novalisten.app.data.TimedToken("Clarté", 1000, 1500), com.novalisten.app.data.TimedToken("nouvelle", 1800, 2800)))
+            val native = old.copy(originalTiming = com.novalisten.app.data.LyricTiming.encode(old.original, listOf(line)))
+            db.saveLyrics("fixture", native)
+            assertEquals(native, db.snapshot().lyrics.getValue("fixture"))
+            assertEquals(line.words, com.novalisten.app.data.LyricTiming.decode(native.original, native.originalTiming).single().words)
+            assertEquals(3, db.readableDatabase.version)
+        } } finally { context.deleteDatabase(name) }
+    }
+    @Test fun automaticLyricsPreferenceIsPersistentAndDoesNotEnableTranslationOrCallAService() {
+        val before = (app.remote.transport as RemoteHttp).requestCount
+        compose.onNodeWithContentDescription("Réglages").performClick()
+        compose.onNodeWithText("API et clés").performClick()
+        compose.onNodeWithTag("api_settings").performScrollToNode(hasTestTag("automatic_lyrics"))
+        compose.onNodeWithTag("automatic_lyrics").assertIsOff().performClick().assertIsOn()
+        compose.activityRule.scenario.recreate(); compose.waitForIdle()
+        compose.onNodeWithTag("api_settings").performScrollToNode(hasTestTag("automatic_lyrics"))
+        compose.onNodeWithTag("automatic_lyrics").assertIsOn().performClick().assertIsOff()
+        assertFalse(app.translation.activated)
+        assertEquals(before, (app.remote.transport as RemoteHttp).requestCount)
     }
     @Test fun photoPreviewsReuseLocalBytesAndFingerprintDuplicateImages() = runBlocking {
         val bitmap = android.graphics.Bitmap.createBitmap(320, 320, android.graphics.Bitmap.Config.ARGB_8888)

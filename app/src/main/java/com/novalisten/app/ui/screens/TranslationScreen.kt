@@ -15,7 +15,9 @@ import com.novalisten.app.ui.components.*
 
 @Composable
 internal fun TranslationScreen(track: Track, vm: MainViewModel, onDismiss: () -> Unit) {
-    val original = remember(track.id) { vm.repository.data.value.lyrics[track.id]?.original.orEmpty() }
+    val sourceLyrics = remember(track.id) { vm.lyricsFor(track.id) }
+    val localAtOpen = remember(track.id) { vm.repository.data.value.lyrics[track.id]?.original }
+    val original = sourceLyrics.original
     var language by remember { mutableStateOf("") }
     var acknowledged by remember { mutableStateOf(false) }
     var wifiOnly by remember { mutableStateOf(true) }
@@ -30,7 +32,7 @@ internal fun TranslationScreen(track: Track, vm: MainViewModel, onDismiss: () ->
     val saveWork = rememberRemoteWork()
     fun sourceChosen(): Boolean = language.isNotBlank() && acknowledged && original.isNotBlank() && !work.busy
     LazyColumn(Modifier.fillMaxSize().testTag("translation_screen"), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Notice("${track.title} — ${track.artist}\nTraduction de la VO sauvegardée (${original.length} caractères), pas du fichier audio. Langue source à choisir ; aucun transfert après une erreur locale. L’ancienne VF reste en place jusqu’à votre choix.") }
+        item { Notice("${track.title} — ${track.artist}\nTraduction de la VO affichée (${original.length} caractères), pas du fichier audio. Langue source à choisir ; aucun transfert après une erreur locale. L’ancienne VF reste en place jusqu’à votre choix.") }
         if (original.isBlank()) item { Notice("Ajoutez ou choisissez d’abord des paroles originales. Aucun service n’est appelé.") }
         item { Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("en" to "Anglais", "es" to "Espagnol", "ko" to "Coréen").forEach { (code, label) ->
@@ -83,13 +85,15 @@ internal fun TranslationScreen(track: Track, vm: MainViewModel, onDismiss: () ->
                 Text(result, style = MaterialTheme.typography.bodyLarge)
             } }
             item { Notice("Les instants de ligne existants sont conservés, pas réinventés. Ce ne sont pas des temps phonétiques des mots français. Les répétitions identiques sont traduites une seule fois ; le contexte entre lignes peut manquer.") }
-            item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(savingConfirmed, { savingConfirmed = it }); Text("Remplacer ma VF sauvegardée par cette proposition ; garder la VO.", style = MaterialTheme.typography.bodySmall) } }
+            item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(savingConfirmed, { savingConfirmed = it }); Text("Conserver cette VO et remplacer ma VF sauvegardée par cette proposition.", style = MaterialTheme.typography.bodySmall) } }
             item { WorkStatus(saveWork) }
             item { Button({ saveWork.run {
-                val current = vm.repository.data.value.lyrics[track.id] ?: SavedLyrics()
-                if (current.original != original) throw RemoteFailure("La VO a changé pendant la traduction. Rien n’a été sauvegardé ; recommencez avec le texte actuel.")
                 val source = Credit(engine, if (engine.startsWith("Google")) "https://translate.google.com/" else "https://learn.microsoft.com/azure/ai-services/translator/", details = "$language → fr · traduction automatique par ligne ; instants repris de la VO, pas de minutage des mots français.").text()
-                vm.repository.mutate { saveLyrics(track.id, current.copy(french = result, frenchSource = source)) }
+                vm.repository.mutate {
+                    val current = snapshot().lyrics[track.id]
+                    if (current?.original != localAtOpen && current?.original != original) throw RemoteFailure("La VO a changé pendant la traduction. Rien n’a été sauvegardé ; recommencez avec le texte actuel.")
+                    saveLyrics(track.id, (current?.takeIf { it.original == original } ?: sourceLyrics).copy(french = result, frenchSource = source))
+                }
                 vm.message("VF choisie sauvegardée hors ligne ; VO conservée")
                 onDismiss()
             } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = savingConfirmed && !work.busy && !saveWork.busy) { Text("Choisir et sauvegarder cette VF") } }

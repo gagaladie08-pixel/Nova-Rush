@@ -1,6 +1,7 @@
 package com.novalisten.app.enrichment
 
 import android.content.Context
+import com.novalisten.app.data.LrcParser
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.common.MlKit
 import com.google.mlkit.common.model.DownloadConditions
@@ -24,7 +25,8 @@ class TranslationPlan(original: String) {
         require(original.isNotBlank() && original.length <= 20_000) { "Cette version traduit des textes de 20 000 caractères maximum, sans les tronquer." }
         val prefix = Regex("^((?:\\[\\d{1,3}:\\d{2}(?:[.:]\\d{1,3})?])+)(.*)$")
         val tag = Regex("^\\[[A-Za-z]+:.*]$")
-        segments = original.replace("\r\n", "\n").split('\n').map { line ->
+        segments = original.replace("\r\n", "\n").split('\n').map { raw ->
+            val line = LrcParser.withoutWordTags(raw)
             val match = prefix.matchEntire(line)
             when {
                 match != null -> TranslationSegment(match.groupValues[1], match.groupValues[2], match.groupValues[2].isNotBlank())
@@ -39,7 +41,7 @@ class TranslationPlan(original: String) {
         else {
             val text = translations[segment.content] ?: throw RemoteFailure("Traduction incomplète. L’original reste intact.")
             // A translated line is one timed segment, never new LRC control data.
-            val plain = text.replace('\n', ' ').replace('\r', ' ').replace(Regex("\\[\\d{1,3}:\\d{2}[^]]*]"), "").trim()
+            val plain = LrcParser.withoutWordTags(text.replace('\n', ' ').replace('\r', ' ').replace(Regex("\\[\\d{1,3}:\\d{2}[^]]*]"), "")).trim()
             require(plain.isNotBlank()) { "Segment de traduction vide." }
             segment.prefix + plain
         }

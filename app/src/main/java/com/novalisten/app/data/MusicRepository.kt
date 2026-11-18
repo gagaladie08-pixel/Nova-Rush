@@ -27,6 +27,8 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     val library = _library.asStateFlow()
     private val _data = MutableStateFlow(LocalData())
     val data = _data.asStateFlow()
+    private val _localDataReady = MutableStateFlow(false)
+    val localDataReady = _localDataReady.asStateFlow()
     private var refreshJob: Job? = null
     private var observerRegistered = false
     private val dataMutex = Mutex()
@@ -34,10 +36,11 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
         override fun onChange(selfChange: Boolean) { refresh(debounce = true) }
     }
     init {
-        scope.launch(Dispatchers.IO) { updateLocalData() }
+        scope.launch(Dispatchers.IO) { dataMutex.withLock { updateLocalData() } }
     }
     private fun updateLocalData() {
         _data.value = database.snapshot()
+        _localDataReady.value = true
         _library.value = _library.value.copy(tracks = decorate(_library.value.tracks))
     }
     private fun decorate(tracks: List<Track>): List<Track> = tracks.map { it.copy(displayCover = _data.value.covers[it.albumKey]?.uri) }

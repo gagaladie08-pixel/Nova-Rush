@@ -5,11 +5,17 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 
-/** Adapters never start themselves: every method is reached from an explicit UI command. */
-class RemoteSources(val transport: RemoteTransport, private val credential: suspend (SecretSlot) -> String?) {
+/** Adapters never start themselves: explicit commands or the user-enabled current-track lyrics loader. */
+class RemoteSources(val transport: RemoteTransport, private val credential: suspend (SecretSlot) -> String?) : LyricLookup {
     private suspend fun required(slot: SecretSlot): String = credential(slot)?.takeIf { it.isNotBlank() }
         ?: throw RemoteFailure("${slot.label} : non configuré. Ouvrez Réglages → API et clés.")
-    suspend fun lyrics(provider: Provider, input: MusicQuery): List<LyricCandidate> {
+    override suspend fun availableLyricProviders(): List<Provider> = buildList {
+        // No invented application email; an absent/unreadable contact skips only lrc.red.
+        val contact = try { credential(SecretSlot.LRC_CONTACT) } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (_: Exception) { null }
+        if (!contact.isNullOrBlank() && runCatching { SecretSlot.LRC_CONTACT.validate(contact) }.isSuccess) add(Provider.LRCRED)
+        add(Provider.LRCLIB); add(Provider.LIRIQO)
+    }
+    override suspend fun lyrics(provider: Provider, input: MusicQuery): List<LyricCandidate> {
         val q = input.checked()
         return when (provider) {
             Provider.LRCLIB -> RemoteParsers.lrclib(transport.request(provider, "/api/search", mapOf("track_name" to q.title, "artist_name" to q.artist)))
@@ -35,7 +41,7 @@ class RemoteSources(val transport: RemoteTransport, private val credential: susp
             else -> throw IllegalArgumentException("Source de paroles non prise en charge.")
         }
     }
-    suspend fun loadLyrics(candidate: LyricCandidate): LyricCandidate {
+    override suspend fun loadLyrics(candidate: LyricCandidate): LyricCandidate {
         if (candidate.text.isNotBlank()) return candidate
         val isrc = candidate.remoteIsrc ?: throw RemoteFailure("Aucun texte chargeable pour ce résultat.")
         require(isrc.matches(Regex("[A-Z]{2}[A-Z0-9]{3}[0-9]{7}")))
@@ -45,12 +51,12 @@ class RemoteSources(val transport: RemoteTransport, private val credential: susp
         val files = detail.optJSONObject("files") ?: throw RemoteFailure("lrc.red : aucun format exploitable annoncé.")
         val lrc = files.str("lrc")
         val ttml = files.str("ttml")
-        val (format, path) = if (lrc.isNotBlank()) "lrc" to "/s/$isrc.lrc" else if (ttml.isNotBlank()) "ttml" to "/s/$isrc.ttml" else throw RemoteFailure("lrc.red : ce résultat n’a pas de LRC ou TTML exploitable dans cette version.")
+        val (format, path) = if (ttml.isNotBlank()) "ttml" to "/s/$isrc.ttml" else if (lrc.isNotBlank()) "lrc" to "/s/$isrc.lrc" else throw RemoteFailure("lrc.red : ce résultat n’a pas de LRC ou TTML exploitable dans cette version.")
         // Never follow a URL supplied by a response with our identifying headers.
         val raw = safeText(transport.request(Provider.LRCRED, path, headers = headers))
-        val text = if (format == "ttml") LyricFormats.ttmlToText(raw) else raw
-        if (text.isBlank()) throw RemoteFailure("Le texte chargé est vide.")
-        return candidate.copy(text = text, timing = LyricFormats.timing(text), credit = candidate.credit.copy(details = "Format source : $format. Affichage ligne/texte ; origine du minutage non certifiée."))
+        val result = if (format == "ttml") NativeLyrics.ttml(raw) else NativeLyricResult(raw, emptyList())
+        if (result.text.isBlank()) throw RemoteFailure("Le texte chargé est vide.")
+        return candidate.copy(text = result.text, nativeLines = result.lines, timing = LyricFormats.timing(result.text, result.lines), credit = candidate.credit.copy(details = "Format source : $format. Temps natifs conservés lorsqu’ils existent ; aucune synchronisation mot à mot inventée."))
     }
     private fun term(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     suspend fun recordings(input: MusicQuery): List<CatalogCandidate> {

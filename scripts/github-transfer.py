@@ -43,8 +43,11 @@ def main():
             for file in files:
                 archive.write(file)
         publish('NovaListen-verifications.zip', buffer.getvalue())
-    apk = Path('artifacts/NovaListen-0.2.0-debug.apk')
-    if apk.is_file():
+    apks = sorted(Path('artifacts').glob('NovaListen-*-debug.apk'))
+    if len(apks) > 1:
+        raise RuntimeError('Ambiguous APK delivery: more than one build result')
+    if apks:
+        apk = apks[0]
         data = apk.read_bytes()
         parts = [publish(f'{apk.name}.part-{index // CHUNK_BYTES + 1:03d}', data[index:index + CHUNK_BYTES]) for index in range(0, len(data), CHUNK_BYTES)]
         manifest = {'file': apk.name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'commit': os.environ['GITHUB_SHA'], 'parts': parts}

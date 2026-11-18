@@ -48,7 +48,7 @@ data class ListenEvent(
     val localHour: Int,
 )
 
-data class SavedLyrics(val original: String = "", val french: String = "", val originalSource: String = "", val frenchSource: String = "")
+data class SavedLyrics(val original: String = "", val french: String = "", val originalSource: String = "", val frenchSource: String = "", val originalTiming: String = "")
 data class ArtistNote(val biography: String = "", val source: String = "", val portrait: String? = null, val portraitSource: String = "")
 data class SavedCover(val uri: String, val source: String)
 

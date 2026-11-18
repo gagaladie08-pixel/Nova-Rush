@@ -18,23 +18,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.novalisten.app.MainViewModel
 import com.novalisten.app.data.*
+import com.novalisten.app.enrichment.AutoLyricState
+import com.novalisten.app.enrichment.AutoLyricStatus
 import com.novalisten.app.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: () -> Unit, onInfo: () -> Unit, onAdd: () -> Unit, onArtist: () -> Unit, onAlbum: () -> Unit, onDelete: () -> Unit, onRemove: () -> Unit, onOnlineLyrics: () -> Unit, onCatalog: () -> Unit, onCover: () -> Unit) {
+fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: () -> Unit, onInfo: () -> Unit, onAdd: () -> Unit, onArtist: () -> Unit, onAlbum: () -> Unit, onDelete: () -> Unit, onRemove: () -> Unit, onOnlineLyrics: () -> Unit, onCatalog: () -> Unit, onCover: () -> Unit, hasLyrics: Boolean, onTranslateLyrics: () -> Unit, onEditLyrics: () -> Unit, onLyricsInfo: () -> Unit) {
     val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        LazyColumn(Modifier.fillMaxHeight(.78f), contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(Modifier.fillMaxHeight(.78f).testTag("track_menu"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item { Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) { Artwork(track.artwork, track.title, Modifier.size(56.dp)); Spacer(Modifier.width(14.dp)); Column { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artist, style = MaterialTheme.typography.bodySmall) } } }
             item { MenuItem("Informations du morceau", Icons.Outlined.Info) { onDismiss(); onInfo() } }
             if (track.playable) {
-                item { MenuItem("Rechercher les paroles en ligne", Icons.Outlined.Lyrics) { onDismiss(); onOnlineLyrics() } }
+                item { MenuItem(if (hasLyrics) "Rechercher d’autres paroles" else "Rechercher les paroles en ligne", Icons.Outlined.Search, tag = "menu_search_lyrics") { onDismiss(); onOnlineLyrics() } }
+                item { MenuItem("Traduire les paroles", Icons.Outlined.Translate, enabled = hasLyrics, tag = "menu_translate_lyrics") { onDismiss(); onTranslateLyrics() } }
+                item { MenuItem("Modifier / importer les paroles", Icons.Outlined.EditNote, tag = "menu_edit_lyrics") { onDismiss(); onEditLyrics() } }
+                item { MenuItem("Source et synchronisation des paroles", Icons.Outlined.Info, tag = "menu_lyrics_info") { onDismiss(); onLyricsInfo() } }
                 item { MenuItem("Comparer les métadonnées en ligne", Icons.Outlined.ManageSearch) { onDismiss(); onCatalog() } }
                 item { MenuItem("Chercher une pochette pour l’affichage", Icons.Outlined.ImageSearch) { onDismiss(); onCover() } }
                 item { MenuItem("Lire ensuite", Icons.Outlined.QueueMusic) { vm.next(listOf(track)); onDismiss() } }
@@ -56,8 +62,36 @@ fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: (
 }
 
 @Composable
-private fun MenuItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    ListItem(headlineContent = { Text(label) }, leadingContent = { Icon(icon, null) }, modifier = Modifier.clickable(onClick = onClick).heightIn(min = 52.dp))
+private fun MenuItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean = true, tag: String = "", onClick: () -> Unit) {
+    val color = LocalContentColor.current.copy(alpha = if (enabled) 1f else .38f)
+    ListItem(headlineContent = { Text(label, color = color) }, leadingContent = { Icon(icon, null, tint = color) },
+        modifier = Modifier.testTag(tag).clickable(enabled = enabled, onClick = onClick).heightIn(min = 52.dp))
+}
+
+@Composable
+fun LyricsDetailsDialog(track: Track, lyrics: SavedLyrics, automatic: AutoLyricState, onDismiss: () -> Unit) {
+    val lines = remember(lyrics.original, lyrics.originalTiming) { LyricTiming.decode(lyrics.original, lyrics.originalTiming) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Source et synchronisation") }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Text(track.title, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+            Text(when {
+                lines.any { row -> row.words.any { it.endMs != null } } -> "Karaoké : remplissage des segments selon leurs débuts et fins natifs. Les segments peuvent être des mots ou des syllabes."
+                lines.any { it.words.isNotEmpty() } -> "Karaoké : changement de couleur aux débuts natifs des segments. Sans fin fournie, aucune durée de remplissage n’est inventée."
+                lines.isNotEmpty() -> "Synchronisation par ligne uniquement. Cette version n’a pas de temps de mots : elle ne permet pas un vrai remplissage karaoké mot à mot. Vous pouvez chercher une autre version dans les trois points."
+                else -> "Texte non synchronisé : aucun temps de ligne ou de mot exploitable."
+            }, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(12.dp))
+            if (automatic.trackId == track.id) {
+                if (automatic.status == AutoLyricStatus.SAVED) Text("Votre version sauvegardée a priorité ; elle n’est jamais remplacée automatiquement.", style = MaterialTheme.typography.bodySmall)
+                else if (automatic.note.isNotBlank()) Text(automatic.note, style = MaterialTheme.typography.bodySmall)
+                automatic.diagnostics.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
+            Text("Le chargement automatique ne concerne que le morceau écouté. Il vérifie titre, artiste et durée, pas l’identité audio. Les propositions automatiques restent en mémoire temporaire ; recherchez ou sauvegardez volontairement une version pour la conserver hors ligne. Aucune traduction automatique.", style = MaterialTheme.typography.bodySmall)
+            if (lyrics.originalSource.isNotBlank()) { Spacer(Modifier.height(12.dp)); Text("Original", style = MaterialTheme.typography.labelLarge); SavedAttribution(lyrics.originalSource) }
+            if (lyrics.frenchSource.isNotBlank()) { Spacer(Modifier.height(12.dp)); Text("Français", style = MaterialTheme.typography.labelLarge); SavedAttribution(lyrics.frenchSource) }
+        }
+    }, confirmButton = { TextButton(onDismiss) { Text("Fermer") } })
 }
 
 @Composable
@@ -136,8 +170,9 @@ fun TrackPickerDialog(tracks: List<Track>, playlist: LocalPlaylist, vm: MainView
 
 @Composable
 fun LyricsEditor(track: Track, saved: SavedLyrics, vm: MainViewModel, onDismiss: () -> Unit, onSearch: () -> Unit, onTranslate: () -> Unit) {
-    var original by remember { mutableStateOf(saved.original) }
-    var french by remember { mutableStateOf(saved.french) }
+    val baseline = remember(track.id) { saved }
+    var original by remember { mutableStateOf(baseline.original) }
+    var french by remember { mutableStateOf(baseline.french) }
     var editingFrench by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -158,21 +193,21 @@ fun LyricsEditor(track: Track, saved: SavedLyrics, vm: MainViewModel, onDismiss:
             Text(track.title, style = MaterialTheme.typography.titleSmall)
             Row {
                 TextButton(onSearch) { Icon(Icons.Outlined.Search, null); Text("Rechercher en ligne") }
-                TextButton(onTranslate, enabled = saved.original.isNotBlank()) { Text("Traduire la VO sauvegardée") }
+                TextButton(onTranslate, enabled = baseline.original.isNotBlank()) { Text("Traduire cette VO") }
             }
-            if (editingFrench && saved.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
+            if (editingFrench && baseline.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
             Row { FilterChip(!editingFrench, { editingFrench = false }, { Text("Original") }); Spacer(Modifier.width(10.dp)); FilterChip(editingFrench, { editingFrench = true }, { Text("Français") }) }
             OutlinedTextField(if (editingFrench) french else original, { if (editingFrench) french = it.take(200_000) else original = it.take(200_000) }, Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 220.dp), label = { Text(if (editingFrench) "Votre version française" else "Texte ou LRC horodaté") })
             TextButton({ import.launch(arrayOf("text/*", "application/octet-stream")) }) { Icon(Icons.Outlined.FileOpen, null); Spacer(Modifier.width(6.dp)); Text("Importer TXT / LRC") }
-            Text("Sauvegarde dans NovaListen uniquement, pas dans le fichier audio. Les recherches et traductions demandent une commande distincte. Une VO modifiée invalide l’ancienne VF non corrigée ; les sources sont conservées avec mention des adaptations.", style = MaterialTheme.typography.bodySmall)
-            val credit = if (editingFrench) saved.frenchSource else saved.originalSource
+            Text("Sauvegarde dans NovaListen uniquement, pas dans le fichier audio. Les recherches et traductions demandent une commande distincte. Une VO modifiée invalide l’ancienne VF non corrigée ; les sources sont conservées avec mention des adaptations. Un texte chargé automatiquement n’est conservé hors ligne qu’en le sauvegardant ; vérifiez vos droits de conservation.", style = MaterialTheme.typography.bodySmall)
+            val credit = if (editingFrench) baseline.frenchSource else baseline.originalSource
             if (credit.isNotBlank()) SavedAttribution(credit)
         }
     }, confirmButton = { TextButton({
-        val voChanged = original != saved.original
-        val fr = if (voChanged && french == saved.french) "" else french
-        val originalCredit = if (voChanged && saved.originalSource.isNotBlank()) saved.originalSource + "\nAdaptation manuelle dans NovaListen." else saved.originalSource
-        val frenchCredit = if (fr.isBlank()) "" else if (fr != saved.french && saved.frenchSource.isNotBlank()) saved.frenchSource + "\nAdaptation manuelle dans NovaListen." else saved.frenchSource
-        vm.saveLyrics(track.id, SavedLyrics(original, fr, originalCredit, frenchCredit)); onDismiss()
+        val voChanged = original != baseline.original
+        val fr = if (voChanged && french == baseline.french) "" else french
+        val originalCredit = if (voChanged && baseline.originalSource.isNotBlank()) baseline.originalSource + "\nAdaptation manuelle dans NovaListen." else baseline.originalSource
+        val frenchCredit = if (fr.isBlank()) "" else if (fr != baseline.french && baseline.frenchSource.isNotBlank()) baseline.frenchSource + "\nAdaptation manuelle dans NovaListen." else baseline.frenchSource
+        vm.saveLyrics(track.id, SavedLyrics(original, fr, originalCredit, frenchCredit, if (voChanged) "" else baseline.originalTiming)); onDismiss()
     }) { Text("Sauvegarder") } }, dismissButton = { TextButton(onDismiss) { Text("Annuler") } })
 }

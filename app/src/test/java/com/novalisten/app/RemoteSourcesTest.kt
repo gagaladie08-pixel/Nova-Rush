@@ -19,6 +19,32 @@ class RemoteSourcesTest {
         }
         override suspend fun image(url: String, maxBytes: Int): ByteArray = error("No image download expected")
     }
+    @Test fun automaticDiscoverySkipsOnlyLrcRedWhenContactIsAbsentAndMakesNoRequests() = runTest {
+        val fake = Fake(); val sources = RemoteSources(fake) { null }
+        assertEquals(listOf(Provider.LRCLIB, Provider.LIRIQO), sources.availableLyricProviders())
+        assertTrue(fake.calls.isEmpty())
+        val configured = RemoteSources(fake) { if (it == SecretSlot.LRC_CONTACT) "dev@example.org" else null }
+        assertEquals(listOf(Provider.LRCRED, Provider.LRCLIB, Provider.LIRIQO), configured.availableLyricProviders())
+        assertTrue(fake.calls.isEmpty())
+    }
+    @Test fun automaticDiscoveryDoesNotLetAnUnreadableContactDisableTheOtherCoreSources() = runTest {
+        val sources = RemoteSources(Fake()) { throw RemoteFailure("Fixture illisible") }
+        assertEquals(listOf(Provider.LRCLIB, Provider.LIRIQO), sources.availableLyricProviders())
+    }
+    @Test fun lrcRedPrefersNativeTtmlSegmentsAndNeverFollowsAnUntrustedFormatUrl() = runTest {
+        val paths = mutableListOf<String>()
+        val transport = object : RemoteTransport {
+            override suspend fun request(provider: Provider, path: String, parameters: Map<String, String>, headers: Map<String, String>, jsonBody: String?): String {
+                paths += path
+                return if (path.endsWith(".json")) """{"files":{"lrc":"https://untrusted.example/a.lrc","ttml":"https://untrusted.example/a.ttml"}}"""
+                else """<tt><p begin="1s" end="3s"><span begin="1s" end="2s">Essai</span></p></tt>"""
+            }
+            override suspend fun image(url: String, maxBytes: Int): ByteArray = error("No images")
+        }
+        val saved = RemoteSources(transport) { "dev@example.org" }.loadLyrics(LyricCandidate("test", "Essai", "Test", "", 65000, Credit("lrc.red", "https://lrc.red/s/ZZAAA0000000"), remoteIsrc = "ZZAAA0000000")).asSavedLyrics()
+        assertEquals(listOf("/s/ZZAAA0000000.json", "/s/ZZAAA0000000.ttml"), paths)
+        assertEquals(2000L, com.novalisten.app.data.LyricTiming.decode(saved.original, saved.originalTiming).single().words.single().endMs)
+    }
     @Test fun constructingClientsMakesNoRequests() { val fake = Fake(); RemoteSources(fake) { null }; assertTrue(fake.calls.isEmpty()) }
     @Test fun lrclibAcceptsActualLrcAndNullPlain() {
         val result = RemoteParsers.lrclib("""[{"id":7,"trackName":"Test","artistName":"Local","albumName":"Tests","duration":65,"plainLyrics":null,"syncedLyrics":"[00:01.230]Lumière de test"}]""").single()

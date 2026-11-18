@@ -14,11 +14,15 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.novalisten.app.MainActivity
 import com.novalisten.app.NovaApplication
+import com.novalisten.app.enrichment.LyricPlayback
+import com.novalisten.app.enrichment.MusicQuery
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 
 @UnstableApi
 class PlaybackService : MediaSessionService() {
@@ -29,6 +33,8 @@ class PlaybackService : MediaSessionService() {
     private val counter = PassageCounter()
     private var passageId: String? = null
     private var lastPlaying = false
+    private val lyricPlayback = MutableStateFlow<LyricPlayback?>(null)
+    private val app get() = application as NovaApplication
     private val repository get() = (application as NovaApplication).repository
     private val ticker = object : Runnable {
         override fun run() {
@@ -46,6 +52,14 @@ class PlaybackService : MediaSessionService() {
         }
         lastPlaying = playing
     }
+    private fun publishLyricsRequest() {
+        val item = player.currentMediaItem
+        lyricPlayback.value = item?.let {
+            val metadata = it.mediaMetadata
+            val duration = metadata.extras?.getLong("duration_ms")?.takeIf { d -> d > 0 } ?: player.duration.coerceAtLeast(0)
+            LyricPlayback(it.mediaId, MusicQuery(metadata.title?.toString().orEmpty(), metadata.artist?.toString().orEmpty(), metadata.albumTitle?.toString().orEmpty(), duration), player.isPlaying)
+        }
+    }
     override fun onCreate() {
         super.onCreate()
         player = ExoPlayer.Builder(this).build().apply {
@@ -53,6 +67,7 @@ class PlaybackService : MediaSessionService() {
             setHandleAudioBecomingNoisy(true)
             setWakeMode(C.WAKE_MODE_LOCAL)
             addListener(object : Player.Listener {
+                override fun onEvents(player: Player, events: Player.Events) { publishLyricsRequest() }
                 override fun onIsPlayingChanged(isPlaying: Boolean) { sample(playing = isPlaying) }
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_ENDED) sample(playing = false)
@@ -81,6 +96,11 @@ class PlaybackService : MediaSessionService() {
         }).build()
         handler.post(ticker)
         scope.launch {
+            combine(lyricPlayback, repository.data, repository.localDataReady, app.lyricPreferences.automatic) { playback, local, ready, enabled ->
+                app.automaticLyrics.onPlayback(playback?.takeUnless { it.trackId in local.hidden }, enabled, playback?.let { local.lyrics[it.trackId] }, ready)
+            }.collect { }
+        }
+        scope.launch {
             repository.data.collect { local ->
                 if (player.currentMediaItem?.mediaId in local.hidden) {
                     val next = (player.currentMediaItemIndex + 1 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId !in local.hidden }
@@ -100,6 +120,7 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         scope.cancel()
+        app.automaticLyrics.stop()
         session?.release()
         player.release()
         super.onDestroy()

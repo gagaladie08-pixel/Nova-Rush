@@ -1,12 +1,9 @@
 package com.novalisten.app.enrichment
 
-import com.novalisten.app.data.LrcParser
+import com.novalisten.app.data.*
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.StringReader
 import java.util.Locale
-import javax.xml.parsers.DocumentBuilderFactory
-import org.xml.sax.InputSource
 
 internal fun JSONObject.str(key: String): String = opt(key)?.takeUnless { it == JSONObject.NULL }?.toString().orEmpty()
 internal fun JSONObject.objects(key: String): List<JSONObject> = optJSONArray(key).objects()
@@ -36,39 +33,22 @@ internal fun secureCatalogueUrl(value: String): String {
 }
 
 object LyricFormats {
-    /** Keeps real line starts. Word timings are not fabricated or advertised by the v0.2 line renderer. */
-    fun ttmlToText(xml: String): String {
-        safeText(xml)
-        require(!xml.contains(Regex("<!\\s*(DOCTYPE|ENTITY)", RegexOption.IGNORE_CASE))) { "Déclarations XML externes interdites." }
-        val factory = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-            isExpandEntityReferences = false
-            // The precheck above also protects Android parsers lacking these optional SAX features.
-            runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
-            runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
-        }
-        val builder = factory.newDocumentBuilder().apply { setEntityResolver { _, _ -> InputSource(StringReader("")) } }
-        val document = builder.parse(InputSource(StringReader(xml)))
-        val paragraphs = document.getElementsByTagNameNS("*", "p")
-        require(paragraphs.length <= 3000)
-        val lines = (0 until paragraphs.length).map { i ->
-            val node = paragraphs.item(i) as org.w3c.dom.Element
-            clock(node.getAttribute("begin")) to node.textContent.trim()
-        }.filter { it.second.isNotBlank() }
-        if (lines.isEmpty()) return ""
-        return if (lines.all { it.first != null }) asLrc(lines.map { it.first!! to it.second }) else lines.joinToString("\n") { it.second }
-    }
+    fun ttmlToText(xml: String): String = NativeLyrics.ttml(xml).text
     fun clock(value: String): Long? = runCatching {
         val raw = value.trim()
-        val seconds = when {
-            raw.endsWith("ms") -> return@runCatching raw.dropLast(2).toDouble().takeIf { it.isFinite() && it >= 0 }?.toLong()
-            raw.endsWith('s') -> raw.dropLast(1).toDouble()
-            ':' in raw -> raw.split(':').fold(0.0) { acc, part -> acc * 60 + part.toDouble() }
-            else -> return@runCatching null
+        val ms = when {
+            raw.matches(Regex("[0-9]+(?:\\.[0-9]+)?ms")) -> raw.dropLast(2).toDouble()
+            raw.matches(Regex("[0-9]+(?:\\.[0-9]+)?s")) -> raw.dropLast(1).toDouble() * 1000
+            raw.matches(Regex("(?:[0-9]{1,3}:)?[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?")) -> raw.split(':').fold(0.0) { acc, part -> acc * 60 + part.toDouble() } * 1000
+            else -> return@runCatching null // frames/ticks require an explicit time base, never guessed
         }
-        (seconds * 1000).takeIf { it.isFinite() && it in 0.0..86_400_000.0 }?.toLong()
+        ms.takeIf { it.isFinite() && it in 0.0..86_400_000.0 }?.toLong()
     }.getOrNull()
-    fun timing(text: String): String = if (LrcParser.parse(text).isNotEmpty()) "Synchro · Ligne" else "Texte non synchronisé"
+    fun timing(text: String, native: List<LyricLine> = emptyList()): String = when {
+        native.any { it.words.isNotEmpty() } || LrcParser.parse(text).any { it.words.isNotEmpty() } -> "Karaoké · minutage natif"
+        LrcParser.parse(text).isNotEmpty() -> "Synchro · Ligne"
+        else -> "Texte non synchronisé"
+    }
 }
 
 object RemoteParsers {
@@ -90,15 +70,25 @@ object RemoteParsers {
         return tracks.take(16).mapIndexedNotNull { index, item ->
             val timed = item.objects("timed")
             val valid = timed.isNotEmpty() && timed.all { it.has("start") && it.optDouble("start", -1.0).let { n -> n.isFinite() && n in 0.0..86_400_000.0 } }
-            val text = safeText(when {
-                valid -> asLrc(timed.map { it.optDouble("start").toLong() to it.str("text") })
-                item.str("lrc").isNotBlank() -> item.str("lrc")
-                item.str("plain").isNotBlank() -> item.str("plain")
-                item.str("ttml").isNotBlank() -> LyricFormats.ttmlToText(item.str("ttml"))
-                else -> ""
-            })
+            fun millis(obj: JSONObject, key: String): Long? = obj.optDouble(key, -1.0).takeIf { it.isFinite() && it in 0.0..86_400_000.0 }?.toLong()
+            val result = when {
+                valid -> {
+                    val lines = timed.map { line ->
+                        val tokens = line.objects("words").mapNotNull { word ->
+                            val at = millis(word, "start") ?: return@mapNotNull null
+                            TimedToken(word.str("text"), at, millis(word, "end"))
+                        }
+                        LyricTiming.line(line.optDouble("start").toLong(), line.str("text"), tokens, millis(line, "end"))
+                    }.sortedBy { it.timeMs }
+                    NativeLyricResult(asLrc(lines.map { it.timeMs to it.text }), lines)
+                }
+                item.str("ttml").isNotBlank() -> NativeLyrics.ttml(item.str("ttml"))
+                item.str("lrc").isNotBlank() -> NativeLyricResult(item.str("lrc"), emptyList())
+                else -> NativeLyricResult(item.str("plain"), emptyList())
+            }
+            val text = safeText(result.text)
             val upstream = item.str("upstreamProvider").ifBlank { item.str("lyricsSource").ifBlank { item.str("provider") } }
-            if (text.isBlank()) null else LyricCandidate("liriqo:$index:${item.str("provider")}", metadata.str("title").ifBlank { query.title }, metadata.str("artist").ifBlank { query.artist }, metadata.str("album").ifBlank { query.album }, (metadata.optDouble("duration", 0.0) * 1000).toLong(), Credit("LiriQo → $upstream", "https://github.com/AlFarrizi-Studio/LiriQo", details = "Source annoncée : ${item.str("syncLevel")}. Affichage ligne/texte dans NovaListen ; aucune traduction/romanisation automatique."), text, timing = LyricFormats.timing(text), upstream = upstream)
+            if (text.isBlank()) null else LyricCandidate("liriqo:$index:${item.str("provider")}", metadata.str("title").ifBlank { query.title }, metadata.str("artist").ifBlank { query.artist }, metadata.str("album").ifBlank { query.album }, (metadata.optDouble("duration", 0.0) * 1000).toLong(), Credit("LiriQo → $upstream", "https://github.com/AlFarrizi-Studio/LiriQo", details = "Source annoncée : ${item.str("syncLevel")}. Temps des segments conservés lorsqu’ils sont fournis et cohérents ; aucune répartition inventée entre mots."), text, timing = LyricFormats.timing(text, result.lines), upstream = upstream, nativeLines = result.lines)
         }
     }
     fun better(body: String, query: MusicQuery): List<LyricCandidate> {
@@ -106,8 +96,8 @@ object RemoteParsers {
         val root = jsonObject(body)
         val xml = root.str("ttml")
         if (xml.isBlank()) return emptyList()
-        val text = LyricFormats.ttmlToText(xml)
-        return if (text.isBlank()) emptyList() else listOf(LyricCandidate("better:${query.title}", query.title, query.artist, query.album, query.durationMs, Credit("Better Lyrics · cache public", "https://betterlyrics.org", details = "Origine du minutage non certifiée. TTML ramené à ses instants de ligne existants."), text, timing = LyricFormats.timing(text)))
+        val result = NativeLyrics.ttml(xml)
+        return if (result.text.isBlank()) emptyList() else listOf(LyricCandidate("better:${query.title}", query.title, query.artist, query.album, query.durationMs, Credit("Better Lyrics · cache public", "https://betterlyrics.org", details = "TTML : temps natifs des lignes et segments conservés s’ils sont exploitables ; leur origine n’est pas certifiée."), result.text, timing = LyricFormats.timing(result.text, result.lines), nativeLines = result.lines))
     }
     fun textyl(body: String, query: MusicQuery): List<LyricCandidate> {
         if (body.trim() == "null") return emptyList()

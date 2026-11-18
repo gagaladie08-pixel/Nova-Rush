@@ -36,14 +36,17 @@ import kotlinx.coroutines.launch
 @Composable
 fun ApiSettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val credentials by vm.credentials.status.collectAsStateWithLifecycle()
+    val automaticLyrics by vm.lyricPreferences.automatic.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf<SecretSlot?>(null) }
     var deletingAll by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf("") }
     val uri = LocalUriHandler.current
     LazyColumn(Modifier.fillMaxSize().testTag("api_settings"), contentPadding = PaddingValues(bottom = 28.dp)) {
-        item { PageTitle("API et clés", "Aucune recherche au démarrage ni à l’enregistrement d’une clé") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
-        item { Notice("La musique reste locale. Les commandes Rechercher en ligne transmettent uniquement les termes affichés (titre, artiste, album, durée ou identifiant), jamais l’audio, l’historique ou toute la bibliothèque. Aucun résultat n’est appliqué sans votre choix.") }
+        item { PageTitle("API et clés", "Paroles du morceau écouté · autres recherches sur demande") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { Notice("La musique reste locale. Le chargement automatique des paroles transmet seulement titre, artiste, album et durée du morceau réellement écouté aux sources admissibles du noyau. Aucun audio, historique ou envoi de la collection. Vos paroles sauvegardées ont priorité et ne sont jamais remplacées automatiquement. Pas de recherche au simple lancement ni à la saisie d’une clé, pas de traduction automatique.") }
+        item { ListItem(headlineContent = { Text("Charger les paroles pendant l’écoute") }, supportingContent = { Text("Seulement le morceau en cours ; cache temporaire en mémoire. Rechercher une autre version et Traduire sont dans les trois points du lecteur.") }, trailingContent = { Switch(automaticLyrics, { vm.lyricPreferences.automatic(it) }, Modifier.testTag("automatic_lyrics")) }) }
+        item { Notice("Un titre, un artiste et une durée cohérents sont nécessaires pour sélectionner automatiquement une proposition. Cela ne prouve pas l’identité audio. Les autres recherches transmettent uniquement les champs affichés sur commande ; leur sauvegarde reste volontaire.") }
         item { SectionHeader("Sources sans clé") }
         item { Notice("Paroles : LRCLIB, lrc.red et LiriQo (noyau), Better Lyrics limité au cache public, Textyl et lyrics.ovh sur demande. lrc.red exige un courriel de contact, à renseigner plus bas. Lyrica reste en réserve ; aucun connecteur privé de plateforme n’est activé.") }
         item { Notice("Métadonnées : MusicBrainz, puis iTunes Search sur comparaison volontaire avec choix de boutique. Pochettes : Cover Art Archive par édition choisie. Artistes : Wikipédia FR, anglais proposé séparément, Wikidata, Commons et Openverse anonyme avec quotas. L’écriture des tags dans les fichiers reste distincte et non intégrée.") }

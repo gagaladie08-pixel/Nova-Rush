@@ -6,11 +6,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.filled.Favorite
@@ -75,14 +73,15 @@ fun MiniPlayer(track: Track, playback: PlaybackUi, vm: MainViewModel, onOpen: ()
 }
 
 @Composable
-fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List<Track>, vm: MainViewModel, onDismiss: () -> Unit, onMenu: () -> Unit, onAdd: () -> Unit, onEditLyrics: () -> Unit, onSearchLyrics: () -> Unit, onTranslateLyrics: () -> Unit, blocked: Boolean) {
+fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List<Track>, vm: MainViewModel,
+               lyrics: SavedLyrics, automatic: com.novalisten.app.enrichment.AutoLyricState,
+               onDismiss: () -> Unit, onMenu: () -> Unit, onAdd: () -> Unit, onEditLyrics: () -> Unit, onLyricsInfo: () -> Unit, blocked: Boolean) {
     var lyricsPage by rememberSaveable { mutableStateOf(false) }
     var controls by remember { mutableStateOf(true) }
     var lastTouch by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var touched by remember { mutableStateOf(false) }
     var queue by remember { mutableStateOf(false) }
     var french by rememberSaveable { mutableStateOf(false) }
-    var provenance by remember { mutableStateOf<String?>(null) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val view = LocalView.current
         val window = (view.parent as? DialogWindowProvider)?.window
@@ -102,9 +101,10 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
         val currentControls by rememberUpdatedState(controls)
         val currentLyrics by rememberUpdatedState(lyricsPage)
         val t = LocalUniverse.current
-        val saved = data.lyrics[track.id] ?: SavedLyrics()
-        val text = if (french && saved.french.isNotBlank()) saved.french else saved.original
-        val timed = remember(text) { LrcParser.parse(text) }
+        val saved = lyrics
+        val showFrench = french && saved.french.isNotBlank()
+        val text = if (showFrench) saved.french else saved.original
+        val timed = remember(text, showFrench, saved.originalTiming) { if (showFrench) LrcParser.parse(text) else LyricTiming.decode(text, saved.originalTiming) }
         val active = LrcParser.activeIndex(timed, playback.position)
         Box(Modifier.fillMaxSize().background(t.background).testTag("full_player")
             .pointerInput(Unit) {
@@ -145,19 +145,18 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
                     IconButton(onMenu) { NovaIcon(Icons.Outlined.MoreVert, "Actions du morceau") }
                 }
                 if (lyricsPage) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        TextButton({ lyricsPage = false; controls = true }) { Icon(Icons.Outlined.ArrowBack, null); Text("Pochette") }
-                        TextButton({ french = !french }, enabled = saved.french.isNotBlank()) { Text(if (french && saved.french.isNotBlank()) "FR → VO" else "VO → FR") }
-                        IconButton(onEditLyrics) { Icon(Icons.Outlined.EditNote, "Modifier les paroles") }
+                    LyricsBody(track.id, text, timed, active, playback.position, playback.playing, automatic, Modifier.weight(1f), vm::seek)
+                    val credit = if (showFrench) saved.frenchSource else saved.originalSource
+                    if (credit.isNotBlank() || saved.french.isNotBlank()) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        if (credit.isNotBlank()) TextButton(onLyricsInfo, Modifier.weight(1f)) {
+                            Text(credit.lineSequence().firstOrNull().orEmpty().take(36), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+                        } else Spacer(Modifier.weight(1f))
+                        if (saved.french.isNotBlank()) {
+                            TextButton({ french = false }, enabled = showFrench) { Text("VO") }
+                            TextButton({ french = true }, enabled = !showFrench) { Text("FR") }
+                        }
                     }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onSearchLyrics) { Icon(Icons.Outlined.Search, null); Text("Rechercher") }
-                        TextButton(onTranslateLyrics, enabled = saved.original.isNotBlank()) { Icon(Icons.Outlined.Translate, null); Text("Traduire") }
-                        val credit = if (french && saved.french.isNotBlank()) saved.frenchSource else saved.originalSource
-                        if (credit.isNotBlank()) TextButton({ provenance = credit }) { Text(credit.lineSequence().firstOrNull().orEmpty().take(32)) }
-                    }
-                    if (french && saved.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
-                    LyricsBody(text, timed, active, Modifier.weight(1f), vm::seek, onEditLyrics)
+                    if (showFrench && saved.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
                 } else {
                     Box(Modifier.weight(1f).fillMaxWidth().clickable { controls = true; lastTouch = System.currentTimeMillis() }, contentAlignment = Alignment.Center) {
                         if (controls) Artwork(track.artwork, track.title, Modifier.fillMaxWidth(.86f).aspectRatio(1f))
@@ -168,7 +167,7 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
                         }
                     }
                     if (controls) {
-                        Text(if (active >= 0) timed[active].text else if (text.isNotBlank()) "Paroles sauvegardées · ouvrir →" else "Ajoutez vos paroles, gardez-les hors ligne", Modifier.fillMaxWidth().clickable { lyricsPage = true }.padding(vertical = 16.dp), maxLines = 2, style = MaterialTheme.typography.bodyLarge, color = t.text)
+                        Text(if (active >= 0) timed[active].text else if (text.isNotBlank()) "Ouvrir les paroles" else if (automatic.trackId == track.id && automatic.status == com.novalisten.app.enrichment.AutoLyricStatus.LOADING) "Chargement des paroles…" else "Ouvrir les paroles", Modifier.fillMaxWidth().clickable { lyricsPage = true }.padding(vertical = 16.dp), maxLines = 2, style = MaterialTheme.typography.bodyLarge, color = t.text)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             IconButton({ vm.favorite(track) }) { Icon(if (track.id in data.favorites) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, "Favori", tint = if (track.id in data.favorites) t.primary else t.text) }
                             IconButton(onAdd) { Icon(Icons.Outlined.PlaylistAdd, "Ajouter à une playlist") }
@@ -179,12 +178,10 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
                 }
                 if (controls || lyricsPage) {
                     PlayerTransport(playback, vm, { queue = true })
-                    TextButton({ lyricsPage = !lyricsPage; controls = true }, Modifier.align(Alignment.CenterHorizontally)) { Text(if (lyricsPage) "● Paroles   ○ Pochette" else "● Pochette   ○ Paroles", style = MaterialTheme.typography.labelSmall) }
                 } else Spacer(Modifier.height(24.dp))
             }
             if (!controls && !lyricsPage) TextButton({ controls = true }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()) { Text("Afficher les commandes") }
         }
-        provenance?.let { credit -> AlertDialog(onDismissRequest = { provenance = null }, title = { Text("Source des paroles") }, text = { LazyColumn { item { SavedAttribution(credit) } } }, confirmButton = { TextButton({ provenance = null }) { Text("Fermer") } }) }
         if (queue) ModalBottomSheet(onDismissRequest = { queue = false }) {
             Text("File d’attente · ${playback.queue.size}", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
             LazyColumn(Modifier.fillMaxHeight(.7f)) {
@@ -211,31 +208,6 @@ private fun PlayerTransport(playback: PlaybackUi, vm: MainViewModel, onQueue: ()
             FilledIconButton(vm::toggle, Modifier.size(68.dp)) { Icon(if (playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playback.playing) "Pause" else "Lecture", Modifier.size(36.dp)) }
             IconButton(vm::forward, Modifier.size(52.dp)) { Icon(Icons.Outlined.SkipNext, "Suivant", Modifier.size(32.dp)) }
             IconButton(onQueue) { Icon(Icons.Outlined.QueueMusic, "File d’attente") }
-        }
-    }
-}
-
-@Composable
-private fun LyricsBody(text: String, timed: List<LyricLine>, active: Int, modifier: Modifier, onSeek: (Long) -> Unit, onEdit: () -> Unit) {
-    val list = rememberLazyListState()
-    var follow by remember(text) { mutableStateOf(true) }
-    val dragged by list.interactionSource.collectIsDraggedAsState()
-    LaunchedEffect(dragged) { if (dragged) follow = false }
-    LaunchedEffect(active, follow) { if (follow && active >= 0) list.animateScrollToItem(active.coerceAtLeast(0)) }
-    Column(modifier) {
-        if (text.isBlank()) EmptyState("Vos mots, votre musique", "Collez un texte ou des paroles LRC horodatées. Les versions originale et française restent séparées. Recherche et traduction facultatives via les boutons ci-dessus ; aucun appel en ouvrant cette page.", Icons.Outlined.Lyrics, Modifier.weight(1f), action = { Button(onEdit) { Text("Ajouter les paroles") } })
-        else {
-            if (timed.isNotEmpty()) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Synchro · Ligne (LRC)", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.bodySmall)
-                TextButton({ follow = true }) { Text("Recentrer") }
-            } else Text("Texte non synchronisé", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.bodySmall)
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(vertical = 24.dp)) {
-                if (timed.isEmpty()) item { Text(text, style = MaterialTheme.typography.headlineSmall) }
-                else itemsIndexed(timed) { index, line ->
-                    Text(line.text.ifBlank { "♪" }, Modifier.fillMaxWidth().clickable { onSeek(line.timeMs) }.padding(vertical = 12.dp), style = MaterialTheme.typography.headlineSmall, color = if (index == active) LocalUniverse.current.accent else LocalUniverse.current.text.copy(alpha = .55f))
-                }
-                item { Spacer(Modifier.height(130.dp)) }
-            }
         }
     }
 }

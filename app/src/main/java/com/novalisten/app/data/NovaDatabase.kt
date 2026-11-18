@@ -7,13 +7,13 @@ import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 import java.util.UUID
 
-class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpenHelper(context, name, null, 2) {
+class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpenHelper(context, name, null, 3) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE flags (track TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, tracks TEXT NOT NULL, created INTEGER NOT NULL, pinned INTEGER, cover TEXT)")
         db.execSQL("CREATE TABLE listens (id INTEGER PRIMARY KEY AUTOINCREMENT, track TEXT NOT NULL, at INTEGER NOT NULL, zone TEXT NOT NULL, local_date TEXT NOT NULL, local_hour INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX listens_track_at ON listens(track, at)")
-        db.execSQL("CREATE TABLE lyrics (track TEXT PRIMARY KEY, original TEXT NOT NULL, french TEXT NOT NULL, original_source TEXT NOT NULL DEFAULT '', french_source TEXT NOT NULL DEFAULT '')")
+        db.execSQL("CREATE TABLE lyrics (track TEXT PRIMARY KEY, original TEXT NOT NULL, french TEXT NOT NULL, original_source TEXT NOT NULL DEFAULT '', french_source TEXT NOT NULL DEFAULT '', original_timing TEXT NOT NULL DEFAULT '')")
         db.execSQL("CREATE TABLE artists (id TEXT PRIMARY KEY, bio TEXT NOT NULL, source TEXT NOT NULL, portrait TEXT, portrait_source TEXT NOT NULL DEFAULT '')")
         createEnrichmentTables(db)
     }
@@ -28,6 +28,7 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
             db.execSQL("ALTER TABLE artists ADD COLUMN portrait_source TEXT NOT NULL DEFAULT ''")
             createEnrichmentTables(db)
         }
+        if (oldVersion < 3) db.execSQL("ALTER TABLE lyrics ADD COLUMN original_timing TEXT NOT NULL DEFAULT ''")
     }
 
     fun snapshot(): LocalData {
@@ -51,8 +52,8 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
             while (c.moveToNext()) events += ListenEvent(c.getLong(0), c.getString(1), c.getLong(2), c.getString(3), c.getString(4), c.getInt(5))
         }
         val lyrics = mutableMapOf<String, SavedLyrics>()
-        readableDatabase.rawQuery("SELECT track,original,french,original_source,french_source FROM lyrics", null).use { c ->
-            while (c.moveToNext()) lyrics[c.getString(0)] = SavedLyrics(c.getString(1), c.getString(2), c.getString(3), c.getString(4))
+        readableDatabase.rawQuery("SELECT track,original,french,original_source,french_source,original_timing FROM lyrics", null).use { c ->
+            while (c.moveToNext()) lyrics[c.getString(0)] = SavedLyrics(c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5))
         }
         val artists = mutableMapOf<String, ArtistNote>()
         readableDatabase.rawQuery("SELECT id,bio,source,portrait,portrait_source FROM artists", null).use { c ->
@@ -90,7 +91,7 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
     }
     fun saveLyrics(id: String, lyrics: SavedLyrics) {
         check(writableDatabase.insertWithOnConflict("lyrics", null, ContentValues().apply {
-            put("track", id); put("original", lyrics.original); put("french", lyrics.french); put("original_source", lyrics.originalSource); put("french_source", lyrics.frenchSource)
+            put("track", id); put("original", lyrics.original); put("french", lyrics.french); put("original_source", lyrics.originalSource); put("french_source", lyrics.frenchSource); put("original_timing", lyrics.originalTiming)
         }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde lyrics." }
     }
     fun saveCover(id: String, cover: SavedCover?) {

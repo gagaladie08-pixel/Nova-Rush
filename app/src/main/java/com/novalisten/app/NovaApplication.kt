@@ -15,6 +15,8 @@ class NovaApplication : Application() {
     val credentials by lazy { CredentialVault(this) }
     private val http by lazy { RemoteHttp() }
     val remote by lazy { RemoteSources(http, credentials::get) }
+    val lyricPreferences by lazy { LyricPreferences(this) }
+    val automaticLyrics by lazy { AutomaticLyrics(applicationScope, remote) }
     val remoteImages by lazy { RemoteImages(this, http) }
     val translation by lazy { LocalTranslation(this) }
 }

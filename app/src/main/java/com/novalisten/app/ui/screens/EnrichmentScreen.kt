@@ -131,7 +131,7 @@ private fun LyricsSearch(track: Track, vm: MainViewModel, onDismiss: () -> Unit)
         }
     }
     LazyColumn(Modifier.fillMaxSize().testTag("lyrics_search"), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Notice("Recherche volontaire : les champs ci-dessous et la durée locale (${durationLabel(track.durationMs)}) seront envoyés aux sources demandées. Aucun audio ni historique. Comparez l’artiste et la version ; le premier résultat n’est jamais appliqué.") }
+        item { Notice("Recherche volontaire : les champs ci-dessous et la durée locale (${durationLabel(track.durationMs)}) seront envoyés aux sources demandées. Aucun audio ni historique. Comparez l’artiste et la version ; cette recherche de remplacement n’applique rien avant votre confirmation.") }
         item { QueryFields(title, { title = it }, artist, { artist = it }, album, { album = it }, !work.busy) }
         item { Button({ search(listOf(Provider.LRCRED, Provider.LRCLIB, Provider.LIRIQO), true) }, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("search_lyrics_core"), enabled = !work.busy) { Icon(Icons.Outlined.Search, null); Spacer(Modifier.width(8.dp)); Text("Rechercher · noyau de 3 sources") } }
         item { WorkStatus(work) }
@@ -170,7 +170,7 @@ private fun LyricsSearch(track: Track, vm: MainViewModel, onDismiss: () -> Unit)
     }, confirmButton = { TextButton({ saveWork.run {
         val previous = vm.repository.data.value.lyrics[track.id] ?: SavedLyrics()
         val same = previous.original == candidate.text
-        vm.repository.mutate { saveLyrics(track.id, SavedLyrics(candidate.text, if (same) previous.french else "", candidate.credit.text(), if (same) previous.frenchSource else "")) }
+        vm.repository.mutate { saveLyrics(track.id, candidate.asSavedLyrics().copy(french = if (same) previous.french else "", frenchSource = if (same) previous.frenchSource else "")) }
         vm.message("Paroles choisies sauvegardées hors ligne dans NovaListen")
         preview = null; onDismiss()
     } }, enabled = rights && !saveWork.busy) { Text("Choisir et sauvegarder") } }, dismissButton = { TextButton({ preview = null }, enabled = !saveWork.busy) { Text("Annuler") } }) }

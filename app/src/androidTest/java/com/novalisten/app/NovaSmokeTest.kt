@@ -31,7 +31,7 @@ class NovaSmokeTest {
     private val app get() = context.applicationContext as NovaApplication
     private val fixtures = mutableListOf<Uri>()
     @Before fun prepare() {
-        compose.runOnIdle { app.themes.effects(false); app.themes.select("cyber"); app.repository.refresh() }
+        compose.runOnIdle { app.lyricPreferences.automatic(false); app.themes.effects(false); app.themes.select("cyber"); app.repository.refresh() }
         compose.waitUntil(20_000) { app.repository.library.value.permission && !app.repository.library.value.loading }
     }
     @After fun cleanup() { fixtures.forEach { context.contentResolver.delete(it, null, null) } }
@@ -94,7 +94,14 @@ class NovaSmokeTest {
             app.repository.mutate { saveLyrics(long.toString(), com.novalisten.app.data.SavedLyrics("[00:01.000]Original synthetic test line", "Français manuel de test", "Fixture locale", "VF manuelle")) }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("Traduire").performClick()
+        compose.onNodeWithText("Pochette").assertDoesNotExist()
+        compose.onNodeWithText("Rechercher").assertDoesNotExist()
+        compose.onNodeWithText("Traduire").assertDoesNotExist()
+        screenshot("07-paroles-epurees-centrees.png")
+        compose.onNodeWithContentDescription("Actions du morceau").performClick()
+        compose.onNodeWithTag("menu_search_lyrics").assertExists()
+        compose.onNodeWithTag("track_menu").performScrollToNode(hasTestTag("menu_translate_lyrics"))
+        compose.onNodeWithTag("menu_translate_lyrics").assertIsEnabled().performClick()
         compose.onNodeWithTag("enrichment_screen").assertIsDisplayed()
         compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translate_local"))
         compose.onNodeWithTag("translate_local").assertIsNotEnabled()
