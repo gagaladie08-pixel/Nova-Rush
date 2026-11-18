@@ -81,18 +81,26 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val theme by vm.themes.state.collectAsStateWithLifecycle()
-            SideEffect {
-                WindowCompat.getInsetsController(window, window.decorView).apply {
-                    isAppearanceLightStatusBars = theme.universe.background.luminance() > .5f
-                    isAppearanceLightNavigationBars = theme.universe.background.luminance() > .5f
-                }
-            }
+            // Read during composition, not only inside SideEffect, so a theme
+            // change also updates system bar contrast without recreating the activity.
+            val lightBars = theme.universe.background.luminance() > .5f
+            SideEffect { applySystemBars(lightBars) }
             NovaApp(vm, { audioPermission.launch(vm.repository.audioPermission()) }, ::requestNotifications,
                 { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }, ::requestDeletion,
                 { kind, id -> imageKind = kind; imageId = id; imagePicker.launch(arrayOf("image/*")) })
         }
     }
-    override fun onResume() { super.onResume(); vm.repository.refresh() }
+    override fun onResume() { super.onResume(); vm.repository.refresh(); applySystemBars(vm.themes.state.value.universe.background.luminance() > .5f) }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applySystemBars(vm.themes.state.value.universe.background.luminance() > .5f)
+    }
+    private fun applySystemBars(light: Boolean) {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = light
+            isAppearanceLightNavigationBars = light
+        }
+    }
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("image_kind", imageKind); outState.putString("image_id", imageId); outState.putStringArrayList("deleting", deleting); outState.putInt("legacy_deleted", legacyDeleted)
         super.onSaveInstanceState(outState)

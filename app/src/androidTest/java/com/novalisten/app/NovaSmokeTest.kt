@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.compose.ui.test.*
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -49,10 +50,13 @@ class NovaSmokeTest {
         compose.waitForIdle()
         compose.runOnIdle { assertEquals("cloud", app.themes.state.value.selected) }
         screenshot("01-themes-cloud.png")
+        // The title/back button belongs to the scrolling page header.
+        compose.onNodeWithTag("theme_list").performScrollToIndex(0)
         compose.onNodeWithContentDescription("Retour").performClick()
         compose.onNodeWithTag("navigation").performScrollToNode(hasTestTag("tab_0"))
         compose.onNodeWithTag("tab_0").performClick()
         compose.onNodeWithContentDescription("Choisir le thème").performClick()
+        compose.onNodeWithTag("theme_list").performScrollToNode(hasTestTag("theme_cyber"))
         compose.onNodeWithTag("theme_cyber").performClick()
         compose.onNodeWithContentDescription("Retour").performClick()
         screenshot("02-accueil-cyber.png")
@@ -65,6 +69,12 @@ class NovaSmokeTest {
         assertFalse(app.repository.library.value.tracks.any { it.fileName == "NovaListen test 12.wav" })
         compose.onNodeWithTag("navigation").performScrollToNode(hasTestTag("tab_1"))
         compose.onNodeWithTag("tab_1").performClick()
+        // Regression: MaterialTheme alone does not provide LocalContentColor.
+        // The default universe must render its title in light, readable text.
+        val titleBitmap = compose.onNodeWithTag("page_title").captureToImage().asAndroidBitmap()
+        val pixels = IntArray(titleBitmap.width * titleBitmap.height)
+        titleBitmap.getPixels(pixels, 0, titleBitmap.width, 0, 0, titleBitmap.width, titleBitmap.height)
+        assertTrue("Cyber Nova title must contain its light foreground, not black text", pixels.count { color -> (color ushr 16 and 255) > 180 && (color ushr 8 and 255) > 180 && (color and 255) > 180 } > 10)
         val tag = "track_${long.lastPathSegment}"
         compose.onNodeWithTag("track_list").performScrollToNode(hasTestTag(tag))
         compose.onNodeWithTag(tag).performClick()

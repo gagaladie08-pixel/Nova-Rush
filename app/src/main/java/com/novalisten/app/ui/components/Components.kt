@@ -95,7 +95,7 @@ fun Artwork(uri: String?, title: String, modifier: Modifier = Modifier, round: B
 fun PageTitle(title: String, subtitle: String, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) {
     Row(modifier.fillMaxWidth().padding(start = 20.dp, end = 10.dp, top = 18.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(title, modifier = Modifier.testTag("page_title"), style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(5.dp))
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = LocalUniverse.current.text.copy(alpha = .8f))
         }

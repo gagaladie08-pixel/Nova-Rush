@@ -1,7 +1,6 @@
 package com.novalisten.app.ui.theme
 
 import android.content.Context
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -13,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -102,7 +100,7 @@ fun NovaTheme(spec: ThemeSpec, effects: Boolean = true, content: @Composable () 
         labelSmall = TextStyle(fontFamily = body, fontSize = 12.sp, lineHeight = 17.sp),
     )
     val shape = universeShape(spec)
-    CompositionLocalProvider(LocalUniverse provides spec, LocalEffects provides effects) {
+    CompositionLocalProvider(LocalUniverse provides spec, LocalEffects provides effects, androidx.compose.material3.LocalContentColor provides spec.text) {
         MaterialTheme(colorScheme = colors, typography = typography, shapes = Shapes(shape, shape, shape, shape, shape), content = content)
     }
 }
