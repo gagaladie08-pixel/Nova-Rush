@@ -27,7 +27,7 @@ Les premières exécutions ont permis de corriger l’initialisation du runner, 
 | Régression de lisibilité | Vérification de pixels clairs sur le titre Bibliothèque de Cyber Nova, après correction de LocalContentColor. |
 | Éditeur personnalisé | Présence et accès aux six catégories. Cela ne teste pas exhaustivement toutes leurs combinaisons. |
 
-Les captures de l’Accueil/du sélecteur, de la Bibliothèque, des paroles et de l’éditeur sont conservées avec les rapports Actions. Les captures sont des preuves ponctuelles d’écrans, pas un audit visuel exhaustif des quinze univers.
+Les captures du sélecteur de thèmes, de la Bibliothèque, des paroles et de l’éditeur sont conservées avec les rapports Actions. Les captures sont des preuves ponctuelles d’écrans, pas un audit visuel exhaustif des quinze univers.
 
 ## Inspection de l’APK remis
 
