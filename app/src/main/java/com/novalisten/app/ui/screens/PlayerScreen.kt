@@ -5,6 +5,8 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,13 +35,13 @@ import androidx.compose.ui.window.DialogWindowProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import com.novalisten.app.MainViewModel
 import com.novalisten.app.PlaybackUi
 import com.novalisten.app.data.*
 import com.novalisten.app.ui.components.*
 import com.novalisten.app.ui.theme.*
+import com.novalisten.app.ui.gestures.lyricsPageAfterSwipe
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 
@@ -119,8 +121,8 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
             .pointerInput(lyricsPage) {
                 detectDragGestures(onDragEnd = {
                     if (abs(dx) > 75.dp.toPx() && abs(dx) > abs(dy)) {
-                        if (dx > 0 && !currentLyrics) lyricsPage = true
-                        else if (dx < 0 && currentLyrics) { lyricsPage = false; controls = true }
+                        val nextPage = lyricsPageAfterSwipe(currentLyrics, dx, dy, 75.dp.toPx())
+                        if (nextPage != currentLyrics) { lyricsPage = nextPage; controls = true }
                     } else if (!currentControls && !currentLyrics && abs(dy) > 75.dp.toPx()) {
                         if (dy < 0) vm.previous() else vm.forward()
                     }
@@ -134,17 +136,16 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
                 AsyncImage(track.artwork, null, Modifier.fillMaxSize().alpha(.55f), contentScale = ContentScale.Crop)
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.background.copy(alpha = .5f), Color.Transparent, t.background.copy(alpha = .92f)))))
             }
-            Column(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 20.dp)) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onDismiss) { NovaIcon(Icons.Outlined.KeyboardArrowDown, "Réduire le player") }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(if (lyricsPage) "PAROLES" else "LECTURE LOCALE", style = MaterialTheme.typography.labelMedium, color = t.accent)
-                        Text(track.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(track.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            PlayerFrame(
+                header = { compact -> PlayerHeader(track, lyricsPage, compact, onDismiss, onMenu) },
+                footer = { compact ->
+                    if (controls || lyricsPage) PlayerTransport(playback, compact, vm::seek, vm::toggle, vm::previous, vm::forward, vm::cycleRepeat) { queue = true }
+                    else Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        TextButton({ controls = true }) { Text("Afficher les commandes") }
                     }
-                    IconButton(onMenu) { NovaIcon(Icons.Outlined.MoreVert, "Actions du morceau") }
                 }
-                if (lyricsPage) {
+            ) { compact ->
+                if (lyricsPage) Column(Modifier.fillMaxSize().testTag("player_lyrics_page")) {
                     LyricsBody(track.id, text, timed, active, playback.position, playback.playing, automatic, Modifier.weight(1f), vm::seek)
                     val credit = if (showFrench) saved.frenchSource else saved.originalSource
                     if (credit.isNotBlank() || saved.french.isNotBlank()) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -157,30 +158,11 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
                         }
                     }
                     if (showFrench && saved.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
-                } else {
-                    Box(Modifier.weight(1f).fillMaxWidth().clickable { controls = true; lastTouch = System.currentTimeMillis() }, contentAlignment = Alignment.Center) {
-                        if (controls) Artwork(track.artwork, track.title, Modifier.fillMaxWidth(.86f).aspectRatio(1f))
-                        else Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(track.title, style = MaterialTheme.typography.headlineMedium)
-                            Spacer(Modifier.height(12.dp)); Text(track.artist, style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(32.dp)); Text(if (active >= 0) timed[active].text else "Touchez pour afficher les commandes", style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
-                    if (controls) {
-                        Text(if (active >= 0) timed[active].text else if (text.isNotBlank()) "Ouvrir les paroles" else if (automatic.trackId == track.id && automatic.status == com.novalisten.app.enrichment.AutoLyricStatus.LOADING) "Chargement des paroles…" else "Ouvrir les paroles", Modifier.fillMaxWidth().clickable { lyricsPage = true }.padding(vertical = 16.dp), maxLines = 2, style = MaterialTheme.typography.bodyLarge, color = t.text)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            IconButton({ vm.favorite(track) }) { Icon(if (track.id in data.favorites) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, "Favori", tint = if (track.id in data.favorites) t.primary else t.text) }
-                            IconButton(onAdd) { Icon(Icons.Outlined.PlaylistAdd, "Ajouter à une playlist") }
-                            IconButton({ lyricsPage = true }) { Icon(Icons.Outlined.Lyrics, "Afficher les paroles") }
-                            IconButton(onEditLyrics) { Icon(Icons.Outlined.EditNote, "Modifier les paroles") }
-                        }
-                    }
-                }
-                if (controls || lyricsPage) {
-                    PlayerTransport(playback, vm, { queue = true })
-                } else Spacer(Modifier.height(24.dp))
+                } else PlayerCoverPage(track, controls, compact, timed.getOrNull(active)?.text,
+                    text.isBlank() && automatic.trackId == track.id && automatic.status == com.novalisten.app.enrichment.AutoLyricStatus.LOADING,
+                    track.id in data.favorites, onReveal = { controls = true; lastTouch = System.currentTimeMillis() },
+                    onFavorite = { vm.favorite(track) }, onAdd = onAdd, onLyrics = { lyricsPage = true }, onEditLyrics = onEditLyrics)
             }
-            if (!controls && !lyricsPage) TextButton({ controls = true }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()) { Text("Afficher les commandes") }
         }
         if (queue) ModalBottomSheet(onDismissRequest = { queue = false }) {
             Text("File d’attente · ${playback.queue.size}", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
@@ -194,20 +176,47 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
 }
 
 @Composable
-private fun PlayerTransport(playback: PlaybackUi, vm: MainViewModel, onQueue: () -> Unit) {
-    var seek by remember(playback.currentId) { mutableStateOf<Float?>(null) }
-    Column(Modifier.fillMaxWidth()) {
-        Slider(value = seek ?: playback.position.toFloat().coerceIn(0f, playback.duration.toFloat().coerceAtLeast(1f)), onValueChange = { seek = it }, onValueChangeFinished = { seek?.let { vm.seek(it.toLong()) }; seek = null }, valueRange = 0f..playback.duration.toFloat().coerceAtLeast(1f), enabled = playback.duration > 0)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(durationLabel((seek ?: playback.position.toFloat()).toLong()), style = MaterialTheme.typography.labelSmall)
-            Text(durationLabel(playback.duration), style = MaterialTheme.typography.labelSmall)
+internal fun PlayerHeader(track: Track, lyricsPage: Boolean, compact: Boolean, onDismiss: () -> Unit, onMenu: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = if (compact) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onDismiss) { NovaIcon(Icons.Outlined.KeyboardArrowDown, "Réduire le player") }
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (!compact) Text(if (lyricsPage) "PAROLES" else "LECTURE LOCALE", style = MaterialTheme.typography.labelMedium, color = LocalUniverse.current.accent, maxLines = 1)
+            Text(track.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(vm::cycleRepeat) { Icon(if (playback.repeatMode == Player.REPEAT_MODE_ONE) Icons.Outlined.RepeatOne else Icons.Outlined.Repeat, "Répétition : ${when(playback.repeatMode) { Player.REPEAT_MODE_ONE -> "un titre"; Player.REPEAT_MODE_ALL -> "toute la file"; else -> "désactivée" }}", tint = if (playback.repeatMode != Player.REPEAT_MODE_OFF) LocalUniverse.current.accent else LocalUniverse.current.text) }
-            IconButton(vm::previous, Modifier.size(52.dp)) { Icon(Icons.Outlined.SkipPrevious, "Précédent", Modifier.size(32.dp)) }
-            FilledIconButton(vm::toggle, Modifier.size(68.dp)) { Icon(if (playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playback.playing) "Pause" else "Lecture", Modifier.size(36.dp)) }
-            IconButton(vm::forward, Modifier.size(52.dp)) { Icon(Icons.Outlined.SkipNext, "Suivant", Modifier.size(32.dp)) }
-            IconButton(onQueue) { Icon(Icons.Outlined.QueueMusic, "File d’attente") }
+        IconButton(onMenu) { NovaIcon(Icons.Outlined.MoreVert, "Actions du morceau") }
+    }
+}
+
+@Composable
+internal fun PlayerCoverPage(track: Track, controls: Boolean, compact: Boolean, lyricLine: String?, loading: Boolean,
+                             favorite: Boolean, onReveal: () -> Unit, onFavorite: () -> Unit, onAdd: () -> Unit,
+                             onLyrics: () -> Unit, onEditLyrics: () -> Unit) {
+    val t = LocalUniverse.current
+    BoxWithConstraints(Modifier.fillMaxSize().testTag("player_cover_page").clickable(onClick = onReveal)) {
+        // Bound the square by both dimensions. Optional content can scroll inside this region
+        // on a small screen, but can never displace or draw over transport.
+        val coverSize = minOf(maxWidth * .86f, maxHeight * .65f)
+        val scroll = rememberScrollState()
+        // Immersive vertical swipes still belong to the parent (previous/next track).
+        Column(Modifier.fillMaxSize().then(if (controls) Modifier.verticalScroll(scroll) else Modifier),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            if (controls) {
+                if (coverSize > 0.dp) Artwork(track.artwork, track.title, Modifier.size(coverSize).testTag("player_artwork"))
+                Text(lyricLine ?: if (loading) "Chargement des paroles…" else "Ouvrir les paroles",
+                    Modifier.fillMaxWidth().clickable(onClick = onLyrics).padding(vertical = if (compact) 8.dp else 16.dp),
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge, color = t.text)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    IconButton(onFavorite) { Icon(if (favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, "Favori", tint = if (favorite) t.primary else t.text) }
+                    IconButton(onAdd) { Icon(Icons.Outlined.PlaylistAdd, "Ajouter à une playlist") }
+                    IconButton(onLyrics) { Icon(Icons.Outlined.Lyrics, "Afficher les paroles") }
+                    IconButton(onEditLyrics) { Icon(Icons.Outlined.EditNote, "Modifier les paroles") }
+                }
+            } else {
+                Text(track.title, style = MaterialTheme.typography.headlineMedium)
+                Spacer(Modifier.height(12.dp)); Text(track.artist, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(24.dp)); Text(lyricLine ?: "Touchez pour afficher les commandes", style = MaterialTheme.typography.bodyLarge)
+            }
         }
     }
 }

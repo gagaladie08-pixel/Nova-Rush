@@ -1,9 +1,17 @@
 # NovaListen
 
-Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.1, paroles du morceau écouté automatiques et autres enrichissements sur demande**.
-La version 0.2.1 a été compilée et vérifiée : **127 tests unitaires + 15 tests Android 10 réussis**, lint sans erreur (32 avertissements). [Compte rendu 0.2.1](docs/developpement/06-paroles-centrees-et-karaoke.md).
+Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.2, correction des swipes et de la disposition du lecteur plein écran**.
+La validation Android de cette correction est à exécuter ; les résultats historiques de 0.2.1 ci-dessous ne la couvrent pas. [Périmètre et essais 0.2.2](docs/developpement/07-swipes-et-commandes-player.md).
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
+
+## Swipes et commandes plein écran — 0.2.2
+
+- Lecteur : **gauche → paroles ; droite → pochette**, sans boucle entre les deux pages.
+- Bibliothèque (lignes et cartes) : **gauche → Lire ensuite ; droite → Informations**, aperçu compris.
+- Les commandes de lecture ont une place réservée et une marge basse de **20 dp en plus des zones système protégées**. La pochette s’adapte à la hauteur restante ; les actions secondaires peuvent défiler dans cette zone sans déplacer les commandes. Disposition compacte pour les fenêtres courtes/étroites, cibles tactiles d’au moins 48 dp conservées.
+- Les gestes du mini-player, les gestes verticaux immersifs, la file, les données et le fonctionnement des paroles/API ne sont pas inversés ou réinitialisés.
+- [Changements, tests et limites](docs/developpement/07-swipes-et-commandes-player.md). Aucune nouvelle compatibilité de signature n’est promise ; les anciens APK et leurs preuves restent inchangés.
 
 ## Correction des paroles vérifiée — 0.2.1
 
@@ -54,8 +62,8 @@ Ces preuves concernent exclusivement **0.1.0**, sans API. Les sources 0.2 ajoute
 La compilation est exécutée par **GitHub Actions**, workflow [NovaListen — APK et tests](.github/workflows/novalisten-apk.yml), sur la branche de travail `arena/216bd0ac-nova-rush`.
 
 1. Ouvrir l’exécution correspondant au dernier commit dans l’onglet **Actions** du dépôt.
-2. Télécharger l’artefact **NovaListen-0.2.1-debug** seulement après le succès de la compilation **et des tests**.
-3. Extraire `NovaListen-0.2.1-debug.apk` du ZIP et le transférer sur le téléphone.
+2. Télécharger l’artefact **NovaListen-0.2.2-debug** seulement après le succès de la compilation **et des tests**.
+3. Extraire `NovaListen-0.2.2-debug.apk` du ZIP et le transférer sur le téléphone.
 4. Autoriser l’installation depuis le navigateur/gestionnaire de fichiers utilisé, puis installer.
 5. Dans NovaListen, toucher **Autoriser ma musique** et accorder l’accès aux fichiers audio.
 

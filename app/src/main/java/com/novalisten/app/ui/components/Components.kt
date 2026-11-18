@@ -37,6 +37,8 @@ import coil.compose.AsyncImage
 import com.novalisten.app.data.Track
 import com.novalisten.app.data.durationLabel
 import com.novalisten.app.ui.theme.*
+import com.novalisten.app.ui.gestures.LibrarySwipeAction
+import com.novalisten.app.ui.gestures.librarySwipeAction
 import kotlin.math.abs
 
 @Composable
@@ -161,15 +163,19 @@ fun SwipeActions(key: String, enabled: Boolean, onNext: () -> Unit, onInfo: () -
     val info by rememberUpdatedState(onInfo)
     val threshold = with(LocalDensity.current) { 78.dp.toPx() }
     Box(Modifier.fillMaxWidth().then(if (enabled) Modifier.pointerInput(key, threshold) {
-        detectHorizontalDragGestures(onDragEnd = {
-            if (displacement > threshold) next() else if (displacement < -threshold) info()
+        detectHorizontalDragGestures(onDragStart = { displacement = 0f }, onDragEnd = {
+            when (librarySwipeAction(displacement, threshold)) {
+                LibrarySwipeAction.PLAY_NEXT -> next()
+                LibrarySwipeAction.INFORMATION -> info()
+                null -> Unit
+            }
             displacement = 0f
         }, onDragCancel = { displacement = 0f }) { change, amount ->
             change.consume(); displacement = (displacement + amount).coerceIn(-threshold * 1.6f, threshold * 1.6f)
         }
     } else Modifier)) {
-        if (abs(displacement) > 10) Row(Modifier.matchParentSize().background(LocalUniverse.current.primary.copy(alpha = .12f)).padding(20.dp), horizontalArrangement = if (displacement > 0) Arrangement.Start else Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            Text(if (displacement > 0) "Lire ensuite" else "Informations", style = MaterialTheme.typography.labelLarge)
+        if (abs(displacement) > 10) Row(Modifier.matchParentSize().background(LocalUniverse.current.primary.copy(alpha = .12f)).padding(20.dp), horizontalArrangement = if (displacement > 0) Arrangement.Absolute.Left else Arrangement.Absolute.Right, verticalAlignment = Alignment.CenterVertically) {
+            Text(if (displacement < 0) "Lire ensuite" else "Informations", Modifier.testTag("library_swipe_hint"), style = MaterialTheme.typography.labelLarge)
         }
         Box(Modifier.graphicsLayer { translationX = displacement }) { content() }
     }

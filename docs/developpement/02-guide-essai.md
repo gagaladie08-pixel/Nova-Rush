@@ -1,6 +1,6 @@
 # NovaListen 0.1 — Essai sur téléphone
 
-> **Archive 0.1** : ce document décrit le premier APK, sans API. Pour les sources 0.2, voir [API et clés](04-api-et-cles.md). Les anciennes preuves ne valident pas la nouvelle version.
+> **Archive 0.1** : ce document décrit le premier APK, sans API. Pour les sources 0.2, voir [API et clés](04-api-et-cles.md). Les anciennes preuves ne valident pas la nouvelle version. **Les sens de swipe de ce guide sont historiques** : à partir des sources 0.2.2, gauche = Lire ensuite / droite = Informations dans la bibliothèque ; gauche = paroles / droite = pochette dans le plein écran. Voir [l’essai de la correction](07-swipes-et-commandes-player.md).
 
 ## Installer
 

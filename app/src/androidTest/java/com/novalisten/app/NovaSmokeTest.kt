@@ -83,8 +83,22 @@ class NovaSmokeTest {
         screenshot("03-bibliotheque-lecture.png")
         compose.onNodeWithTag("mini_player").performClick()
         compose.onNodeWithTag("full_player").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Afficher les paroles").performClick()
+        assertPlayerControlsVisible()
+        screenshot("08-pochette-commandes-degagees.png")
+        // Physical directions: left opens lyrics; right returns to artwork. No wrap-around.
+        compose.onNodeWithTag("player_content").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("player_cover_page").assertIsDisplayed()
+        compose.onNodeWithTag("player_content").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("player_lyrics_page").assertIsDisplayed()
+        assertPlayerControlsVisible()
+        compose.onNodeWithTag("player_content").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("player_lyrics_page").assertIsDisplayed()
+        compose.onNodeWithTag("player_content").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("player_cover_page").assertIsDisplayed()
+        // The explicit lyrics button remains available too.
+        compose.onNodeWithContentDescription("Afficher les paroles").performScrollTo().performClick()
         compose.onNodeWithText("Vos mots, votre musique").assertIsDisplayed()
+        assertPlayerControlsVisible()
         screenshot("04-paroles-locales.png")
         // Opening online tools is still local. Test only synthetic text and a deliberately missing key.
         val requestsBefore = (app.remote.transport as com.novalisten.app.enrichment.RemoteHttp).requestCount
@@ -159,6 +173,16 @@ class NovaSmokeTest {
         }
         if (Build.VERSION.SDK_INT >= 29) context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null)
         return uri
+    }
+    private fun assertPlayerControlsVisible() {
+        val safe = compose.onNodeWithTag("player_safe_area").getUnclippedBoundsInRoot()
+        val full = compose.onNodeWithTag("full_player").getUnclippedBoundsInRoot()
+        for (tag in listOf("player_repeat", "player_previous", "player_toggle", "player_next", "player_queue")) {
+            val button = compose.onNodeWithTag(tag).assertIsDisplayed().getUnclippedBoundsInRoot()
+            assertTrue("$tag must be fully inside safe horizontal bounds", button.left >= safe.left && button.right <= safe.right)
+            assertTrue("$tag must be fully inside safe vertical bounds", button.top >= safe.top && button.bottom <= safe.bottom)
+            assertTrue("$tag must not touch the screen bottom", full.bottom.value - button.bottom.value >= 20f)
+        }
     }
     private fun screenshot(name: String) {
         val dir = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let(::File) ?: context.getExternalFilesDir("evidence")!!
