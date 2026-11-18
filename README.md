@@ -7,6 +7,8 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 
 ## Swipes et commandes plein écran — 0.2.2
 
+**[Télécharger NovaListen 0.2.2 — APK de test (89,5 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.2/NovaListen-0.2.2-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.2/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-v0.2.2).
+
 - Lecteur : **gauche → paroles ; droite → pochette**, sans boucle entre les deux pages.
 - Bibliothèque (lignes et cartes) : **gauche → Lire ensuite ; droite → Informations**, aperçu compris.
 - Les commandes de lecture ont une place réservée et une marge basse de **20 dp en plus des zones système protégées**. La pochette s’adapte à la hauteur restante ; les actions secondaires peuvent défiler dans cette zone sans déplacer les commandes. Disposition compacte pour les fenêtres courtes/étroites, cibles tactiles d’au moins 48 dp conservées.
