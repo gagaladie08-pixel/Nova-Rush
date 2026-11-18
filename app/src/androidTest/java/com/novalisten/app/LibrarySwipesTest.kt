@@ -63,11 +63,20 @@ class LibrarySwipesTest {
         } }
         for (selected in listOf(true, false)) {
             compose.runOnIdle { selecting.value = selected }
-            compose.onNodeWithTag("track_fixture").performTouchInput { swipeLeft() }
-            compose.onNodeWithTag("track_fixture").performTouchInput { swipeRight() }
-            compose.onNodeWithTag("library_swipe_hint").assertDoesNotExist()
+            for (from in listOf(.9f, .1f)) {
+                compose.onNodeWithTag("track_fixture").performTouchInput {
+                    down(Offset(width * from, height / 2f))
+                    moveTo(Offset(width * (1f - from), height / 2f), delayMillis = 300)
+                }
+                compose.onNodeWithTag("library_swipe_hint").assertDoesNotExist()
+                // With no drag recognizer, a release inside a clickable row may be a tap.
+                // Cancel to test swipe admission separately from the pending row's Info click.
+                compose.onNodeWithTag("track_fixture").performTouchInput { cancel() }
+            }
         }
         compose.runOnIdle { assertEquals(0, actions) }
+        compose.onNodeWithTag("track_fixture").performClick()
+        compose.runOnIdle { assertEquals("A deliberate click on a pending track still opens information", 1, actions) }
     }
 
     @Test fun smallVerticalAndCancelledGesturesDoNothingAndCallbacksStayFresh() {

@@ -74,7 +74,7 @@ class PlayerLayoutTest {
         compose.setContent { Fixture(viewport, onEdit = { edited = true }) }
         assertControlsInside(viewport)
         val middle = compose.onNodeWithTag("player_content").getUnclippedBoundsInRoot()
-        val artwork = compose.onNodeWithTag("player_artwork").getUnclippedBoundsInRoot()
+        val artwork = compose.onNodeWithTag("player_artwork", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val artWidth = artwork.right - artwork.left
         val artHeight = artwork.bottom - artwork.top
         assertTrue("Artwork is square", abs(artWidth.value - artHeight.value) <= 2f)
