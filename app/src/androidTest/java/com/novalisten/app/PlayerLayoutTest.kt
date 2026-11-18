@@ -75,8 +75,10 @@ class PlayerLayoutTest {
         assertControlsInside(viewport)
         val middle = compose.onNodeWithTag("player_content").getUnclippedBoundsInRoot()
         val artwork = compose.onNodeWithTag("player_artwork").getUnclippedBoundsInRoot()
-        assertTrue("Artwork is square", abs(artwork.width.value - artwork.height.value) <= 2f)
-        assertTrue("Artwork must yield to available height", artwork.height <= middle.height * .65f + 2.dp)
+        val artWidth = artwork.right - artwork.left
+        val artHeight = artwork.bottom - artwork.top
+        assertTrue("Artwork is square", abs(artWidth.value - artHeight.value) <= 2f)
+        assertTrue("Artwork must yield to available height", artHeight <= (middle.bottom - middle.top) * .65f + 2.dp)
         val before = compose.onNodeWithTag("player_transport").getUnclippedBoundsInRoot()
         compose.onNodeWithContentDescription("Modifier les paroles").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertTrue(edited) }
@@ -152,7 +154,7 @@ class PlayerLayoutTest {
             assertTrue("Full $tag must stay inside horizontal insets: $viewport", button.left.value >= safe.left.value - 2f && button.right.value <= safe.right.value + 2f)
             assertTrue("Full $tag must stay inside vertical insets: $viewport", button.top.value >= safe.top.value - 2f && button.bottom.value <= safe.bottom.value + 2f)
             assertTrue("$tag must stay clear of Android navigation: $viewport", frame.bottom.value - button.bottom.value >= viewport.bottom + 20f - 2f)
-            assertTrue("$tag keeps its 48dp touch target: $viewport", button.width.value >= 48f - 2f && button.height.value >= 48f - 2f)
+            assertTrue("$tag keeps its 48dp touch target: $viewport", (button.right - button.left).value >= 48f - 2f && (button.bottom - button.top).value >= 48f - 2f)
         }
         assertTrue("Left safe inset plus content margin", transport.left.value - frame.left.value >= viewport.left + 16f - 2f)
         assertTrue("Right safe inset plus content margin", frame.right.value - transport.right.value >= viewport.right + 16f - 2f)
