@@ -7,6 +7,8 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 
 ## Validation actuelle — 0.2.0
 
+**[Télécharger NovaListen 0.2.0 — APK de test (89,5 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.0/NovaListen-0.2.0-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.0/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-v0.2.0).
+
 - [Compilation et tests réussis — exécution 44282482614](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44282482614), code applicatif `63702262c6d32b9b0356eaa038d9e5a3af256ba3`.
 - APK de **89 460 991 octets**, SHA-256 `deff51cbbcccfd4676c646cf8544760dcfca23f1c68b023ca1204ea9c1d82497`, Android 8+ universel.
 - Manifeste binaire contrôlé : Internet/HTTPS pour les commandes volontaires, pas de microphone/localisation, pas de provider automatique ML Kit. Aucun secret réel ou musique de démonstration inclus.

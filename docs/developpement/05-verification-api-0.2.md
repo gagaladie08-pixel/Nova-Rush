@@ -14,6 +14,14 @@
 
 Le fichier a été reconstitué à partir des cinq fragments de transfert du job. Taille et SHA-256 de chaque fragment, puis du fichier complet, ont été revérifiés. Le ZIP interne de l’APK est intègre. Le pont ne crée que des blobs GitHub non référencés : aucun APK ni secret n’est ajouté à un commit. La publication directe est effectuée séparément sans nouvelle compilation/signature.
 
+## Téléchargement public du même binaire
+
+- **[NovaListen-0.2.0-debug.apk](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.0/NovaListen-0.2.0-debug.apk)** · [SHA256SUMS.txt](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.0/SHA256SUMS.txt).
+- [Version publique de test `novalisten-v0.2.0`](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-v0.2.0), release `449811770`, cible du tag : commit applicatif vérifié ci-dessus.
+- [Publication sans recompilation **44284217987**](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44284217987), job `134732573228` : **success**.
+- Métadonnées GitHub de l’asset contrôlées : `uploaded`, **89 460 991 octets**, digest identique au fichier inspecté. Pas de nouvelle signature entre test et publication.
+- La version publique 0.1 et son empreinte ont aussi été contrôlées : elles sont inchangées. Les commits ultérieurs de documentation et de distribution ne modifient pas l’APK 0.2 testé.
+
 ## Tests effectivement passés
 
 ### 92 tests unitaires
