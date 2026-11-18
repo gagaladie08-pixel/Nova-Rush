@@ -3,7 +3,6 @@
     <style name="Theme.NovaListen" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:colorAccent">#00FFF0</item>
         <item name="android:windowBackground">#050510</item>

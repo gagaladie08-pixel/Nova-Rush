@@ -30,7 +30,7 @@ def main():
     log = Path('artifacts/diagnostics/gradle.log')
     if log.is_file():
         publish('gradle.log', log.read_bytes())
-    roots = [Path('app/build/reports'), Path('app/build/outputs/androidTest-results'), Path('app/build/outputs/connected_android_test_additional_output')]
+    roots = [Path('app/build/reports'), Path('app/build/test-results'), Path('app/build/outputs/androidTest-results'), Path('app/build/outputs/connected_android_test_additional_output')]
     files = [file for root in roots if root.exists() for file in root.rglob('*') if file.is_file()]
     if files:
         buffer = io.BytesIO()
