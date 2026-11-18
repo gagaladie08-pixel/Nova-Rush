@@ -1,7 +1,7 @@
 # NovaListen
 
 Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.2, correction des swipes et de la disposition du lecteur plein écran**.
-La validation Android de cette correction est à exécuter ; les résultats historiques de 0.2.1 ci-dessous ne la couvrent pas. [Périmètre et essais 0.2.2](docs/developpement/07-swipes-et-commandes-player.md).
+La correction a été compilée et vérifiée : **133 tests unitaires + 24 tests Android 10 réussis**, lint sans erreur (32 avertissements). [Validation 44305382562](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44305382562) · [périmètre, preuves et essai 0.2.2](docs/developpement/07-swipes-et-commandes-player.md).
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
 
@@ -11,7 +11,8 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 - Bibliothèque (lignes et cartes) : **gauche → Lire ensuite ; droite → Informations**, aperçu compris.
 - Les commandes de lecture ont une place réservée et une marge basse de **20 dp en plus des zones système protégées**. La pochette s’adapte à la hauteur restante ; les actions secondaires peuvent défiler dans cette zone sans déplacer les commandes. Disposition compacte pour les fenêtres courtes/étroites, cibles tactiles d’au moins 48 dp conservées.
 - Les gestes du mini-player, les gestes verticaux immersifs, la file, les données et le fonctionnement des paroles/API ne sont pas inversés ou réinitialisés.
-- [Changements, tests et limites](docs/developpement/07-swipes-et-commandes-player.md). Aucune nouvelle compatibilité de signature n’est promise ; les anciens APK et leurs preuves restent inchangés.
+- **APK 0.2.2 vérifié** : artefact `NovaListen-0.2.2-debug` dans [l’exécution réussie](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44305382562), sources `d7721e1eb2a9d3c44b29ab3b16a0448a041f26c7` ; fichier de 89 542 970 octets remis sans recompilation. [Changements, hachage, tests et limites](docs/developpement/07-swipes-et-commandes-player.md).
+- **Certificat différent de 0.2.0 et 0.2.1** : pas de mise à jour directe avec ces APK. Ne pas désinstaller aveuglément : effacement des données privées, sans export intégré. Les anciens APK et leurs preuves restent inchangés.
 
 ## Correction des paroles vérifiée — 0.2.1
 
