@@ -1,11 +1,18 @@
 # NovaListen
 
-Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.0, enrichissements en ligne facultatifs**.
-La version 0.2 a été compilée et vérifiée : **92 tests unitaires + 10 tests Android 10 réussis**, lint sans erreur. [Compte rendu 0.2](docs/developpement/05-verification-api-0.2.md).
+Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.1, paroles du morceau écouté automatiques et autres enrichissements sur demande**.
+La précédente version 0.2.0 a été compilée et vérifiée : **92 tests unitaires + 10 tests Android 10 réussis**, lint sans erreur. [Compte rendu 0.2](docs/developpement/05-verification-api-0.2.md).
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
 
-## Validation actuelle — 0.2.0
+## Correction des paroles — sources 0.2.1
+
+- Écran allégé : Rechercher / Traduire / Modifier / Source dans les trois points ; ligne active centrée, y compris aux extrémités et après déplacement de lecture.
+- Chargement automatique limité au morceau réellement écouté, activable/désactivable ; priorité absolue aux paroles déjà sauvegardées, cache temporaire en mémoire et aucun envoi de la collection.
+- Conservation et rendu progressif des temps de segments TTML/LiriQo lorsqu’ils existent ; Enhanced LRC avec débuts natifs. Un LRC par ligne ne devient pas un faux minutage mot à mot. Aucune traduction automatique.
+- [Périmètre, confidentialité et vérifications distinctes de 0.2.1](docs/developpement/06-paroles-centrees-et-karaoke.md). Validation en cours ; les preuves historiques ci-dessous ne valident pas le nouvel APK.
+
+## Livraison précédente vérifiée — 0.2.0
 
 **[Télécharger NovaListen 0.2.0 — APK de test (89,5 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.0/NovaListen-0.2.0-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.0/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-v0.2.0).
 
@@ -42,8 +49,8 @@ Ces preuves concernent exclusivement **0.1.0**, sans API. Les sources 0.2 ajoute
 La compilation est exécutée par **GitHub Actions**, workflow [NovaListen — APK et tests](.github/workflows/novalisten-apk.yml), sur la branche de travail `arena/216bd0ac-nova-rush`.
 
 1. Ouvrir l’exécution correspondant au dernier commit dans l’onglet **Actions** du dépôt.
-2. Télécharger l’artefact **NovaListen-0.2.0-debug** seulement après le succès de la compilation **et des tests**.
-3. Extraire `NovaListen-0.2.0-debug.apk` du ZIP et le transférer sur le téléphone.
+2. Télécharger l’artefact **NovaListen-0.2.1-debug** seulement après le succès de la compilation **et des tests**.
+3. Extraire `NovaListen-0.2.1-debug.apk` du ZIP et le transférer sur le téléphone.
 4. Autoriser l’installation depuis le navigateur/gestionnaire de fichiers utilisé, puis installer.
 5. Dans NovaListen, toucher **Autoriser ma musique** et accorder l’accès aux fichiers audio.
 
@@ -92,7 +99,7 @@ Ce n’est pas l’ensemble des 21 fiches de conception en une version. Voir [le
 
 ## Confidentialité
 
-Les sources 0.2 demandent **Internet** pour les commandes volontaires d’enrichissement et utilisent HTTPS uniquement. Le scan et la lecture restent locaux ; aucune collection, musique ou historique n’est envoyé automatiquement. Les champs de recherche affichés partent seulement sur commande ; Azure envoie la VO seulement après un consentement dédié. **ML Kit est facultatif mais ses diagnostics Google ne sont pas une promesse de zéro réseau** ; son initialisation automatique au lancement est retirée. Pas de compte obligatoire, publicité, microphone ou localisation.
+Les sources actuelles demandent **Internet** et utilisent HTTPS uniquement. Le scan et la lecture restent locaux ; aucune collection, musique ou historique n’est envoyé automatiquement. Les paroles automatiques transmettent seulement titre/artiste/album/durée du morceau réellement écouté si aucune VO n’est sauvegardée et que l’option est active. Les autres recherches transmettent les champs affichés seulement sur commande ; Azure envoie la VO seulement après un consentement dédié. **ML Kit est facultatif mais ses diagnostics Google ne sont pas une promesse de zéro réseau** ; son initialisation automatique au lancement est retirée. Pas de compte obligatoire, publicité, microphone ou localisation.
 
 Les fichiers audio ne sont pas modifiés par les recherches, traductions, favoris, thèmes, playlists, pochettes d’affichage ou masquages. Seule l’action explicite **Effacer** peut supprimer de l’audio. Les images choisies, textes et crédits sont conservés dans le stockage privé. Sauvegarde/transfert automatique Android désactivés. Les secrets sont chiffrés sur le téléphone, jamais intégrés au dépôt, à l’APK ou aux workflows.
 

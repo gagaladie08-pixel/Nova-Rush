@@ -78,11 +78,36 @@ class NativeLyricsTest {
         listOf("-1s", "00:75.000", "12f", "00:00:01:12", "NaNs").forEach { assertNull(LyricFormats.clock(it)) }
     }
     @Test fun liriqoWordMillisecondsSurviveConversionAndSaving() {
-        val candidate = RemoteParsers.liriqo("""{"metadata":{"title":"Test","artist":"Essai","duration":65},"tracks":[{"provider":"fixture","timed":[{"start":1234,"end":3000,"text":"Clarté de test","words":[{"start":1234,"end":1500,"text":"Clarté"},{"start":1800,"end":2000,"text":"de"},{"start":2200,"end":2800,"text":"test"}]}]}]}""", MusicQuery("Test", "Essai", durationMs = 65000)).single()
+        val candidate = RemoteParsers.liriqo("""{"metadata":{"title":"Test","artist":"Essai","duration":65},"tracks":[{"provider":"fixture","nativeWordTiming":true,"timed":[{"start":1234,"end":3000,"text":"Clarté de test","words":[{"start":1234,"end":1500,"text":"Clarté"},{"start":1800,"end":2000,"text":"de"},{"start":2200,"end":2800,"text":"test"}]}]}]}""", MusicQuery("Test", "Essai", durationMs = 65000)).single()
         val saved = candidate.asSavedLyrics()
         val line = LyricTiming.decode(saved.original, saved.originalTiming).single()
         assertEquals(1234L, line.words.first().startMs); assertEquals(1500L, line.words.first().endMs)
         assertEquals("Karaoké · minutage natif", candidate.timing); assertEquals(3, line.words.size)
+    }
+    @Test fun liriqoRejectsProportionalOrExplicitlyNonNativeWordsAndDoesNotAnimateDerivedEnds() {
+        fun parse(fields: String) = RemoteParsers.liriqo("""{"metadata":{"title":"Essai","artist":"Test","duration":"01:05"},"tracks":[{$fields,"timed":[{"start":1000,"end":3000,"text":"Essai","words":[{"start":1000,"end":2000,"text":"Essai","derivedEnd":true}]}]}]}""", MusicQuery("Essai", "Test")).single()
+        assertTrue(parse("\"provider\":\"lrclib_wordsync\",\"syncLevel\":\"word\"").nativeLines.single().words.isEmpty())
+        assertTrue(parse("\"provider\":\"fixture\",\"syncLevel\":\"word\",\"nativeWordTiming\":false").nativeLines.single().words.isEmpty())
+        val realStart = parse("\"provider\":\"fixture\",\"nativeRichsync\":true")
+        assertEquals(65000L, realStart.durationMs)
+        val word = realStart.nativeLines.single().words.single()
+        assertNull(word.endMs); assertEquals(1f, word.progress(1000), 0f)
+    }
+    @Test fun liriqoCanKeepTopLevelWordArraysAddressedByLineId() {
+        val result = RemoteParsers.liriqo("""{"tracks":[{"provider":"fixture","syncLevel":"word","timed":[{"id":0,"start":1000,"text":"Essai"}],"words":[[{"text":"Essai","start":1000,"end":2000}]]}]}""", MusicQuery("Essai", "Test")).single()
+        assertEquals(2000L, result.nativeLines.single().words.single().endMs)
+    }
+    @Test fun nativeTtmlCanEnrichLineOnlyNormalizedDataWithoutLosingItsWordWindows() {
+        val item = JSONObject().put("provider", "fixture").put("syncLevel", "word").put("ttml", xml)
+            .put("timed", org.json.JSONArray("""[{"start":1000,"text":"Clarté nouvelle"}]"""))
+        val body = JSONObject().put("tracks", org.json.JSONArray().put(item)).toString()
+        assertEquals(2, RemoteParsers.liriqo(body, MusicQuery("Essai", "Test")).single().nativeLines.single().words.size)
+    }
+    @Test fun metadataFilledForAManualPreviewIsNotProofForAutomaticMatching() {
+        val query = MusicQuery("Essai", "Test", durationMs = 65000)
+        val result = RemoteParsers.liriqo("""{"metadata":{"duration":65},"tracks":[{"provider":"fixture","plain":"Texte"}]}""", query).single()
+        assertEquals(query.title, result.title)
+        assertFalse(result.hasMatchMetadata); assertFalse(LyricMatch.accepts(query, result))
     }
     @Test fun translationNeverSendsOrReusesOriginalWordTimingsAsFrenchTimings() {
         val original = "[00:01.000]<00:01.000>Hello <00:01.500>world"

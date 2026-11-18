@@ -93,6 +93,7 @@ class NovaSmokeTest {
             app.credentials.remove(com.novalisten.app.enrichment.SecretSlot.AZURE)
             app.repository.mutate { saveLyrics(long.toString(), com.novalisten.app.data.SavedLyrics("[00:01.000]Original synthetic test line", "Français manuel de test", "Fixture locale", "VF manuelle")) }
         }
+        compose.runOnIdle { androidx.lifecycle.ViewModelProvider(compose.activity)[MainViewModel::class.java].seek(1500) }
         compose.waitForIdle()
         compose.onNodeWithText("Pochette").assertDoesNotExist()
         compose.onNodeWithText("Rechercher").assertDoesNotExist()

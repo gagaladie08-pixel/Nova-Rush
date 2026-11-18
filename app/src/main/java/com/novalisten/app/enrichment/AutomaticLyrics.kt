@@ -31,7 +31,7 @@ object LyricMatch {
         key(q.title).isNotEmpty() && key(q.artist).isNotEmpty() && q.durationMs in MIN_TRACK_DURATION_MS..86_400_000 &&
             key(q.artist) !in setOf("artiste inconnu", "unknown artist", "unknown", "inconnu")
     }.getOrDefault(false)
-    fun accepts(q: MusicQuery, result: LyricCandidate): Boolean = queryAllowed(q) && result.durationMs > 0 &&
+    fun accepts(q: MusicQuery, result: LyricCandidate): Boolean = queryAllowed(q) && result.hasMatchMetadata && result.durationMs > 0 &&
         abs(result.durationMs - q.durationMs) <= 3000 && key(q.title) == key(result.title) && key(q.artist) == key(result.artist)
     fun quality(candidate: LyricCandidate): Int {
         val saved = candidate.asSavedLyrics()
@@ -110,16 +110,19 @@ class AutomaticLyrics(private val scope: CoroutineScope, private val lookup: Lyr
                     if (failed > 0) AutoLyricStatus.UNAVAILABLE else AutoLyricStatus.NO_MATCH,
                     note = if (failed > 0) "Sources indisponibles ou limitées. Réessayez depuis les trois points ; la lecture reste locale." else "Aucune version suffisamment sûre. Les trois points permettent de chercher ou d’importer vos paroles.", diagnostics = diagnostics.toList())
                 _state.value = completed
-                cache[key!!] = Cached(completed, now() + if (completed.lyrics != null) 3_600_000 else if (failed > 0) 120_000 else 600_000)
-                while (cache.size > 8 || cache.values.sumOf { it.state.lyrics?.let { text -> text.original.length + text.originalTiming.length } ?: 0 } > 3_000_000) cache.remove(cache.keys.first())
+                cacheResult(key!!, completed, if (completed.lyrics != null) 3_600_000 else if (failed > 0) 120_000 else 600_000)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) {
                 if (token == generation) {
                     _state.value = AutoLyricState(request.trackId, AutoLyricStatus.UNAVAILABLE, note = e.publicMessage())
-                    cache[key!!] = Cached(_state.value, now() + 120_000)
+                    cacheResult(key!!, _state.value, 120_000)
                 }
             }
         }
+    }
+    private fun cacheResult(key: Key, state: AutoLyricState, ttlMs: Long) {
+        cache[key] = Cached(state, now() + ttlMs)
+        while (cache.size > 8 || cache.values.sumOf { it.state.lyrics?.let { text -> text.original.length + text.originalTiming.length } ?: 0 } > 3_000_000) cache.remove(cache.keys.first())
     }
     private fun cancel() { generation++; job?.cancel(); job = null }
     fun stop() { cancel(); current = null; _state.value = AutoLyricState() }

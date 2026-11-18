@@ -1,16 +1,17 @@
-# NovaListen 0.2 — API facultatives et identifiants locaux
+# NovaListen 0.2.1 — paroles automatiques, API et identifiants locaux
 
 ## État et portée
 
 Cette itération répond à la demande d’intégrer les API sans clé et de saisir les autres identifiants **dans l’application**, gratuitement. Elle ne crée aucun compte, n’active aucun abonnement et ne contient aucune clé de fournisseur. Les 21 fiches de conception restent la référence ; cette première interface n’en réalise pas toutes les fonctions avancées.
 
-La version des sources est **0.2.0 / code 2**. La compilation et les essais sur émulateur ont réussi dans l’exécution 44282482614 : **92 tests unitaires + 10 tests Android**. Voir le [compte rendu 0.2 et les limites exactes](05-verification-api-0.2.md) ; l’ancienne validation de 0.1.0 ne suffit pas à valider ce code. Les documents 01–03 décrivent historiquement 0.1.
+La version des sources est **0.2.1 / code 3**. La précédente 0.2.0 a été compilée et vérifiée dans l’exécution 44282482614 : **92 tests unitaires + 10 tests Android** ; voir son [compte rendu historique](05-verification-api-0.2.md). La correction actuelle des paroles et ses vérifications distinctes sont décrites dans le [guide 0.2.1](06-paroles-centrees-et-karaoke.md). Les documents 01–03 décrivent historiquement 0.1.
 
 ## Où trouver les fonctions
 
 - **Réglages → API et clés** : renseigner, remplacer, supprimer un identifiant, ou tous les effacer. Le site officiel de chaque service est accessible. Une valeur sauvegardée apparaît « non testée » : son enregistrement ne déclenche aucune requête.
-- **Menu d’un morceau → Rechercher les paroles en ligne**, ou **lecteur → Paroles → Rechercher** : revoir titre, artiste et album avant la recherche. Les résultats affichent source et type de synchronisation ; prévisualiser, vérifier les droits puis choisir. Ni le premier résultat ni un échec ne remplacent la VO locale.
-- **Lecteur → Paroles → Traduire**, ou éditeur local : travaille sur la VO déjà sauvegardée. L’import TXT/LRC et le collage restent possibles sans API.
+- **Pendant l’écoute** : les paroles du morceau en cours se chargent automatiquement si aucune VO n’a été sauvegardée. Noyau lrc.red/LRCLIB/LiriQo, correspondance prudente et cache mémoire borné. Désactivation possible dans API et clés. Vos paroles sauvegardées ont toujours priorité ; aucune traduction automatique.
+- **Lecteur → trois points → Rechercher d’autres paroles**, ou menu d’un morceau : revoir titre, artiste et album pour une recherche de remplacement. Prévisualiser, vérifier les droits puis choisir. Cette recherche manuelle ne remplace la VO qu’après confirmation.
+- **Trois points → Traduire les paroles**, ou éditeur local : travaille sur la VO affichée, sauvegardée ou temporaire. Conserver la VF conserve explicitement sa VO aussi. L’import TXT/LRC et le collage restent disponibles hors ligne ; **Source et synchronisation** explique le niveau ligne/segment réellement présent.
 - **Menu d’un morceau → Comparer les métadonnées en ligne** : références de MusicBrainz, comparaison volontaire d’une autre source. Consultation seulement, sans écriture de tags ni faux enregistrement dans l’audio.
 - **Page artiste → Biographie en ligne / Photos en ligne** : identifier le sujet, lire et choisir. Le français est prioritaire ; demander l’anglais reste une action séparée. Pas de traduction automatique des biographies.
 - **Page album / menu d’un morceau → Chercher une pochette** : choisir une édition MusicBrainz, puis une proposition CAA ; recours de groupe et fanart volontaires. Changement de l’affichage dans NovaListen seulement, pas de fusion d’albums ni d’édition des fichiers.
@@ -19,9 +20,9 @@ Les contenus choisis et leurs crédits sont sauvegardés hors ligne. Les recherc
 
 ## Sources intégrées et limites
 
-| Fonction | Disponible par commande | Limites importantes |
+| Fonction | Accès disponible | Limites importantes |
 | --- | --- | --- |
-| Paroles, noyau | lrc.red + LRCLIB + LiriQo | lrc.red nécessite un courriel de contact. LiriQo est un agrégateur : origine amont indiquée lorsqu’elle existe. Aucun réglage définitif des questions de cascade restées ouvertes n’est imposé par cette interface. |
+| Paroles, noyau | lrc.red + LRCLIB + LiriQo ; morceau écouté automatique, remplacement manuel | lrc.red nécessite un courriel de contact. LiriQo est un agrégateur : origine amont indiquée lorsqu’elle existe. Aucun réglage définitif des questions de cascade restées ouvertes n’est imposé par cette interface. |
 | Compléments de paroles | Better Lyrics public, Textyl, lyrics.ovh | Une commande par complément. Better : aucun jeton privé d’extension extrait, 401 distingué de 404, quotas respectés. Textyl/ovh ne certifient ni la version ni les droits ; pas de faux consensus entre agrégateurs. |
 | Catalogue | MusicBrainz ; iTunes Search avec boutique choisie | Identité/version à comparer ; pas de téléchargement permanent des pochettes de boutique. La boutique ne déduit pas la localisation. |
 | Identifiants configurables | Last.fm, fanart.tv, Discogs, Genius, Azure | Last.fm : tags de consultation, aucun scrobbling/portrait. Discogs et Genius : références de consultation, pas de collecte de paroles/portraits. |
@@ -45,7 +46,7 @@ Les contenus choisis et leurs crédits sont sauvegardés hors ligne. Les recherc
 
 Un seul `RemoteHttp` applicatif dessert recherches et octets d’images. Son ordonnanceur impose **au maximum deux requêtes en vol**, y compris les aperçus, avec espacement par fournisseur (notamment MusicBrainz) et regroupement Wikimedia. C’est un budget de réalisation conservateur ; il ne transforme pas les limites de cascade validées en une nouvelle règle universelle de conception.
 
-- Pas d’appels à l’ouverture de l’application, d’une page, ni lors de la saisie/sauvegarde d’une clé. Le scan MediaStore ne dépend d’aucun service distant.
+- Pas d’appel au simple lancement, à l’ouverture d’une page ou à la saisie/sauvegarde d’une clé. Exception explicitement demandée : le morceau réellement écouté peut déclencher les paroles automatiques si aucune VO n’est sauvegardée et que l’option est activée. Le scan MediaStore ne dépend d’aucun service distant ; ni la file préparée ni la collection ne sont envoyées.
 - HTTPS uniquement, DNS public vérifié, pas de cookies, cache HTTP disque, journal des requêtes ou retry automatique. Les en-têtes et erreurs des fournisseurs ne sont pas exposés en clair dans les messages utilisateur.
 - Réponses JSON/texte limitées à 2 Mo ; aperçus à 2 Mo et images choisies à 8 Mo. Les téléchargements sont annulables ; le rendu est borné en pixels.
 - Redirections API refusées, sauf le `307` documenté de CAA vers un `mbid-…/index.json` d’Internet Archive, suivi avec une nouvelle requête sans les en-têtes privés. Les redirections d’images sont bornées et revérifiées. Pas de contournement d’un accès protégé.
@@ -61,7 +62,7 @@ Un seul `RemoteHttp` applicatif dessert recherches et octets d’images. Son ord
 3. **Translate with Google · sur l’appareil** utilise Google Translate via ML Kit, sans envoyer la VO à Azure. Le SDK Google déclare néanmoins des diagnostics d’appareil, d’application, de performances et d’usage après activation. Le provider d’initialisation automatique est retiré du manifeste ; « local » ne signifie pas zéro communication du SDK. Voir [les diagnostics ML Kit](https://developers.google.com/ml-kit/android-data-disclosure), [les conditions de traduction ML Kit](https://developers.google.com/ml-kit/language/translation/translation-terms) et [Google Cloud Translation](https://cloud.google.com/translate).
 4. **Azure**, si désiré, demande à nouveau confirmation de la ressource F0 et demande explicite d’envoi de cette VO. Les lignes et la langue sont envoyées à Microsoft, pas l’audio, le titre ni l’historique. Consentement d’envoi consommé à chaque tentative ; pas de reprise automatique. L’application ne peut pas vérifier le forfait d’une clé.
 
-Les instants LRC existants, balises et lignes vides sont conservés ; les répétitions identiques ne sont traduites qu’une fois. Limite technique initiale : 20 000 caractères et 500 lignes, refus au-delà sans troncature. Les mots français n’héritent pas d’un faux minutage phonétique. La proposition reste en prévisualisation : sauvegarder la VF demande un choix séparé, laisse la VO intacte et vérifie qu’elle n’a pas changé. Changer la VO invalide l’ancienne VF non corrigée.
+Les instants LRC de ligne existants, métadonnées et lignes vides sont conservés ; les balises de mots sont retirées du texte à traduire ; les répétitions identiques ne sont traduites qu’une fois. Limite technique initiale : 20 000 caractères et 500 lignes, refus au-delà sans troncature. Les mots français n’héritent pas d’un faux minutage phonétique. La proposition reste en prévisualisation : sauvegarder la VF demande un choix séparé, laisse la VO intacte et vérifie qu’elle n’a pas changé. Changer la VO invalide l’ancienne VF non corrigée.
 
 Le badge officiel **powered by Google Translate**, récupéré sans modification depuis le ZIP officiel Google, est inclus localement et affiché à côté des résultats Google (aperçu, player et éditeur). Les crédits et le disclaimer restent accessibles dans l’application. Une VF adaptée manuellement est indiquée comme telle. Aucun logo Google recréé ou issu d’un site tiers n’est utilisé.
 
@@ -71,12 +72,12 @@ Le badge officiel **powered by Google Translate**, récupéré sans modification
 - Saisie masquée et non `rememberSaveable`, pas de retour automatique de l’ancien secret ; `FLAG_SECURE` et dialogue sécurisé. La saisie est vidée au passage en arrière-plan et après enregistrement. Aucun mécanisme ne rend un appareil compromis ou un clavier tiers inviolable.
 - Effacement individuel/global sur le téléphone ; ne révoque pas une clé chez le fournisseur. Musiques et choix sauvegardés ne sont pas supprimés.
 - Sauvegarde/transfert Android désactivés ; pas de secrets dans BuildConfig, ressources, GitHub Actions ou APK. La clé est envoyée uniquement à son fournisseur, pas à GitHub ni à NovaListen.
-- SQLite passe de v1 à v2 par migration **sans réinitialiser la bibliothèque** : sources VO/VF/portraits, pochettes d’affichage et associations MusicBrainz. Les URI, favoris, playlists, événements et textes existants sont conservés.
+- SQLite v3 conserve la migration v1 → v2 (sources VO/VF/portraits, pochettes et associations MusicBrainz), puis ajoute un champ de minutage natif à la VO en v2 → v3, **sans réinitialiser la bibliothèque**. Les URI, favoris, playlists, événements, textes et crédits existants sont conservés. Les résultats automatiques temporaires ne sont pas écrits dans cette base.
 - Aucun envoi automatique d’audio, de collection complète, d’historique ou de fichiers de tags. Les thèmes et autorisations de suppression restent indépendants des accords API.
 
 ## Vérifications et limites
 
-Couverture testée dans cette itération (détail et résultats dans le compte rendu lié ci-dessus) : contrats JSON synthétiques, unités de temps, TTML/XXE, 404 vs refus/quota, redirections sûres, limites de taille, filtrage d’URL, plan LRC et traduction, plafond/annulation de l’ordonnanceur, budget photo et déduplication. Tests Android : coffre/Keystore, persistance et suppression, saisie non restaurée, migration SQLite, erreurs de sauvegarde, cache d’aperçus et manifeste fusionné. **Aucun secret réel n’est utilisé dans ces tests**.
+Couverture de 0.2 (détail et résultats dans son compte rendu historique ; nouveaux tests de 0.2.1 dans le guide distinct) : contrats JSON synthétiques, unités de temps, TTML/XXE, 404 vs refus/quota, redirections sûres, limites de taille, filtrage d’URL, plan LRC et traduction, plafond/annulation de l’ordonnanceur, budget photo et déduplication. Tests Android : coffre/Keystore, persistance et suppression, saisie non restaurée, migration SQLite, erreurs de sauvegarde, cache d’aperçus et manifeste fusionné. **Aucun secret réel n’est utilisé dans ces tests**.
 
 Ces tests ne prouvent pas la disponibilité du service sur le téléphone, l’admission d’un compte, l’exactitude d’un texte/portrait, ni les droits du fournisseur. Les appels réels de traduction et packs, les quotas d’un compte et les essais sur appareil physique restent à effectuer volontairement. Listening Party, YouTube, Fil Rouge, modèles intelligents, tags audio originaux et autres fonctions non réalisées restent hors de cette livraison.
 

@@ -57,7 +57,7 @@ data class Credit(val provider: String, val url: String, val licence: String = "
     fun text(): String = listOf(provider, url, licence, author, details, "Récupéré le ${java.time.Instant.ofEpochMilli(at)}").filter { it.isNotBlank() }.joinToString("\n")
 }
 
-data class LyricCandidate(val id: String, val title: String, val artist: String, val album: String, val durationMs: Long, val credit: Credit, val text: String = "", val remoteIsrc: String? = null, val timing: String = "Texte", val upstream: String = "", val nativeLines: List<LyricLine> = emptyList())
+data class LyricCandidate(val id: String, val title: String, val artist: String, val album: String, val durationMs: Long, val credit: Credit, val text: String = "", val remoteIsrc: String? = null, val timing: String = "Texte", val upstream: String = "", val nativeLines: List<LyricLine> = emptyList(), val hasMatchMetadata: Boolean = true)
 fun LyricCandidate.asSavedLyrics(): SavedLyrics = SavedLyrics(original = text, originalSource = credit.text(), originalTiming = runCatching { LyricTiming.encode(text, nativeLines) }.getOrDefault(""))
 data class CatalogCandidate(val id: String, val title: String, val artist: String, val album: String = "", val year: String = "", val durationMs: Long = 0, val releaseId: String? = null, val groupId: String? = null, val credit: Credit, val details: String = "")
 data class ArtistCandidate(val id: String, val name: String, val description: String, val credit: Credit, val imageTitle: String? = null, val mbid: String? = null)

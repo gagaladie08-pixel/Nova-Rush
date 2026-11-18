@@ -69,26 +69,38 @@ object RemoteParsers {
         val tracks = root.objects("tracks").ifEmpty { listOfNotNull(root.optJSONObject("primary")) }
         return tracks.take(16).mapIndexedNotNull { index, item ->
             val timed = item.objects("timed")
-            val valid = timed.isNotEmpty() && timed.all { it.has("start") && it.optDouble("start", -1.0).let { n -> n.isFinite() && n in 0.0..86_400_000.0 } }
-            fun millis(obj: JSONObject, key: String): Long? = obj.optDouble(key, -1.0).takeIf { it.isFinite() && it in 0.0..86_400_000.0 }?.toLong()
-            val result = when {
+            fun millis(obj: JSONObject, key: String): Long? = obj.optDouble(key, -1.0).takeIf { it.isFinite() && it in 0.0..86_400_000.0 && it == it.toLong().toDouble() }?.toLong()
+            val valid = timed.isNotEmpty() && timed.all { millis(it, "start") != null }
+            val richLevels = setOf("word", "syllable", "character", "phrase")
+            val denied = item.str("provider") in setOf("lrclib_wordsync", "lrclib") ||
+                (item.has("nativeWordTiming") && !item.optBoolean("nativeWordTiming") && !item.optBoolean("nativeRichsync"))
+            val richClaim = item.optBoolean("nativeWordTiming") || item.optBoolean("nativeRichsync") || item.str("syncLevel") in richLevels
+            val parsed = when {
                 valid -> {
-                    val lines = timed.map { line ->
-                        val tokens = line.objects("words").mapNotNull { word ->
+                    val lines = timed.mapIndexed { lineIndex, line ->
+                        val lineId = line.optInt("id", lineIndex)
+                        val units = line.optJSONArray("words") ?: item.optJSONArray("words")?.optJSONArray(lineId)
+                        val tokens = if (denied || (!richClaim && line.str("granularity") !in richLevels)) emptyList() else units.objects().mapNotNull { word ->
                             val at = millis(word, "start") ?: return@mapNotNull null
-                            TimedToken(word.str("text"), at, millis(word, "end"))
+                            // Native starts can coexist with explicitly derived unit ends: never animate those ends.
+                            TimedToken(word.str("text"), at, if (word.optBoolean("derivedEnd")) null else millis(word, "end"))
                         }
-                        LyricTiming.line(line.optDouble("start").toLong(), line.str("text"), tokens, millis(line, "end"))
+                        LyricTiming.line(requireNotNull(millis(line, "start")), line.str("text"), tokens, millis(line, "end"))
                     }.sortedBy { it.timeMs }
                     NativeLyricResult(asLrc(lines.map { it.timeMs to it.text }), lines)
                 }
                 item.str("ttml").isNotBlank() -> NativeLyrics.ttml(item.str("ttml"))
                 item.str("lrc").isNotBlank() -> NativeLyricResult(item.str("lrc"), emptyList())
-                else -> NativeLyricResult(item.str("plain"), emptyList())
+                else -> NativeLyricResult(item.str("plain").ifBlank { timed.joinToString("\n") { it.str("text") } }, emptyList())
             }
+            val richerTtml = if (!denied && richClaim && parsed.lines.none { it.words.isNotEmpty() } && item.str("ttml").isNotBlank())
+                runCatching { NativeLyrics.ttml(item.str("ttml")) }.getOrNull()?.takeIf { result -> result.lines.any { it.words.isNotEmpty() } } else null
+            val result = if (denied) parsed.copy(text = LrcParser.withoutWordTags(parsed.text), lines = parsed.lines.map { it.copy(words = emptyList()) }) else richerTtml ?: parsed
             val text = safeText(result.text)
+            val duration = metadata.optDouble("duration", -1.0).takeIf { it.isFinite() && it in 0.0..86_400.0 }?.let { (it * 1000).toLong() }
+                ?: metadata.str("duration").takeIf { it.matches(Regex("[0-9]{1,3}:[0-5][0-9]")) }?.let { LyricFormats.clock(it) } ?: 0L
             val upstream = item.str("upstreamProvider").ifBlank { item.str("lyricsSource").ifBlank { item.str("provider") } }
-            if (text.isBlank()) null else LyricCandidate("liriqo:$index:${item.str("provider")}", metadata.str("title").ifBlank { query.title }, metadata.str("artist").ifBlank { query.artist }, metadata.str("album").ifBlank { query.album }, (metadata.optDouble("duration", 0.0) * 1000).toLong(), Credit("LiriQo → $upstream", "https://github.com/AlFarrizi-Studio/LiriQo", details = "Source annoncée : ${item.str("syncLevel")}. Temps des segments conservés lorsqu’ils sont fournis et cohérents ; aucune répartition inventée entre mots."), text, timing = LyricFormats.timing(text, result.lines), upstream = upstream, nativeLines = result.lines)
+            if (text.isBlank()) null else LyricCandidate("liriqo:$index:${item.str("provider")}", metadata.str("title").ifBlank { query.title }, metadata.str("artist").ifBlank { query.artist }, metadata.str("album").ifBlank { query.album }, duration, Credit("LiriQo → $upstream", "https://github.com/AlFarrizi-Studio/LiriQo", details = "Source annoncée : ${item.str("syncLevel")}. Temps des segments conservés lorsqu’ils sont fournis et cohérents ; aucune répartition inventée entre mots."), text, timing = LyricFormats.timing(text, result.lines), upstream = upstream, nativeLines = result.lines, hasMatchMetadata = metadata.str("title").isNotBlank() && metadata.str("artist").isNotBlank() && duration > 0)
         }
     }
     fun better(body: String, query: MusicQuery): List<LyricCandidate> {
