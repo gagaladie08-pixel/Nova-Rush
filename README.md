@@ -7,10 +7,15 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 
 ## Correction des paroles vérifiée — 0.2.1
 
+**[Télécharger NovaListen 0.2.1 — APK de test (89,5 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.1/NovaListen-0.2.1-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.1/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-v0.2.1).
+
+**Attention : certificat debug différent de 0.2.0.** Android refusera normalement la mise à jour directe. Ne pas désinstaller sans préserver les données privées ; aucun export intégré. [Précautions et preuves](docs/developpement/06-paroles-centrees-et-karaoke.md).
+
+
 - Écran allégé : Rechercher / Traduire / Modifier / Source dans les trois points ; ligne active centrée, y compris aux extrémités et après déplacement de lecture.
 - Chargement automatique limité au morceau réellement écouté, activable/désactivable ; priorité absolue aux paroles déjà sauvegardées, cache temporaire en mémoire et aucun envoi de la collection.
 - Conservation et rendu progressif des temps de segments TTML/LiriQo lorsqu’ils existent ; Enhanced LRC avec débuts natifs. Un LRC par ligne ne devient pas un faux minutage mot à mot. Aucune traduction automatique.
-- [Périmètre, confidentialité et vérifications distinctes de 0.2.1](docs/developpement/06-paroles-centrees-et-karaoke.md). [Vérification réussie 44292086637](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44292086637), sources `bcdd86f7da19086d85fb8aede3bd7cf028c564be` ; distribution HTTPS du même binaire en cours. Les preuves historiques ci-dessous restent distinctes.
+- [Périmètre, confidentialité et vérifications distinctes de 0.2.1](docs/developpement/06-paroles-centrees-et-karaoke.md). [Vérification réussie 44292086637](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44292086637), sources `bcdd86f7da19086d85fb8aede3bd7cf028c564be` ; APK publié sans recompilation par [l’exécution 44293391407](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44293391407), taille et digest GitHub identiques au binaire inspecté. Les preuves historiques ci-dessous restent distinctes.
 
 ## Livraison précédente vérifiée — 0.2.0
 
