@@ -4,7 +4,7 @@
 
 Cette itération répond à la demande d’intégrer les API sans clé et de saisir les autres identifiants **dans l’application**, gratuitement. Elle ne crée aucun compte, n’active aucun abonnement et ne contient aucune clé de fournisseur. Les 21 fiches de conception restent la référence ; cette première interface n’en réalise pas toutes les fonctions avancées.
 
-La version des sources est **0.2.1 / code 3**. La précédente 0.2.0 a été compilée et vérifiée dans l’exécution 44282482614 : **92 tests unitaires + 10 tests Android** ; voir son [compte rendu historique](05-verification-api-0.2.md). La correction actuelle des paroles et ses vérifications distinctes sont décrites dans le [guide 0.2.1](06-paroles-centrees-et-karaoke.md). Les documents 01–03 décrivent historiquement 0.1.
+La version des sources est **0.2.1 / code 3**, compilée et vérifiée dans l’exécution **44292086637 : 127 tests unitaires + 15 tests Android 10**, zéro échec/erreur/ignoré ; lint sans erreur et 32 avertissements. La correction actuelle des paroles, ses preuves et les précautions de signature sont décrites dans le [guide 0.2.1](06-paroles-centrees-et-karaoke.md). Les preuves de la précédente version 0.2.0 restent dans son [compte rendu historique](05-verification-api-0.2.md) ; les documents 01–03 décrivent historiquement 0.1.
 
 ## Où trouver les fonctions
 

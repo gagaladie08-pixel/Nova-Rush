@@ -1,16 +1,16 @@
 # NovaListen
 
 Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.1, paroles du morceau écouté automatiques et autres enrichissements sur demande**.
-La précédente version 0.2.0 a été compilée et vérifiée : **92 tests unitaires + 10 tests Android 10 réussis**, lint sans erreur. [Compte rendu 0.2](docs/developpement/05-verification-api-0.2.md).
+La version 0.2.1 a été compilée et vérifiée : **127 tests unitaires + 15 tests Android 10 réussis**, lint sans erreur (32 avertissements). [Compte rendu 0.2.1](docs/developpement/06-paroles-centrees-et-karaoke.md).
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
 
-## Correction des paroles — sources 0.2.1
+## Correction des paroles vérifiée — 0.2.1
 
 - Écran allégé : Rechercher / Traduire / Modifier / Source dans les trois points ; ligne active centrée, y compris aux extrémités et après déplacement de lecture.
 - Chargement automatique limité au morceau réellement écouté, activable/désactivable ; priorité absolue aux paroles déjà sauvegardées, cache temporaire en mémoire et aucun envoi de la collection.
 - Conservation et rendu progressif des temps de segments TTML/LiriQo lorsqu’ils existent ; Enhanced LRC avec débuts natifs. Un LRC par ligne ne devient pas un faux minutage mot à mot. Aucune traduction automatique.
-- [Périmètre, confidentialité et vérifications distinctes de 0.2.1](docs/developpement/06-paroles-centrees-et-karaoke.md). Validation en cours ; les preuves historiques ci-dessous ne valident pas le nouvel APK.
+- [Périmètre, confidentialité et vérifications distinctes de 0.2.1](docs/developpement/06-paroles-centrees-et-karaoke.md). [Vérification réussie 44292086637](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44292086637), sources `bcdd86f7da19086d85fb8aede3bd7cf028c564be` ; distribution HTTPS du même binaire en cours. Les preuves historiques ci-dessous restent distinctes.
 
 ## Livraison précédente vérifiée — 0.2.0
 
