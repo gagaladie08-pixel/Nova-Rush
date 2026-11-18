@@ -1,0 +1,26 @@
+name: NovaListen — Ressource officielle de traduction
+on:
+  push:
+    branches: [arena/216bd0ac-nova-rush]
+    paths: ['.github/workflows/novalisten-brand-resource.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  attribution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Acquérir les badges officiels sans les modifier
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, io, json, os, subprocess, urllib.request, zipfile
+          url = 'https://docs.cloud.google.com/static/translate/images/google-translate-attribution.zip'
+          data = urllib.request.urlopen(url, timeout=40).read(2000000)
+          with zipfile.ZipFile(io.BytesIO(data)) as archive:
+              print('Badge files:', json.dumps(archive.namelist()))
+          blob = json.loads(subprocess.check_output(['gh', 'api', 'repos/' + os.environ['GITHUB_REPOSITORY'] + '/git/blobs', '--input', '-'], input=json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()))
+          print('::notice title=Official translation attribution::' + json.dumps({'blob':blob['sha'], 'sha256':hashlib.sha256(data).hexdigest(), 'bytes':len(data), 'source':url}))
+          PY
