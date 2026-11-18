@@ -3,6 +3,19 @@
 Lecteur musical Android local et hors ligne. **Première version : 0.1.0, APK de test**.
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
+
+## Livraison vérifiée
+
+- [Compilation GitHub Actions réussie — exécution 44268439182](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44268439182).
+- Sources de l’APK : commit `1da6c447840010a5063ae59d3e042fe5c4be7174` de la branche de session.
+- **25 tests unitaires + 3 tests sur émulateur Android 10 réussis**, zéro échec ou test ignoré ; lint sans erreur.
+- `NovaListen-0.1.0-debug.apk` : **24 642 420 octets**, signature APK v2, ARMv7 / ARM64 / x86 / x86_64.
+- SHA-256 : `df8d40e7825cdcc1ad87c70403f419ffd7ddd04d06abe45c552b0c3123931692`.
+- Le manifeste compilé a été inspecté : **pas de permission Internet, microphone ou localisation**. Les 25 familles de polices demandées sont présentes avec leurs licences et leurs hachages d’origine. Pas de musique de démonstration dans l’APK.
+- [Guide d’installation et d’essai sur téléphone](docs/developpement/02-guide-essai.md) · [compte rendu de vérification et limites](docs/developpement/03-verification-livraison.md).
+
+Les commits documentaires ultérieurs ne modifient pas l’APK vérifié ci-dessus. L’APK reste un prototype de test, pas une version complète ou certifiée sur tous les téléphones.
+
 ## Compiler et obtenir l’APK
 
 La compilation est exécutée par **GitHub Actions**, workflow [NovaListen — APK et tests](.github/workflows/novalisten-apk.yml), sur la branche de travail `arena/216bd0ac-nova-rush`.
