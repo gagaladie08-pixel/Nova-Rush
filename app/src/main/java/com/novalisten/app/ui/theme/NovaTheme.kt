@@ -47,7 +47,7 @@ class ThemePreferences(context: Context) {
                 bodyFont = json.getString("bodyFont").also { require(it in fontResources) },
                 radius = json.optInt("radius", 6).coerceIn(0, 32).takeUnless { json.optBoolean("cut", false) },
                 icons = IconStyle.valueOf(json.getString("icons")), effect = json.getString("effect"),
-                transitionMs = json.optInt("duration", 280).coerceIn(100, 700),
+                transitionMs = if (json.isNull("duration")) null else json.optInt("duration", 280).coerceIn(100, 700),
                 curveStyle = json.optString("curveStyle", "cyber"), curveWidth = json.optDouble("curveWidth", 2.0).toFloat().coerceIn(1f, 6f),
                 curveHalo = json.optDouble("curveHalo", 8.0).toFloat().coerceIn(0f, 20f),
             )
@@ -61,7 +61,7 @@ class ThemePreferences(context: Context) {
         val json = JSONObject().apply {
             put("palette", JSONArray(value.palette)); put("titleFont", value.titleFont); put("bodyFont", value.bodyFont)
             put("radius", value.radius ?: 0); put("cut", value.radius == null); put("icons", value.icons.name)
-            put("effect", value.effect); put("duration", value.transitionMs ?: 280)
+            put("effect", value.effect); put("duration", value.transitionMs ?: JSONObject.NULL)
             put("curveStyle", value.curveStyle); put("curveWidth", value.curveWidth); put("curveHalo", value.curveHalo)
         }
         preferences.edit().putString("custom", json.toString()).putString("selected", "custom").apply()

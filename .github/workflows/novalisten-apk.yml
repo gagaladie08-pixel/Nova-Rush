@@ -16,22 +16,24 @@ concurrency:
 jobs:
   android:
     name: Compiler, vérifier et tester Android
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: wrapper
       - name: Intégrité des spécifications embarquées
         run: python3 scripts/verify-project.py
       - name: Tests unitaires, lint et APK de test signé
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+        run: scripts/gradle-ci.sh testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
       - name: Préparer les livrables
         run: |
           mkdir -p artifacts
@@ -39,7 +41,7 @@ jobs:
           cd artifacts
           sha256sum NovaListen-0.1.0-debug.apk > SHA256SUMS.txt
       - name: Publier l’APK installable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NovaListen-0.1.0-debug
           path: artifacts/
@@ -58,13 +60,14 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 2048
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: scripts/gradle-ci.sh connectedDebugAndroidTest
       - name: Publier les rapports de vérification
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NovaListen-verifications
           path: |
+            artifacts/diagnostics/
             app/build/reports/
             app/build/outputs/androidTest-results/
             app/build/outputs/connected_android_test_additional_output/

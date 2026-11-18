@@ -49,7 +49,7 @@ import kotlin.math.abs
 fun MiniPlayer(track: Track, playback: PlaybackUi, vm: MainViewModel, onOpen: () -> Unit) {
     var dx by remember { mutableFloatStateOf(0f) }
     var dy by remember { mutableFloatStateOf(0f) }
-    Surface(color = LocalUniverse.current.surface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().testTag("mini_player").pointerInput(track.id) {
+    Surface(color = LocalUniverse.current.surface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().testTag("mini_player").clickable(onClick = onOpen).pointerInput(track.id) {
         detectDragGestures(onDragEnd = {
             if (abs(dx) > 60.dp.toPx() && abs(dx) > abs(dy)) { if (dx < 0) vm.forward() else vm.previous() }
             else if (dy < -45.dp.toPx()) onOpen()

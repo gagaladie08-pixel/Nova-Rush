@@ -37,8 +37,9 @@ data class PlaybackUi(
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-    val repository = (application as NovaApplication).repository
-    val themes = application.themes
+    private val app = application as NovaApplication
+    val repository = app.repository
+    val themes = app.themes
     private val _playback = MutableStateFlow(PlaybackUi())
     val playback = _playback.asStateFlow()
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 5)
