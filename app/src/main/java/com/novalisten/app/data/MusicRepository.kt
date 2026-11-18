@@ -28,13 +28,13 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     private val _data = MutableStateFlow(LocalData())
     val data = _data.asStateFlow()
     private var refreshJob: Job? = null
+    private var observerRegistered = false
     private val dataMutex = Mutex()
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) { refresh(debounce = true) }
     }
     init {
         scope.launch(Dispatchers.IO) { _data.value = database.snapshot() }
-        context.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer)
     }
     fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(context, audioPermission()) == PackageManager.PERMISSION_GRANTED
     fun audioPermission(): String = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -46,6 +46,10 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
             if (!hasPermission()) {
                 _library.value = LibraryState(permission = false)
                 return@launch
+            }
+            if (!observerRegistered) {
+                runCatching { context.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer) }
+                    .onSuccess { observerRegistered = true }
             }
             _library.value = _library.value.copy(permission = true, loading = true, error = null)
             try {

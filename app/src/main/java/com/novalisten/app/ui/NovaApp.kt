@@ -56,6 +56,8 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     var createPlaylist by remember { mutableStateOf(false) }
     var pickPlaylist by remember { mutableStateOf<String?>(null) }
     var removeTrack by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val artists = remember(playable) { artistGroups(playable) }
+    val albums = remember(playable) { albumGroups(playable) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
@@ -74,7 +76,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
             tab != 0 -> tab = 0
         }
     }
-    BackHandler(route.isNotEmpty() || tab != 0 || artistId != null || albumId != null || playlistId != null) { goBack() }
+    BackHandler(route.isNotEmpty() || tab != 0) { goBack() }
     val actions = TrackActions(menu = { menuTrack = it }, info = { infoTrack = it }, add = { addTracks = it }, delete = { deleteTracks = it })
     NovaTheme(settings.universe, settings.effects) {
         Box(Modifier.fillMaxSize()) {
@@ -149,13 +151,13 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                     0 -> HomeScreen(playable, data, vm, onLibrary = { tab = 1 }, onFavorites = { routeParent = ""; route = "favorites" }, onHistory = { routeParent = ""; route = "history" }, onPlaylist = ::openPlaylist)
                                     1 -> TrackListScreen("Bibliothèque", visible, data, playback, vm, actions)
                                     2 -> {
-                                        val artist = artistGroups(playable).find { it.id == artistId }
+                                        val artist = artists.find { it.id == artistId }
                                         if (artist != null && artistLibrary) TrackListScreen(artist.name, artist.tracks, data, playback, vm, actions, onBack = { artistLibrary = false })
                                         else if (artist != null) ArtistDetail(artist, data, playback, vm, actions, onBack = { artistId = null }, onAlbum = ::openAlbum, onLibrary = { artistLibrary = true }, onPortrait = { onChooseImage("artist", artist.id) })
                                         else CatalogScreen(true, playable, data, vm, ::openArtist, ::openAlbum, { addTracks = it })
                                     }
                                     3 -> {
-                                        val album = albumGroups(playable).find { it.id == albumId }
+                                        val album = albums.find { it.id == albumId }
                                         if (album != null) AlbumDetail(album, data, playback, vm, actions, { albumId = null }, ::openArtist)
                                         else CatalogScreen(false, playable, data, vm, ::openArtist, ::openAlbum, { addTracks = it })
                                     }

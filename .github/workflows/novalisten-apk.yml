@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: novalisten-${{ github.ref }}
@@ -73,3 +73,8 @@ jobs:
             app/build/outputs/connected_android_test_additional_output/
           if-no-files-found: warn
           retention-days: 14
+      - name: Pont de livraison limité aux fichiers compilés
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/github-transfer.py

@@ -41,3 +41,7 @@ Restent nécessaires les essais sur téléphone (notamment Android récent et va
 ## Livraison et signature
 
 L’APK de CI est installable et signé avec la clé debug du runner ; ce n’est pas une publication Play Store. Le nom d’application est NovaListen, identifiant `com.novalisten.app`. Les artefacts Actions ont une durée de rétention de 30 jours pour l’APK et 14 pour les rapports. Le fichier APK et son SHA-256 sont récupérables séparément. Pas de clé de signature de production commise au dépôt ; stratégie de signature stable à définir avant des mises à jour durables. La désinstallation efface les enrichissements/paramètres privés : l’utilisateur doit en être averti, sans promesse d’export encore absent.
+
+### Transfert dans l’environnement de livraison
+
+Le téléchargement standard des artefacts Actions redirige vers le stockage Azure, inaccessible dans l’environnement de travail courant. Un pont de livraison limité copie l’APK, le journal Gradle et les rapports vers des blobs GitHub **non référencés** : aucun APK n’est ajouté à un commit, arbre, tag ou branche. Le manifeste de transfert indique commit, taille et SHA-256 ; le fichier récupéré est revérifié avant livraison. Ces objets peuvent être nettoyés par GitHub : les artefacts Actions et la copie remise à l’utilisateur restent les voies de conservation ordinaires. Le jeton éphémère GitHub du job, doté de contents:write pour ce transfert, n’est ni affiché ni embarqué.

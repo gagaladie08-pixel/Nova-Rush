@@ -86,7 +86,8 @@ fun PlaylistDetail(playlist: LocalPlaylist, tracks: List<Track>, data: LocalData
     var rename by remember { mutableStateOf(false) }
     var newName by remember(playlist.name) { mutableStateOf(playlist.name) }
     var reorder by remember { mutableStateOf(false) }
-    val available = playlist.trackIds.mapNotNull { id -> tracks.find { it.id == id } }
+    val byId = remember(tracks) { tracks.associateBy { it.id } }
+    val available = remember(playlist.trackIds, byId) { playlist.trackIds.mapNotNull { byId[it] } }
     val missing = playlist.trackIds.count { id -> data.hidden.let { id !in it } && tracks.none { it.id == id } }
     TrackListScreen("Playlist", available, data, playback, vm, actions, onBack = onBack, sourcePlaylist = playlist.id, fixedOrder = true,
         extraActions = {
@@ -97,7 +98,7 @@ fun PlaylistDetail(playlist: LocalPlaylist, tracks: List<Track>, data: LocalData
                     DropdownMenuItem({ Text("Réorganiser les morceaux") }, { menu = false; reorder = true })
                     DropdownMenuItem({ Text("Choisir une couverture locale") }, { menu = false; onCover() })
                     DropdownMenuItem({ Text(if (playlist.pinnedAt != null) "Désépingler de l’Accueil" else "Épingler à l’Accueil") }, { menu = false; vm.savePlaylist(playlist.copy(pinnedAt = if (playlist.pinnedAt != null) null else System.currentTimeMillis())) })
-                    DropdownMenuItem({ Text("Dupliquer") }, { menu = false; vm.createPlaylist(playlist.name + " — copie", available); vm.message("Copie créée") })
+                    DropdownMenuItem({ Text("Dupliquer") }, { menu = false; vm.savePlaylist(playlist.copy(id = java.util.UUID.randomUUID().toString(), name = playlist.name + " — copie", createdAt = System.currentTimeMillis(), pinnedAt = null)); vm.message("Copie créée") })
                     DropdownMenuItem({ Text("Supprimer la playlist") }, { menu = false; onDelete() })
                 }
             }
