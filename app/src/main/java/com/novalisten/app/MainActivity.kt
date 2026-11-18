@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
         if (uri != null && kind != null && id != null) lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { copyImage(uri, "$kind:$id") } }
             result.onSuccess { localUri ->
-                if (kind == "artist") vm.saveArtist(id, (vm.repository.data.value.artists[id] ?: ArtistNote()).copy(portrait = localUri))
+                if (kind == "artist") vm.saveArtist(id, (vm.repository.data.value.artists[id] ?: ArtistNote()).copy(portrait = localUri, portraitSource = "Image importée volontairement depuis le téléphone ; droits à conserver par l’utilisateur."))
                 else vm.repository.data.value.playlists.find { it.id == id }?.let { vm.savePlaylist(it.copy(cover = localUri)) }
                 vm.message("Image copiée dans NovaListen pour rester disponible hors ligne")
             }.onFailure { vm.message("Image impossible à importer. Choisissez une image locale lisible.") }

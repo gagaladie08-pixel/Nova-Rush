@@ -19,12 +19,13 @@ import com.novalisten.app.ui.components.*
 import com.novalisten.app.ui.theme.LocalUniverse
 
 @Composable
-fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onAppearance: () -> Unit, onHidden: () -> Unit, onHistory: () -> Unit, onSystem: () -> Unit, onNotifications: () -> Unit) {
+fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onAppearance: () -> Unit, onHidden: () -> Unit, onHistory: () -> Unit, onSystem: () -> Unit, onNotifications: () -> Unit, onApi: () -> Unit) {
     val context = LocalContext.current
     var licenceDirectory by remember { mutableStateOf<String?>(null) }
     var licenceText by remember { mutableStateOf<String?>(null) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { PageTitle("Réglages", "NovaListen ${BuildConfig.VERSION_NAME} · première version") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("Réglages", "NovaListen ${BuildConfig.VERSION_NAME} · version de test") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { SettingRow("API et clés", "Recherches volontaires · identifiants chiffrés sur ce téléphone", Icons.Outlined.Key, onApi) }
         item { SettingRow("Votre univers", LocalUniverse.current.name, Icons.Outlined.Palette, onAppearance) }
         item { SettingRow("Morceaux masqués", "${data.hidden.size} référence(s) · fichiers conservés", Icons.Outlined.VisibilityOff, onHidden) }
         item { SettingRow("Historique local", "Une minute réellement jouée par écoute", Icons.Outlined.History, onHistory) }
@@ -32,9 +33,9 @@ fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onApp
         item { SettingRow("Autorisation de notification", "Commandes de lecture et écran verrouillé", Icons.Outlined.NotificationsNone, onNotifications) }
         item { SettingRow("Autorisations Android", "Gérer l’accès à votre musique", Icons.Outlined.Security, onSystem) }
         item { SectionHeader("Privé par construction") }
-        item { Notice("Cette version n’a pas de permission Internet, pas de compte, pas de publicité et pas de télémétrie. Vos fichiers et vos paroles ne quittent pas l’appareil. Les sauvegardes automatiques Android sont désactivées.") }
+        item { Notice("La lecture reste locale et sans compte obligatoire. Les API sont appelées par des recherches volontaires avec les champs affichés, jamais par un envoi de collection ou d’historique. Azure n’envoie les paroles qu’après confirmation dédiée. ML Kit peut émettre les diagnostics Google déclarés après activation. Les sauvegardes automatiques Android sont désactivées.") }
         item { SectionHeader("Ce qui arrive ensuite") }
-        item { Notice("API d’enrichissement, traduction ML Kit / Azure sur demande, Fil Rouge et autres modèles Nova, édition des fichiers et fusion d’albums : non intégrés dans 0.1. Listening Party et YouTube restent à concevoir.") }
+        item { Notice("Recherche de paroles, références de métadonnées, biographies, photos et pochettes disponibles sur commande ; traduction locale ML Kit et Azure F0 volontaire. Fil Rouge, modèles intelligents, édition des tags dans l’audio et fusion d’albums ne sont pas encore intégrés. Listening Party et YouTube restent à concevoir.") }
         item { SettingRow("Licences des polices", "25 familles embarquées · OFL / Ubuntu Font Licence", Icons.Outlined.Description) { licenceDirectory = "font-licenses" } }
         item { SettingRow("Licences des bibliothèques principales", "AndroidX, Media3, Kotlin, Coil et Guava", Icons.Outlined.Description) { licenceDirectory = "third-party" } }
         item { Notice("APK de test signé automatiquement, pas une version de production. Les signatures des compilations peuvent différer ; conservez vos données avant toute désinstallation. Les réglages et enrichissements sont stockés seulement dans NovaListen.") }

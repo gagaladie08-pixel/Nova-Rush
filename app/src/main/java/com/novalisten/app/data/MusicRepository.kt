@@ -34,8 +34,13 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
         override fun onChange(selfChange: Boolean) { refresh(debounce = true) }
     }
     init {
-        scope.launch(Dispatchers.IO) { _data.value = database.snapshot() }
+        scope.launch(Dispatchers.IO) { updateLocalData() }
     }
+    private fun updateLocalData() {
+        _data.value = database.snapshot()
+        _library.value = _library.value.copy(tracks = decorate(_library.value.tracks))
+    }
+    private fun decorate(tracks: List<Track>): List<Track> = tracks.map { it.copy(displayCover = _data.value.covers[it.albumKey]?.uri) }
     fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(context, audioPermission()) == PackageManager.PERMISSION_GRANTED
     fun audioPermission(): String = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
 
@@ -54,7 +59,7 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
             _library.value = _library.value.copy(permission = true, loading = true, error = null)
             try {
                 val tracks = withContext(Dispatchers.IO) { scan() }
-                _library.value = LibraryState(permission = true, tracks = tracks)
+                _library.value = LibraryState(permission = true, tracks = decorate(tracks))
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: SecurityException) {
@@ -85,11 +90,11 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
         return result
     }
     suspend fun mutate(block: NovaDatabase.() -> Unit) = withContext(Dispatchers.IO) {
-        dataMutex.withLock { database.block(); _data.value = database.snapshot() }
+        dataMutex.withLock { database.block(); updateLocalData() }
     }
     suspend fun createPlaylist(name: String, ids: List<String>): LocalPlaylist = withContext(Dispatchers.IO) {
         dataMutex.withLock {
-            database.createPlaylist(name, ids).also { _data.value = database.snapshot() }
+            database.createPlaylist(name, ids).also { updateLocalData() }
         }
     }
     suspend fun addToPlaylists(destinations: Set<String>, ids: List<String>): Int = withContext(Dispatchers.IO) {
@@ -100,7 +105,7 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
                 ignored += ids.distinct().count { it in playlist.trackIds }
                 database.savePlaylist(playlist.copy(trackIds = prependUnique(playlist.trackIds, ids)))
             }
-            _data.value = database.snapshot()
+            updateLocalData()
             ignored
         }
     }

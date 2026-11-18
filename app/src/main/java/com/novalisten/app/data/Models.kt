@@ -21,10 +21,11 @@ data class Track(
     val fileName: String,
     val size: Long,
     val mimeType: String,
+    val displayCover: String? = null,
 ) {
     val playable: Boolean get() = durationMs >= MIN_TRACK_DURATION_MS
     val pending: Boolean get() = durationMs <= 0
-    val artwork: String get() = "content://media/external/audio/albumart/$albumId"
+    val artwork: String get() = displayCover ?: "content://media/external/audio/albumart/$albumId"
     val artistKey: String get() = artist.normalized()
     val albumKey: String get() = "$albumId:${(albumArtist.ifBlank { artist }).normalized()}"
 }
@@ -47,8 +48,9 @@ data class ListenEvent(
     val localHour: Int,
 )
 
-data class SavedLyrics(val original: String = "", val french: String = "")
-data class ArtistNote(val biography: String = "", val source: String = "", val portrait: String? = null)
+data class SavedLyrics(val original: String = "", val french: String = "", val originalSource: String = "", val frenchSource: String = "")
+data class ArtistNote(val biography: String = "", val source: String = "", val portrait: String? = null, val portraitSource: String = "")
+data class SavedCover(val uri: String, val source: String)
 
 data class LocalData(
     val favorites: Set<String> = emptySet(),
@@ -57,6 +59,8 @@ data class LocalData(
     val events: List<ListenEvent> = emptyList(),
     val lyrics: Map<String, SavedLyrics> = emptyMap(),
     val artists: Map<String, ArtistNote> = emptyMap(),
+    val covers: Map<String, SavedCover> = emptyMap(),
+    val identities: Map<String, String> = emptyMap(),
 )
 
 data class LibraryState(

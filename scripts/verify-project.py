@@ -22,7 +22,11 @@ for font in fonts:
 for path in (root / 'app/src').rglob('*.xml'):
     ET.parse(path)
 manifest = (root / 'app/src/main/AndroidManifest.xml').read_text()
-assert 'android.permission.INTERNET' not in manifest
+assert 'android.permission.INTERNET' in manifest
+assert 'android:usesCleartextTraffic="false"' in manifest
+assert 'MlKitInitProvider" tools:node="remove"' in manifest
+assert 'android.permission.RECORD_AUDIO' not in manifest
+assert 'android.permission.ACCESS_FINE_LOCATION' not in manifest
 assert 'android:allowBackup="false"' in manifest
 assert (root / 'gradle/wrapper/gradle-wrapper.jar').stat().st_size > 40000
 assert not list((root / 'app/src/main').rglob('*.mp3'))
@@ -30,4 +34,4 @@ for path in (root / 'app/src').rglob('*.kt'):
     text = path.read_text()
     assert '\r' not in text
     assert not any(line.rstrip() != line for line in text.splitlines()), path
-print('OK — 15 palettes / 120 exact tokens; 25 licensed font families; XML; offline manifest; source hygiene.')
+print('OK — 15 palettes / 120 exact tokens; 25 licensed font families; XML; explicit-network manifest / no microphone / no location; source hygiene.')

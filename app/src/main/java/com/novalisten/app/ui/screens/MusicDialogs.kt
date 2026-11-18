@@ -27,13 +27,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: () -> Unit, onInfo: () -> Unit, onAdd: () -> Unit, onArtist: () -> Unit, onAlbum: () -> Unit, onDelete: () -> Unit, onRemove: () -> Unit) {
+fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: () -> Unit, onInfo: () -> Unit, onAdd: () -> Unit, onArtist: () -> Unit, onAlbum: () -> Unit, onDelete: () -> Unit, onRemove: () -> Unit, onOnlineLyrics: () -> Unit, onCatalog: () -> Unit, onCover: () -> Unit) {
     val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(Modifier.fillMaxHeight(.78f), contentPadding = PaddingValues(bottom = 24.dp)) {
             item { Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) { Artwork(track.artwork, track.title, Modifier.size(56.dp)); Spacer(Modifier.width(14.dp)); Column { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artist, style = MaterialTheme.typography.bodySmall) } } }
             item { MenuItem("Informations du morceau", Icons.Outlined.Info) { onDismiss(); onInfo() } }
             if (track.playable) {
+                item { MenuItem("Rechercher les paroles en ligne", Icons.Outlined.Lyrics) { onDismiss(); onOnlineLyrics() } }
+                item { MenuItem("Comparer les métadonnées en ligne", Icons.Outlined.ManageSearch) { onDismiss(); onCatalog() } }
+                item { MenuItem("Chercher une pochette pour l’affichage", Icons.Outlined.ImageSearch) { onDismiss(); onCover() } }
                 item { MenuItem("Lire ensuite", Icons.Outlined.QueueMusic) { vm.next(listOf(track)); onDismiss() } }
                 item { MenuItem("Ajouter à une playlist", Icons.Outlined.PlaylistAdd) { onDismiss(); onAdd() } }
                 item { MenuItem("Aller dans l’album", Icons.Outlined.Album) { onDismiss(); onAlbum() } }
@@ -132,7 +135,7 @@ fun TrackPickerDialog(tracks: List<Track>, playlist: LocalPlaylist, vm: MainView
 }
 
 @Composable
-fun LyricsEditor(track: Track, saved: SavedLyrics, vm: MainViewModel, onDismiss: () -> Unit) {
+fun LyricsEditor(track: Track, saved: SavedLyrics, vm: MainViewModel, onDismiss: () -> Unit, onSearch: () -> Unit, onTranslate: () -> Unit) {
     var original by remember { mutableStateOf(saved.original) }
     var french by remember { mutableStateOf(saved.french) }
     var editingFrench by remember { mutableStateOf(false) }
@@ -150,13 +153,25 @@ fun LyricsEditor(track: Track, saved: SavedLyrics, vm: MainViewModel, onDismiss:
             result.onSuccess { if (editingFrench) french = it else original = it }.onFailure { vm.message("Import impossible : choisissez un fichier texte ou LRC de moins de 200 000 caractères.") }
         }
     }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Paroles locales") }, text = {
-        Column {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Paroles et sources") }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(track.title, style = MaterialTheme.typography.titleSmall)
-            Row { FilterChip(!editingFrench, { editingFrench = false }, { Text("Original") }); Spacer(Modifier.width(10.dp)); FilterChip(editingFrench, { editingFrench = true }, { Text("Français manuel") }) }
-            OutlinedTextField(if (editingFrench) french else original, { if (editingFrench) french = it.take(200_000) else original = it.take(200_000) }, Modifier.fillMaxWidth().heightIn(min = 170.dp, max = 280.dp), label = { Text(if (editingFrench) "Votre version française" else "Texte ou LRC horodaté") })
+            Row {
+                TextButton(onSearch) { Icon(Icons.Outlined.Search, null); Text("Rechercher en ligne") }
+                TextButton(onTranslate, enabled = saved.original.isNotBlank()) { Text("Traduire la VO sauvegardée") }
+            }
+            Row { FilterChip(!editingFrench, { editingFrench = false }, { Text("Original") }); Spacer(Modifier.width(10.dp)); FilterChip(editingFrench, { editingFrench = true }, { Text("Français") }) }
+            OutlinedTextField(if (editingFrench) french else original, { if (editingFrench) french = it.take(200_000) else original = it.take(200_000) }, Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 220.dp), label = { Text(if (editingFrench) "Votre version française" else "Texte ou LRC horodaté") })
             TextButton({ import.launch(arrayOf("text/*", "application/octet-stream")) }) { Icon(Icons.Outlined.FileOpen, null); Spacer(Modifier.width(6.dp)); Text("Importer TXT / LRC") }
-            Text("Sauvegarde dans NovaListen uniquement, pas dans le fichier audio. Aucune traduction automatique ni synchronisation inventée.", style = MaterialTheme.typography.bodySmall)
+            Text("Sauvegarde dans NovaListen uniquement, pas dans le fichier audio. Les recherches et traductions demandent une commande distincte. Une VO modifiée invalide l’ancienne VF non corrigée ; les sources sont conservées avec mention des adaptations.", style = MaterialTheme.typography.bodySmall)
+            val credit = if (editingFrench) saved.frenchSource else saved.originalSource
+            if (credit.isNotBlank()) Text("Source / crédits :\n$credit", style = MaterialTheme.typography.bodySmall)
         }
-    }, confirmButton = { TextButton({ vm.saveLyrics(track.id, SavedLyrics(original, french)); onDismiss() }) { Text("Sauvegarder") } }, dismissButton = { TextButton(onDismiss) { Text("Annuler") } })
+    }, confirmButton = { TextButton({
+        val voChanged = original != saved.original
+        val fr = if (voChanged && french == saved.french) "" else french
+        val originalCredit = if (voChanged && saved.originalSource.isNotBlank()) saved.originalSource + "\nAdaptation manuelle dans NovaListen." else saved.originalSource
+        val frenchCredit = if (fr.isBlank()) "" else if (fr != saved.french && saved.frenchSource.isNotBlank()) saved.frenchSource + "\nAdaptation manuelle dans NovaListen." else saved.frenchSource
+        vm.saveLyrics(track.id, SavedLyrics(original, fr, originalCredit, frenchCredit)); onDismiss()
+    }) { Text("Sauvegarder") } }, dismissButton = { TextButton(onDismiss) { Text("Annuler") } })
 }

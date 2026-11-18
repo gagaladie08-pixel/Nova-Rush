@@ -53,6 +53,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     var addTracks by remember { mutableStateOf<List<Track>?>(null) }
     var deleteTracks by remember { mutableStateOf<List<Track>?>(null) }
     var editingLyrics by remember { mutableStateOf<Track?>(null) }
+    var enrichment by remember { mutableStateOf<EnrichmentRequest?>(null) }
     var createPlaylist by remember { mutableStateOf(false) }
     var pickPlaylist by remember { mutableStateOf<String?>(null) }
     var removeTrack by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -118,7 +119,9 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                         "custom" -> CustomThemeScreen(settings, vm.themes, ::goBack)
                         "settings" -> SettingsScreen(data, vm, ::goBack,
                             onAppearance = { routeParent = "settings"; route = "themes" }, onHidden = { routeParent = "settings"; route = "hidden" },
-                            onHistory = { routeParent = "settings"; route = "history" }, onSystem = onSystemSettings, onNotifications = onRequestNotifications)
+                            onHistory = { routeParent = "settings"; route = "history" }, onSystem = onSystemSettings, onNotifications = onRequestNotifications,
+                            onApi = { routeParent = "settings"; route = "api" })
+                        "api" -> ApiSettingsScreen(vm, ::goBack)
                         "hidden" -> HiddenScreen(library.tracks, data, vm, ::goBack)
                         "history" -> HistoryScreen(playable, data, ::goBack) { vm.play(playable, it) }
                         "favorites" -> TrackListScreen("Favoris", playable.filter { it.id in data.favorites }, data, playback, vm, actions, ::goBack)
@@ -140,7 +143,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Button(onRequestAudio, Modifier.testTag("grant_audio")) { Text("Autoriser ma musique") }
                                             TextButton(onSystemSettings) { Text("Ouvrir les paramètres Android") }
-                                            Text("NovaListen 0.1 · votre lecteur hors ligne", style = MaterialTheme.typography.bodySmall)
+                                            Text("NovaListen ${com.novalisten.app.BuildConfig.VERSION_NAME} · votre lecteur local", style = MaterialTheme.typography.bodySmall)
                                         }
                                     })
                                 } else if (library.loading && library.tracks.isEmpty() && activeTab < 5) {
@@ -153,12 +156,12 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                     2 -> {
                                         val artist = artists.find { it.id == artistId }
                                         if (artist != null && artistLibrary) TrackListScreen(artist.name, artist.tracks, data, playback, vm, actions, onBack = { artistLibrary = false })
-                                        else if (artist != null) ArtistDetail(artist, data, playback, vm, actions, onBack = { artistId = null }, onAlbum = ::openAlbum, onLibrary = { artistLibrary = true }, onPortrait = { onChooseImage("artist", artist.id) })
+                                        else if (artist != null) ArtistDetail(artist, data, playback, vm, actions, onBack = { artistId = null }, onAlbum = ::openAlbum, onLibrary = { artistLibrary = true }, onPortrait = { onChooseImage("artist", artist.id) }, onBiography = { enrichment = EnrichmentRequest(EnrichmentMode.BIOGRAPHY, artistId = artist.id, name = artist.name) }, onPhotos = { enrichment = EnrichmentRequest(EnrichmentMode.PHOTOS, artistId = artist.id, name = artist.name) })
                                         else CatalogScreen(true, playable, data, vm, ::openArtist, ::openAlbum, { addTracks = it })
                                     }
                                     3 -> {
                                         val album = albums.find { it.id == albumId }
-                                        if (album != null) AlbumDetail(album, data, playback, vm, actions, { albumId = null }, ::openArtist)
+                                        if (album != null) AlbumDetail(album, data, playback, vm, actions, { albumId = null }, ::openArtist, onCovers = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, album.tracks.first(), name = album.name, albumKey = album.id) })
                                         else CatalogScreen(false, playable, data, vm, ::openArtist, ::openAlbum, { addTracks = it })
                                     }
                                     4 -> {
@@ -180,11 +183,12 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
             }
         }
         val current = playable.firstOrNull { it.id == playback.currentId }
-        if (playerOpen && current != null) FullPlayer(current, playback, data, playable, vm, { playerOpen = false }, { menuTrack = current }, { addTracks = listOf(current) }, { editingLyrics = current }, menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || deleteTracks != null)
-        menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { openArtist(track.artistKey) }, { openAlbum(track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }) }
+        if (playerOpen && current != null) FullPlayer(current, playback, data, playable, vm, { playerOpen = false }, { menuTrack = current }, { addTracks = listOf(current) }, { editingLyrics = current }, { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, current) }, { enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, current) }, menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || deleteTracks != null || enrichment != null)
+        menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { openArtist(track.artistKey) }, { openAlbum(track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }, onOnlineLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onCatalog = { enrichment = EnrichmentRequest(EnrichmentMode.CATALOG, track) }, onCover = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, track) }) }
         infoTrack?.let { TrackInfoDialog(it) { infoTrack = null } }
         addTracks?.let { AddToPlaylistDialog(it, data.playlists, vm) { addTracks = null } }
-        editingLyrics?.let { LyricsEditor(it, data.lyrics[it.id] ?: SavedLyrics(), vm) { editingLyrics = null } }
+        editingLyrics?.let { track -> LyricsEditor(track, data.lyrics[track.id] ?: SavedLyrics(), vm, onDismiss = { editingLyrics = null }, onSearch = { editingLyrics = null; enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onTranslate = { editingLyrics = null; enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, track) }) }
+        enrichment?.let { request -> EnrichmentDialog(request, vm, onDismiss = { enrichment = null }, onKeys = { enrichment = null; playerOpen = false; routeParent = "settings"; route = "api" }) }
         if (createPlaylist) CreatePlaylistDialog(vm, { createPlaylist = false }) { playlist, pick -> openPlaylist(playlist.id); if (pick) pickPlaylist = playlist.id }
         data.playlists.find { it.id == pickPlaylist }?.let { playlist -> TrackPickerDialog(playable, playlist, vm) { pickPlaylist = null } }
         removeTrack?.let { (listId, trackId) -> AlertDialog(onDismissRequest = { removeTrack = null }, title = { Text("Retirer de cette playlist ?") }, text = { Text("Le fichier reste sur le téléphone, dans vos autres playlists et dans la file déjà lancée.") }, confirmButton = { TextButton({ data.playlists.find { it.id == listId }?.let { vm.savePlaylist(it.copy(trackIds = it.trackIds.filterNot { id -> id == trackId })) }; removeTrack = null }) { Text("Retirer") } }, dismissButton = { TextButton({ removeTrack = null }) { Text("Annuler") } }) }

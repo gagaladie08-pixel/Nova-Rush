@@ -40,13 +40,13 @@ jobs:
       - name: Préparer les livrables
         run: |
           mkdir -p artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk artifacts/NovaListen-0.1.0-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/NovaListen-0.2.0-debug.apk
           cd artifacts
-          sha256sum NovaListen-0.1.0-debug.apk > SHA256SUMS.txt
+          sha256sum NovaListen-0.2.0-debug.apk > SHA256SUMS.txt
       - name: Publier l’APK installable
         uses: actions/upload-artifact@v7
         with:
-          name: NovaListen-0.1.0-debug
+          name: NovaListen-0.2.0-debug
           path: artifacts/
           if-no-files-found: error
           retention-days: 30

@@ -13,6 +13,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.novalisten.app.data.*
 import com.novalisten.app.playback.PlaybackService
+import com.novalisten.app.enrichment.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as NovaApplication
     val repository = app.repository
     val themes = app.themes
+    val credentials = app.credentials
+    val remote = app.remote
+    val remoteImages = app.remoteImages
+    val translation = app.translation
     private val _playback = MutableStateFlow(PlaybackUi())
     val playback = _playback.asStateFlow()
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 5)
@@ -53,6 +58,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     init {
+        viewModelScope.launch { credentials.refresh() }
         repository.refresh()
         controllerFuture.addListener({
             runCatching {
@@ -111,6 +117,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun hide(tracks: List<Track>) { viewModelScope.launch { repository.mutate { tracks.forEach { setFlag(it.id, "hidden", true) } }; message("Masqué dans toute l’application · fichier conservé") } }
     fun unhide(track: Track) { viewModelScope.launch { repository.mutate { setFlag(track.id, "hidden", false) } } }
     fun saveLyrics(id: String, lyrics: SavedLyrics) { viewModelScope.launch { repository.mutate { saveLyrics(id, lyrics) }; message("Paroles sauvegardées dans NovaListen, hors ligne") } }
+    fun saveCover(id: String, cover: SavedCover?) { viewModelScope.launch { repository.mutate { saveCover(id, cover) }; message(if (cover == null) "Pochette du fichier rétablie dans l’affichage" else "Pochette d’affichage sauvegardée dans NovaListen, pas dans le fichier audio") } }
+    fun saveIdentity(id: String, mbid: String?) { viewModelScope.launch { repository.mutate { saveIdentity(id, mbid) } } }
+    fun clearRemotePreviews() { viewModelScope.launch { remoteImages.clearPreviews() } }
     fun saveArtist(id: String, note: ArtistNote) { viewModelScope.launch { repository.mutate { saveArtist(id, note) } } }
     fun createPlaylist(name: String, tracks: List<Track> = emptyList(), done: (LocalPlaylist) -> Unit = {}) {
         if (name.isBlank()) return

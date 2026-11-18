@@ -2,6 +2,7 @@ package com.novalisten.app
 
 import android.app.Application
 import com.novalisten.app.data.MusicRepository
+import com.novalisten.app.enrichment.*
 import com.novalisten.app.ui.theme.ThemePreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,4 +12,9 @@ class NovaApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val repository by lazy { MusicRepository(this, applicationScope) }
     val themes by lazy { ThemePreferences(this) }
+    val credentials by lazy { CredentialVault(this) }
+    private val http by lazy { RemoteHttp() }
+    val remote by lazy { RemoteSources(http, credentials::get) }
+    val remoteImages by lazy { RemoteImages(this, http) }
+    val translation by lazy { LocalTranslation(this) }
 }

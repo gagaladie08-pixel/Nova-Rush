@@ -24,7 +24,7 @@ def publish(label, data):
 
 
 def main():
-    apk = Path('artifacts/NovaListen-0.1.0-debug.apk')
+    apk = Path('artifacts/NovaListen-0.2.0-debug.apk')
     if apk.is_file():
         publish(apk.name, apk.read_bytes())
     log = Path('artifacts/diagnostics/gradle.log')

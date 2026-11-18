@@ -7,16 +7,28 @@ import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 import java.util.UUID
 
-class NovaDatabase(context: Context) : SQLiteOpenHelper(context, "novalisten.db", null, 1) {
+class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpenHelper(context, name, null, 2) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE flags (track TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, tracks TEXT NOT NULL, created INTEGER NOT NULL, pinned INTEGER, cover TEXT)")
         db.execSQL("CREATE TABLE listens (id INTEGER PRIMARY KEY AUTOINCREMENT, track TEXT NOT NULL, at INTEGER NOT NULL, zone TEXT NOT NULL, local_date TEXT NOT NULL, local_hour INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX listens_track_at ON listens(track, at)")
-        db.execSQL("CREATE TABLE lyrics (track TEXT PRIMARY KEY, original TEXT NOT NULL, french TEXT NOT NULL)")
-        db.execSQL("CREATE TABLE artists (id TEXT PRIMARY KEY, bio TEXT NOT NULL, source TEXT NOT NULL, portrait TEXT)")
+        db.execSQL("CREATE TABLE lyrics (track TEXT PRIMARY KEY, original TEXT NOT NULL, french TEXT NOT NULL, original_source TEXT NOT NULL DEFAULT '', french_source TEXT NOT NULL DEFAULT '')")
+        db.execSQL("CREATE TABLE artists (id TEXT PRIMARY KEY, bio TEXT NOT NULL, source TEXT NOT NULL, portrait TEXT, portrait_source TEXT NOT NULL DEFAULT '')")
+        createEnrichmentTables(db)
     }
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    private fun createEnrichmentTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE album_covers (id TEXT PRIMARY KEY, uri TEXT NOT NULL, source TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE identities (id TEXT PRIMARY KEY, mbid TEXT NOT NULL)")
+    }
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE lyrics ADD COLUMN original_source TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE lyrics ADD COLUMN french_source TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE artists ADD COLUMN portrait_source TEXT NOT NULL DEFAULT ''")
+            createEnrichmentTables(db)
+        }
+    }
 
     fun snapshot(): LocalData {
         val favorites = mutableSetOf<String>()
@@ -39,14 +51,22 @@ class NovaDatabase(context: Context) : SQLiteOpenHelper(context, "novalisten.db"
             while (c.moveToNext()) events += ListenEvent(c.getLong(0), c.getString(1), c.getLong(2), c.getString(3), c.getString(4), c.getInt(5))
         }
         val lyrics = mutableMapOf<String, SavedLyrics>()
-        readableDatabase.rawQuery("SELECT track,original,french FROM lyrics", null).use { c ->
-            while (c.moveToNext()) lyrics[c.getString(0)] = SavedLyrics(c.getString(1), c.getString(2))
+        readableDatabase.rawQuery("SELECT track,original,french,original_source,french_source FROM lyrics", null).use { c ->
+            while (c.moveToNext()) lyrics[c.getString(0)] = SavedLyrics(c.getString(1), c.getString(2), c.getString(3), c.getString(4))
         }
         val artists = mutableMapOf<String, ArtistNote>()
-        readableDatabase.rawQuery("SELECT id,bio,source,portrait FROM artists", null).use { c ->
-            while (c.moveToNext()) artists[c.getString(0)] = ArtistNote(c.getString(1), c.getString(2), c.getString(3))
+        readableDatabase.rawQuery("SELECT id,bio,source,portrait,portrait_source FROM artists", null).use { c ->
+            while (c.moveToNext()) artists[c.getString(0)] = ArtistNote(c.getString(1), c.getString(2), c.getString(3), c.getString(4))
         }
-        return LocalData(favorites, hidden, lists, events, lyrics, artists)
+        val covers = mutableMapOf<String, SavedCover>()
+        readableDatabase.rawQuery("SELECT id,uri,source FROM album_covers", null).use { c ->
+            while (c.moveToNext()) covers[c.getString(0)] = SavedCover(c.getString(1), c.getString(2))
+        }
+        val identities = mutableMapOf<String, String>()
+        readableDatabase.rawQuery("SELECT id,mbid FROM identities", null).use { c ->
+            while (c.moveToNext()) identities[c.getString(0)] = c.getString(1)
+        }
+        return LocalData(favorites, hidden, lists, events, lyrics, artists, covers, identities)
     }
 
     fun setFlag(id: String, column: String, value: Boolean) {
@@ -70,12 +90,23 @@ class NovaDatabase(context: Context) : SQLiteOpenHelper(context, "novalisten.db"
     }
     fun saveLyrics(id: String, lyrics: SavedLyrics) {
         writableDatabase.insertWithOnConflict("lyrics", null, ContentValues().apply {
-            put("track", id); put("original", lyrics.original); put("french", lyrics.french)
+            put("track", id); put("original", lyrics.original); put("french", lyrics.french); put("original_source", lyrics.originalSource); put("french_source", lyrics.frenchSource)
         }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+    fun saveCover(id: String, cover: SavedCover?) {
+        if (cover == null) writableDatabase.delete("album_covers", "id=?", arrayOf(id))
+        else writableDatabase.insertWithOnConflict("album_covers", null, ContentValues().apply { put("id", id); put("uri", cover.uri); put("source", cover.source) }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+    fun saveIdentity(id: String, mbid: String?) {
+        if (mbid == null) writableDatabase.delete("identities", "id=?", arrayOf(id))
+        else {
+            com.novalisten.app.enrichment.RemoteSafety.mbid(mbid)
+            writableDatabase.insertWithOnConflict("identities", null, ContentValues().apply { put("id", id); put("mbid", mbid) }, SQLiteDatabase.CONFLICT_REPLACE)
+        }
     }
     fun saveArtist(id: String, note: ArtistNote) {
         writableDatabase.insertWithOnConflict("artists", null, ContentValues().apply {
-            put("id", id); put("bio", note.biography); put("source", note.source); put("portrait", note.portrait)
+            put("id", id); put("bio", note.biography); put("source", note.source); put("portrait", note.portrait); put("portrait_source", note.portraitSource)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 }

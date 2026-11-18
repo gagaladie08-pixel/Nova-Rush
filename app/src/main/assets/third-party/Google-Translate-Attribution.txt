@@ -1,0 +1,11 @@
+Google Translate attribution badge
+
+Official, unmodified branding resource; not a new NovaListen logo. Google trademarks remain the property of Google. Use governed by the attribution / brand guidelines.
+
+Source: https://docs.cloud.google.com/static/translate/images/google-translate-attribution.zip
+Guidelines: https://cloud.google.com/translate/attribution
+ML Kit terms: https://developers.google.com/ml-kit/language/translation/translation-terms
+ZIP SHA-256: 1cf5975466881127a227d4c0510518a83542eacff57d0ac5240430263035ee1b
+Entry: png/color-regular@3x.png
+Resource SHA-256: 44aab849963bc32493c1b2ff4ed9d47aea8d16cdfa12d3aaebef22feb2ba2ca9
+Retrieved by workflow 44278737925.

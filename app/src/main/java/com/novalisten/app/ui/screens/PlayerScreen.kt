@@ -75,13 +75,14 @@ fun MiniPlayer(track: Track, playback: PlaybackUi, vm: MainViewModel, onOpen: ()
 }
 
 @Composable
-fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List<Track>, vm: MainViewModel, onDismiss: () -> Unit, onMenu: () -> Unit, onAdd: () -> Unit, onEditLyrics: () -> Unit, blocked: Boolean) {
+fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List<Track>, vm: MainViewModel, onDismiss: () -> Unit, onMenu: () -> Unit, onAdd: () -> Unit, onEditLyrics: () -> Unit, onSearchLyrics: () -> Unit, onTranslateLyrics: () -> Unit, blocked: Boolean) {
     var lyricsPage by rememberSaveable { mutableStateOf(false) }
     var controls by remember { mutableStateOf(true) }
     var lastTouch by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var touched by remember { mutableStateOf(false) }
     var queue by remember { mutableStateOf(false) }
     var french by rememberSaveable { mutableStateOf(false) }
+    var provenance by remember { mutableStateOf<String?>(null) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val view = LocalView.current
         val window = (view.parent as? DialogWindowProvider)?.window
@@ -149,6 +150,13 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
                         TextButton({ french = !french }, enabled = saved.french.isNotBlank()) { Text(if (french && saved.french.isNotBlank()) "FR → VO" else "VO → FR") }
                         IconButton(onEditLyrics) { Icon(Icons.Outlined.EditNote, "Modifier les paroles") }
                     }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onSearchLyrics) { Icon(Icons.Outlined.Search, null); Text("Rechercher") }
+                        TextButton(onTranslateLyrics, enabled = saved.original.isNotBlank()) { Icon(Icons.Outlined.Translate, null); Text("Traduire") }
+                        val credit = if (french && saved.french.isNotBlank()) saved.frenchSource else saved.originalSource
+                        if (credit.isNotBlank()) TextButton({ provenance = credit }) { Text("Source") }
+                    }
+                    if (french && saved.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
                     LyricsBody(text, timed, active, Modifier.weight(1f), vm::seek, onEditLyrics)
                 } else {
                     Box(Modifier.weight(1f).fillMaxWidth().clickable { controls = true; lastTouch = System.currentTimeMillis() }, contentAlignment = Alignment.Center) {
@@ -176,6 +184,7 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
             }
             if (!controls && !lyricsPage) TextButton({ controls = true }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()) { Text("Afficher les commandes") }
         }
+        provenance?.let { credit -> AlertDialog(onDismissRequest = { provenance = null }, title = { Text("Source des paroles") }, text = { LazyColumn { item { Text(credit) } } }, confirmButton = { TextButton({ provenance = null }) { Text("Fermer") } }) }
         if (queue) ModalBottomSheet(onDismissRequest = { queue = false }) {
             Text("File d’attente · ${playback.queue.size}", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
             LazyColumn(Modifier.fillMaxHeight(.7f)) {
@@ -214,7 +223,7 @@ private fun LyricsBody(text: String, timed: List<LyricLine>, active: Int, modifi
     LaunchedEffect(dragged) { if (dragged) follow = false }
     LaunchedEffect(active, follow) { if (follow && active >= 0) list.animateScrollToItem(active.coerceAtLeast(0)) }
     Column(modifier) {
-        if (text.isBlank()) EmptyState("Vos mots, votre musique", "Collez un texte ou des paroles LRC horodatées. Les versions originale et française restent séparées. La traduction automatique n’est pas encore intégrée.", Icons.Outlined.Lyrics, Modifier.weight(1f), action = { Button(onEdit) { Text("Ajouter les paroles") } })
+        if (text.isBlank()) EmptyState("Vos mots, votre musique", "Collez un texte ou des paroles LRC horodatées. Les versions originale et française restent séparées. Recherche et traduction facultatives via les boutons ci-dessus ; aucun appel en ouvrant cette page.", Icons.Outlined.Lyrics, Modifier.weight(1f), action = { Button(onEdit) { Text("Ajouter les paroles") } })
         else {
             if (timed.isNotEmpty()) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Synchro · Ligne (LRC)", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.bodySmall)

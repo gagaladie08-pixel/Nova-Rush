@@ -79,7 +79,7 @@ fun CatalogScreen(artists: Boolean, tracks: List<Track>, data: LocalData, vm: Ma
 }
 
 @Composable
-fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: MainViewModel, actions: TrackActions, onBack: () -> Unit, onAlbum: (String) -> Unit, onLibrary: () -> Unit, onPortrait: () -> Unit) {
+fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: MainViewModel, actions: TrackActions, onBack: () -> Unit, onAlbum: (String) -> Unit, onLibrary: () -> Unit, onPortrait: () -> Unit, onBiography: () -> Unit, onPhotos: () -> Unit) {
     val note = data.artists[group.id] ?: ArtistNote()
     var expanded by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
@@ -96,12 +96,17 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
                 Artwork(note.portrait, group.name, Modifier.size(180.dp), round = true, artist = true)
                 Spacer(Modifier.height(16.dp)); Text(group.name, style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(12.dp))
-                Text(note.biography.ifBlank { "Aucune biographie sauvegardée. Vous pouvez ajouter votre texte localement ; la recherche en ligne sera intégrée ensuite." }, maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                Text(note.biography.ifBlank { "Aucune biographie sauvegardée. Recherchez une version en ligne ou ajoutez votre texte localement." }, maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                 Row {
                     TextButton({ expanded = !expanded }) { Text(if (expanded) "Voir moins" else "Voir plus") }
                     TextButton({ editing = true }) { Text("Éditer le texte local") }
                 }
+                Row {
+                    TextButton(onBiography) { Icon(Icons.Outlined.Search, null); Text("Biographie en ligne") }
+                    TextButton(onPhotos) { Icon(Icons.Outlined.ImageSearch, null); Text("Photos en ligne") }
+                }
                 if (expanded && note.source.isNotBlank()) Text("Source indiquée : ${note.source}", style = MaterialTheme.typography.bodySmall)
+                if (expanded && note.portraitSource.isNotBlank()) Text("Crédits du portrait : ${note.portraitSource}", style = MaterialTheme.typography.bodySmall)
             }
         }
         item { SectionHeader("Sorties locales", "Le type des sorties n’est pas encore vérifié") }
@@ -120,6 +125,8 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem({ Text("Lire ensuite") }, { menu = false; vm.next(group.tracks) })
                         DropdownMenuItem({ Text("Ajouter à une playlist") }, { menu = false; actions.add(group.tracks) })
+                        DropdownMenuItem({ Text("Rechercher des photos en ligne") }, { menu = false; onPhotos() })
+                        DropdownMenuItem({ Text("Rechercher une biographie en ligne") }, { menu = false; onBiography() })
                         DropdownMenuItem({ Text("Choisir une photo locale") }, { menu = false; onPortrait() })
                         DropdownMenuItem({ Text("Biographie locale et source") }, { menu = false; editing = true })
                     }
@@ -130,16 +137,16 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
         if (top.isEmpty()) item { Notice("Pas encore d’écoute validée pour cet artiste. Une minute réellement jouée est nécessaire ; aucun classement mondial n’est utilisé.") }
         items(top, key = { it.id }) { track -> TrackRow(track, track.id in data.favorites, playback.currentId == track.id, { vm.play(top, track) }, { vm.favorite(track) }, { actions.menu(track) }, { vm.next(listOf(track)) }, { actions.info(track) }, onSelect = { actions.add(listOf(track)) }) }
         item { OutlinedButton(onLibrary, Modifier.fillMaxWidth().padding(20.dp)) { Icon(Icons.Outlined.LibraryMusic, null); Spacer(Modifier.width(8.dp)); Text("Bibliothèque de l’artiste") } }
-        item { Notice("Biographies et portraits enregistrés localement. Recherche multi-API, records vérifiés et catégories détaillées à venir.") }
+        item { Notice("Biographies et portraits choisis sont conservés localement avec leurs sources. Recherches en ligne volontaires uniquement ; records vérifiés et catégories détaillées restent à développer.") }
         item { Spacer(Modifier.height(16.dp)) }
     }
     if (editing) AlertDialog(onDismissRequest = { editing = false }, title = { Text("Biographie locale") }, text = {
         Column { OutlinedTextField(bio, { bio = it.take(30_000) }, label = { Text("Votre texte") }, modifier = Modifier.heightIn(max = 240.dp)); Spacer(Modifier.height(8.dp)); OutlinedTextField(source, { source = it.take(1000) }, label = { Text("Source / crédits") }); Text("Sauvegardé dans NovaListen, sans réécrire les fichiers audio.", style = MaterialTheme.typography.bodySmall) }
-    }, confirmButton = { TextButton({ vm.saveArtist(group.id, note.copy(biography = bio, source = source)); editing = false }) { Text("Sauvegarder") } }, dismissButton = { TextButton({ editing = false }) { Text("Annuler") } })
+    }, confirmButton = { TextButton({ vm.saveArtist(group.id, note.copy(biography = bio, source = source + if (bio != note.biography && source.isNotBlank()) "\nAdaptation manuelle dans NovaListen." else "")); editing = false }) { Text("Sauvegarder") } }, dismissButton = { TextButton({ editing = false }) { Text("Annuler") } })
 }
 
 @Composable
-fun AlbumDetail(group: AlbumGroup, data: LocalData, playback: PlaybackUi, vm: MainViewModel, actions: TrackActions, onBack: () -> Unit, onArtist: (String) -> Unit) {
+fun AlbumDetail(group: AlbumGroup, data: LocalData, playback: PlaybackUi, vm: MainViewModel, actions: TrackActions, onBack: () -> Unit, onArtist: (String) -> Unit, onCovers: () -> Unit) {
     TrackListScreen("Album", group.tracks, data, playback, vm, actions, onBack = onBack, fixedOrder = true, header = {
         item {
             Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -148,6 +155,8 @@ fun AlbumDetail(group: AlbumGroup, data: LocalData, playback: PlaybackUi, vm: Ma
                 TextButton({ group.tracks.firstOrNull()?.let { onArtist(it.artistKey) } }) { Text(group.artist) }
                 Text(listOfNotNull(group.tracks.firstOrNull()?.year?.takeIf { it > 0 }?.toString(), "${group.tracks.size} titres locaux", totalDurationLabel(group.tracks.sumOf { it.durationMs })).joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
                 Row { TextButton({ vm.next(group.tracks) }) { Text("Lire ensuite") }; TextButton({ actions.add(group.tracks) }) { Text("Ajouter à une playlist") } }
+                TextButton(onCovers) { Icon(Icons.Outlined.ImageSearch, null); Text("Chercher une pochette en ligne") }
+                data.covers[group.id]?.let { cover -> Text("Pochette d’affichage seulement · fichiers intacts\n${cover.source}", style = MaterialTheme.typography.bodySmall) }
             }
         }
     })
