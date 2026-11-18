@@ -1,0 +1,13 @@
+NovaListen uses these open-source libraries, without modifying their source:
+
+AndroidX / Jetpack Compose / Material 3 — The Android Open Source Project — Apache 2.0.
+AndroidX Media3 / ExoPlayer — The Android Open Source Project — Apache 2.0.
+Kotlin — JetBrains s.r.o. and contributors — Apache 2.0.
+Kotlin coroutines — JetBrains s.r.o. and contributors — Apache 2.0.
+Coil — Coil Contributors — Apache 2.0.
+Guava — The Guava Authors — Apache 2.0.
+
+Upstream licence texts are included in this folder. Font-specific licences,
+copyright notices and exact provenance are included in ../font-licenses/.
+The APK is a debug build; the exhaustive transitive dependency inventory remains
+to be automated before a production distribution.

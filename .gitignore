@@ -11,3 +11,6 @@ local.properties
 captures/
 artifacts/
 .DS_Store
+
+__pycache__/
+*.py[cod]

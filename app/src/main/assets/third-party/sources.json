@@ -1,0 +1,32 @@
+[
+  {
+    "name": "androidx",
+    "source": "https://github.com/androidx/androidx/blob/androidx-main/LICENSE.txt",
+    "sha": "e454a52586f29b8ce8a6799163eac1f875e9ac01"
+  },
+  {
+    "name": "media3",
+    "source": "https://github.com/androidx/media/blob/release/LICENSE",
+    "sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+  },
+  {
+    "name": "coil",
+    "source": "https://github.com/coil-kt/coil/blob/main/LICENSE.txt",
+    "sha": "ebd16d9f5bb5f7b5a944f4d969e493e05e398f32"
+  },
+  {
+    "name": "kotlin",
+    "source": "https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt",
+    "sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+  },
+  {
+    "name": "coroutines",
+    "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt",
+    "sha": "9c308d958bf91eafe83f66106ca692ff414a4965"
+  },
+  {
+    "name": "guava",
+    "source": "https://github.com/google/guava/blob/master/LICENSE",
+    "sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+  }
+]

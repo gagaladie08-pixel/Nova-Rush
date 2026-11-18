@@ -69,7 +69,7 @@ class ThemePreferences(context: Context) {
     }
 }
 
-fun universeShape(spec: ThemeSpec): Shape = spec.radius?.let { RoundedCornerShape(it.dp) } ?: CutCornerShape(percent = 12)
+fun universeShape(spec: ThemeSpec): androidx.compose.foundation.shape.CornerBasedShape = spec.radius?.let { RoundedCornerShape(it.dp) } ?: CutCornerShape(percent = 12)
 fun onColor(color: Color): Color = if (color.luminance() > 0.179f) Color.Black else Color.White
 
 @Composable

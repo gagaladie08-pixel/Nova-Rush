@@ -21,7 +21,7 @@ import com.novalisten.app.ui.theme.LocalUniverse
 @Composable
 fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onAppearance: () -> Unit, onHidden: () -> Unit, onHistory: () -> Unit, onSystem: () -> Unit, onNotifications: () -> Unit) {
     val context = LocalContext.current
-    var licences by remember { mutableStateOf(false) }
+    var licenceDirectory by remember { mutableStateOf<String?>(null) }
     var licenceText by remember { mutableStateOf<String?>(null) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { PageTitle("Réglages", "NovaListen ${BuildConfig.VERSION_NAME} · première version") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
@@ -35,12 +35,13 @@ fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onApp
         item { Notice("Cette version n’a pas de permission Internet, pas de compte, pas de publicité et pas de télémétrie. Vos fichiers et vos paroles ne quittent pas l’appareil. Les sauvegardes automatiques Android sont désactivées.") }
         item { SectionHeader("Ce qui arrive ensuite") }
         item { Notice("API d’enrichissement, traduction ML Kit / Azure sur demande, Fil Rouge et autres modèles Nova, édition des fichiers et fusion d’albums : non intégrés dans 0.1. Listening Party et YouTube restent à concevoir.") }
-        item { SettingRow("Licences des polices", "25 familles embarquées · OFL / Ubuntu Font Licence", Icons.Outlined.Description) { licences = true } }
+        item { SettingRow("Licences des polices", "25 familles embarquées · OFL / Ubuntu Font Licence", Icons.Outlined.Description) { licenceDirectory = "font-licenses" } }
+        item { SettingRow("Licences des bibliothèques principales", "AndroidX, Media3, Kotlin, Coil et Guava", Icons.Outlined.Description) { licenceDirectory = "third-party" } }
         item { Notice("APK de test signé automatiquement, pas une version de production. Les signatures des compilations peuvent différer ; conservez vos données avant toute désinstallation. Les réglages et enrichissements sont stockés seulement dans NovaListen.") }
     }
-    if (licences) AlertDialog(onDismissRequest = { licences = false }, title = { Text("Polices libres") }, text = {
-        LazyColumn { items(context.assets.list("font-licenses")?.filter { it.endsWith(".txt") }?.toList().orEmpty()) { name -> TextButton({ licenceText = context.assets.open("font-licenses/$name").bufferedReader().use { it.readText() } }) { Text(name.removeSuffix(".txt")) } } }
-    }, confirmButton = { TextButton({ licences = false }) { Text("Fermer") } })
+    licenceDirectory?.let { directory -> AlertDialog(onDismissRequest = { licenceDirectory = null }, title = { Text(if (directory == "font-licenses") "Polices libres" else "Bibliothèques principales") }, text = {
+        LazyColumn { items(context.assets.list(directory)?.filter { it.endsWith(".txt") }?.toList().orEmpty()) { name -> TextButton({ licenceText = context.assets.open("$directory/$name").bufferedReader().use { it.readText() } }) { Text(name.removeSuffix(".txt")) } } }
+    }, confirmButton = { TextButton({ licenceDirectory = null }) { Text("Fermer") } }) }
     licenceText?.let { text -> AlertDialog(onDismissRequest = { licenceText = null }, title = { Text("Licence de la police") }, text = { LazyColumn { item { Text(text, style = MaterialTheme.typography.bodySmall) } } }, confirmButton = { TextButton({ licenceText = null }) { Text("Fermer") } }) }
 }
 

@@ -98,14 +98,17 @@ fun sortTracks(tracks: List<Track>, sort: TrackSort, descending: Boolean): List<
 }
 
 /** New references are prepended without moving any existing reference. */
-fun prependUnique(existing: List<String>, incoming: List<String>): List<String> =
-    incoming.distinct().filterNot { it in existing.toHashSet() } + existing
+fun prependUnique(existing: List<String>, incoming: List<String>): List<String> {
+    val existingIds = existing.toHashSet()
+    return incoming.distinct().filterNot { it in existingIds } + existing
+}
 
 /** Retain the current item and all the past; move future duplicates to the new block. */
 fun insertNext(existing: List<String>, current: Int, incoming: List<String>): List<String> {
     val block = incoming.distinct()
     if (existing.isEmpty() || current !in existing.indices) return block
-    return existing.take(current + 1) + block + existing.drop(current + 1).filterNot { it in block }
+    val blockIds = block.toHashSet()
+    return existing.take(current + 1) + block + existing.drop(current + 1).filterNot { it in blockIds }
 }
 
 fun inLocalDayWindow(event: ListenEvent, days: Long, today: LocalDate = LocalDate.now()): Boolean =

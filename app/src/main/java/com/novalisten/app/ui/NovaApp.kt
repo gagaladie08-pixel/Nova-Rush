@@ -128,11 +128,11 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                 if (!settings.effects) EnterTransition.None togetherWith ExitTransition.None
                                 else when (t.effect) {
                                     "villain", "venom" -> slideInHorizontally(tween(t.transitionMs ?: 150)) { 12 } togetherWith slideOutHorizontally(tween(t.transitionMs ?: 150)) { -12 }
-                                    "survivor" -> slideInVertically(spring(dampingRatio = .9f)) { it / 4 } togetherWith ExitTransition.None
+                                    "survivor" -> slideInVertically(if (t.id == "custom" && t.transitionMs != null) tween(t.transitionMs) else spring(dampingRatio = .9f)) { it / 4 } togetherWith ExitTransition.None
                                     "y2k", "queen" -> (scaleIn(spring(dampingRatio = .65f), initialScale = .95f) + fadeIn(tween(t.transitionMs ?: 320))) togetherWith fadeOut(tween(120))
-                                    "velvet" -> slideInHorizontally(tween(500)) { it / 3 } togetherWith fadeOut(tween(250))
-                                    "chaos" -> slideInHorizontally(tween((100..400).random())) { 14 } togetherWith ExitTransition.None
-                                    else -> fadeIn(tween(t.transitionMs ?: 280)) togetherWith fadeOut(tween(t.transitionMs ?: 280))
+                                    "velvet" -> slideInHorizontally(if (t.transitionMs != null) tween(t.transitionMs) else spring()) { it / 3 } togetherWith fadeOut(if (t.transitionMs != null) tween(t.transitionMs / 2) else spring())
+                                    "chaos" -> slideInHorizontally(if (t.id == "custom" && t.transitionMs != null) tween(t.transitionMs) else tween((100..400).random())) { 14 } togetherWith ExitTransition.None
+                                    else -> fadeIn(if (t.transitionMs != null) tween(t.transitionMs) else spring()) togetherWith fadeOut(if (t.transitionMs != null) tween(t.transitionMs) else spring())
                                 }
                             }) { activeTab ->
                                 if (!library.permission && activeTab < 5) {
