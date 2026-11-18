@@ -105,8 +105,8 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
                     TextButton(onBiography) { Icon(Icons.Outlined.Search, null); Text("Biographie en ligne") }
                     TextButton(onPhotos) { Icon(Icons.Outlined.ImageSearch, null); Text("Photos en ligne") }
                 }
-                if (expanded && note.source.isNotBlank()) Text("Source indiquée : ${note.source}", style = MaterialTheme.typography.bodySmall)
-                if (expanded && note.portraitSource.isNotBlank()) Text("Crédits du portrait : ${note.portraitSource}", style = MaterialTheme.typography.bodySmall)
+                if (expanded && note.source.isNotBlank()) SavedAttribution(note.source)
+                if (expanded && note.portraitSource.isNotBlank()) SavedAttribution("Crédits du portrait :\n${note.portraitSource}")
             }
         }
         item { SectionHeader("Sorties locales", "Le type des sorties n’est pas encore vérifié") }
@@ -156,7 +156,7 @@ fun AlbumDetail(group: AlbumGroup, data: LocalData, playback: PlaybackUi, vm: Ma
                 Text(listOfNotNull(group.tracks.firstOrNull()?.year?.takeIf { it > 0 }?.toString(), "${group.tracks.size} titres locaux", totalDurationLabel(group.tracks.sumOf { it.durationMs })).joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
                 Row { TextButton({ vm.next(group.tracks) }) { Text("Lire ensuite") }; TextButton({ actions.add(group.tracks) }) { Text("Ajouter à une playlist") } }
                 TextButton(onCovers) { Icon(Icons.Outlined.ImageSearch, null); Text("Chercher une pochette en ligne") }
-                data.covers[group.id]?.let { cover -> Text("Pochette d’affichage seulement · fichiers intacts\n${cover.source}", style = MaterialTheme.typography.bodySmall) }
+                data.covers[group.id]?.let { cover -> SavedAttribution("Pochette d’affichage seulement · fichiers intacts\n${cover.source}") }
             }
         }
     })

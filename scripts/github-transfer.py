@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Optional delivery bridge for environments unable to reach Actions blob storage.
-Creates only unreferenced GitHub blobs: NO commit, tag, tree or branch is changed.
-The ordinary Actions artifacts remain the canonical user-facing download.
-Only the APK, CI log and test reports from this build are eligible; never secrets.
+"""Delivery bridge when Actions blob storage is unreachable from the workspace.
+Only unreferenced GitHub blobs: NO commit, tree, tag or branch is changed.
+Eligible: the APK, CI log and test reports, never credentials or phone data.
+Larger APKs are chunked to avoid oversized JSON requests to the Git Data API.
 """
 import base64
 import hashlib
@@ -13,20 +13,25 @@ from pathlib import Path
 import subprocess
 import zipfile
 
+CHUNK_BYTES = 20_000_000
+
 
 def publish(label, data):
-    result = json.loads(subprocess.check_output(
-        ['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/git/blobs', '--input', '-'],
-        input=json.dumps({'content': base64.b64encode(data).decode('ascii'), 'encoding': 'base64'}).encode(),
-    ))
-    info = {'file': label, 'blob': result['sha'], 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'commit': os.environ['GITHUB_SHA']}
+    command = ['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/git/blobs', '--input', '-']
+    result = subprocess.run(command, input=json.dumps({'content': base64.b64encode(data).decode('ascii'), 'encoding': 'base64'}).encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode:
+        # Fixed endpoint, no provider keys in this script, and never print request bodies/base64.
+        error = result.stderr.decode(errors='replace')[:1200].replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
+        print(f'::error title=NovaListen delivery bridge::{label}: {error}', flush=True)
+        raise RuntimeError(f'GitHub blob transfer failed: {label}')
+    response = json.loads(result.stdout)
+    info = {'file': label, 'blob': response['sha'], 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'commit': os.environ['GITHUB_SHA']}
     print('::notice title=NovaListen delivery::' + json.dumps(info), flush=True)
+    return info
 
 
 def main():
-    apk = Path('artifacts/NovaListen-0.2.0-debug.apk')
-    if apk.is_file():
-        publish(apk.name, apk.read_bytes())
+    # Publish diagnostics before the binary, so a delivery problem cannot hide test failures.
     log = Path('artifacts/diagnostics/gradle.log')
     if log.is_file():
         publish('gradle.log', log.read_bytes())
@@ -38,6 +43,12 @@ def main():
             for file in files:
                 archive.write(file)
         publish('NovaListen-verifications.zip', buffer.getvalue())
+    apk = Path('artifacts/NovaListen-0.2.0-debug.apk')
+    if apk.is_file():
+        data = apk.read_bytes()
+        parts = [publish(f'{apk.name}.part-{index // CHUNK_BYTES + 1:03d}', data[index:index + CHUNK_BYTES]) for index in range(0, len(data), CHUNK_BYTES)]
+        manifest = {'file': apk.name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'commit': os.environ['GITHUB_SHA'], 'parts': parts}
+        print('::notice title=NovaListen APK manifest::' + json.dumps(manifest), flush=True)
 
 
 if __name__ == '__main__':

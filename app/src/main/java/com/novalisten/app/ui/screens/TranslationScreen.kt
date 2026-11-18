@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import com.novalisten.app.MainViewModel
 import com.novalisten.app.data.*
 import com.novalisten.app.enrichment.*
@@ -28,24 +29,25 @@ internal fun TranslationScreen(track: Track, vm: MainViewModel, onDismiss: () ->
     val work = rememberRemoteWork()
     val saveWork = rememberRemoteWork()
     fun sourceChosen(): Boolean = language.isNotBlank() && acknowledged && original.isNotBlank() && !work.busy
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().testTag("translation_screen"), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Notice("${track.title} — ${track.artist}\nTraduction de la VO sauvegardée (${original.length} caractères), pas du fichier audio. Langue source à choisir ; aucun transfert après une erreur locale. L’ancienne VF reste en place jusqu’à votre choix.") }
         if (original.isBlank()) item { Notice("Ajoutez ou choisissez d’abord des paroles originales. Aucun service n’est appelé.") }
         item { Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("en" to "Anglais", "es" to "Espagnol", "ko" to "Coréen").forEach { (code, label) ->
-                FilterChip(language == code, { language = code; result = ""; progress = ""; cloudConsent = false }, { Text(label) }, enabled = !work.busy)
+                FilterChip(language == code, { language = code; result = ""; progress = ""; cloudConsent = false }, { Text(label) }, modifier = Modifier.testTag("translation_language_$code"), enabled = !work.busy)
             }
         } }
         item { Notice("ML Kit calcule sur l’appareil après téléchargement des packs. Le SDK Google déclare des diagnostics d’appareil, d’application et de performances après activation. En dehors de la traduction elle-même, ce n’est donc pas une promesse de zéro communication réseau. EN/ES/KO → FR ; les traductions entre langues autres que l’anglais passent par l’anglais.") }
-        item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(acknowledged, { acknowledged = it }); Text("J’ai les droits de traduire ce texte et j’accepte l’activation de ML Kit avec ces diagnostics.", style = MaterialTheme.typography.bodySmall) } }
+        item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(acknowledged, { acknowledged = it }, Modifier.testTag("translation_local_consent")); Text("J’ai les droits de traduire ce texte et j’accepte l’activation de ML Kit avec ces diagnostics.", style = MaterialTheme.typography.bodySmall) } }
         item { Button({ work.run {
             result = ""; savingConfirmed = false
             val plan = TranslationPlan(original)
             progress = "Traduction locale en cours…"
-            result = vm.translation.translate(plan, language) { completed, total -> progress = "$completed / $total lignes distinctes traduites localement" }
+            try { result = vm.translation.translate(plan, language) { completed, total -> progress = "$completed / $total lignes distinctes traduites localement" } }
+            catch (e: Exception) { progress = ""; throw e }
             engine = "Google Translate · ML Kit sur l’appareil"
             progress = "Traduction locale proposée, pas encore sauvegardée."
-        } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = sourceChosen()) { Text("Translate with Google · sur l’appareil") } }
+        } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("translate_local"), enabled = sourceChosen()) { Text("Translate with Google · sur l’appareil") } }
         item { WorkStatus(work) }
         if (progress.isNotBlank()) item { Notice(progress) }
         item { SectionHeader("Packs de langues · téléchargement volontaire") }
@@ -53,24 +55,26 @@ internal fun TranslationScreen(track: Track, vm: MainViewModel, onDismiss: () ->
         item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(wifiOnly, { wifiOnly = it }); Text("Télécharger les packs uniquement en Wi-Fi", style = MaterialTheme.typography.bodySmall) } }
         item { OutlinedButton({ work.run {
             progress = "Téléchargement volontaire des packs requis…"
-            vm.translation.download(language, wifiOnly)
+            try { vm.translation.download(language, wifiOnly) }
+            catch (e: Exception) { progress = ""; throw e }
             progress = "Packs disponibles. Vous pouvez lancer la traduction locale."
-        } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = sourceChosen()) { Text("Télécharger les packs pour cette langue → FR") } }
+        } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("download_translation_packs"), enabled = sourceChosen()) { Text("Télécharger les packs pour cette langue → FR") } }
         item { TextButton({ deleting = true }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Supprimer les packs de traduction de NovaListen") } }
         item { SectionHeader("Autre traduction · Azure F0, uniquement sur demande") }
         item { Notice("Cette option envoie les lignes de la VO à Microsoft avec leur langue, sans audio, titre ni historique. La clé doit appartenir à une ressource Text Translation standard F0. NovaListen ne peut pas vérifier son niveau tarifaire ; n’utilisez pas une clé S1 ou une offre facturable. Aucun fallback ni changement de forfait automatique.") }
-        item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(cloudF0, { cloudF0 = it }); Text("J’ai vérifié dans Azure que cette ressource est bien au niveau gratuit F0.", style = MaterialTheme.typography.bodySmall) } }
-        item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(cloudConsent, { cloudConsent = it }); Text("Je demande explicitement l’envoi de cette VO à Azure pour cette traduction et j’en ai les droits.", style = MaterialTheme.typography.bodySmall) } }
+        item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(cloudF0, { cloudF0 = it }, Modifier.testTag("azure_f0")); Text("J’ai vérifié dans Azure que cette ressource est bien au niveau gratuit F0.", style = MaterialTheme.typography.bodySmall) } }
+        item { Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(cloudConsent, { cloudConsent = it }, Modifier.testTag("azure_consent")); Text("Je demande explicitement l’envoi de cette VO à Azure pour cette traduction et j’en ai les droits.", style = MaterialTheme.typography.bodySmall) } }
         item { OutlinedButton({ work.run {
             result = ""; savingConfirmed = false
+            // Consume the confirmation before validation too. No automatic repeat or provider switch.
+            cloudConsent = false
             val plan = TranslationPlan(original)
             progress = "Traduction distante demandée à Azure F0…"
-            // Consume the confirmation, even on error. No automatic repeat or provider switch.
-            cloudConsent = false
-            result = vm.remote.azure(plan, language)
+            try { result = vm.remote.azure(plan, language) }
+            catch (e: Exception) { progress = ""; throw e }
             engine = "Azure Translator · traduction automatique demandée en ligne"
             progress = "Traduction Azure proposée, pas encore sauvegardée."
-        } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = !work.busy && original.isNotBlank() && language.isNotBlank() && cloudF0 && cloudConsent) { Text("Envoyer cette VO et traduire avec Azure F0") } }
+        } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("translate_azure"), enabled = !work.busy && original.isNotBlank() && language.isNotBlank() && cloudF0 && cloudConsent) { Text("Envoyer cette VO et traduire avec Azure F0") } }
         if (result.isNotBlank()) {
             item { SectionHeader("Proposition française", "Ligne par ligne ; qualité poétique non garantie") }
             item { Column(Modifier.padding(horizontal = 20.dp)) {

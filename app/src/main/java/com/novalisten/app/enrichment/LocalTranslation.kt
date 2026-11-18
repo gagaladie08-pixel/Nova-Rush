@@ -49,6 +49,7 @@ class TranslationPlan(original: String) {
 /** ML Kit is explicitly initialized here, not by an Android startup provider. */
 class LocalTranslation(private val context: Context) {
     @Volatile private var initialized = false
+    val activated: Boolean get() = initialized
     private fun initialize() {
         if (!initialized) synchronized(this) { if (!initialized) { MlKit.initialize(context); initialized = true } }
     }

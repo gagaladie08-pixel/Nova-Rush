@@ -1,10 +1,11 @@
 # NovaListen
 
-Lecteur musical Android local et hors ligne. **Première version : 0.1.0, APK de test**.
+Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.0, enrichissements en ligne facultatifs**.
+La validation de la nouvelle version est en cours ; ne pas confondre celle-ci avec le binaire 0.1 vérifié ci-dessous.
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
 
-## Livraison vérifiée
+## Livraison historique vérifiée — 0.1.0
 
 - [Compilation GitHub Actions réussie — exécution 44268439182](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44268439182).
 - Sources de l’APK : commit `1da6c447840010a5063ae59d3e042fe5c4be7174` de la branche de session.
@@ -14,15 +15,25 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 - Le manifeste compilé a été inspecté : **pas de permission Internet, microphone ou localisation**. Les 25 familles de polices demandées sont présentes avec leurs licences et leurs hachages d’origine. Pas de musique de démonstration dans l’APK.
 - [Guide d’installation et d’essai sur téléphone](docs/developpement/02-guide-essai.md) · [compte rendu de vérification et limites](docs/developpement/03-verification-livraison.md).
 
-Les commits documentaires ultérieurs ne modifient pas l’APK vérifié ci-dessus. L’APK reste un prototype de test, pas une version complète ou certifiée sur tous les téléphones.
+Ces preuves concernent exclusivement **0.1.0**, sans API. Les sources 0.2 ajoutent volontairement Internet et ML Kit : elles ne sont pas couvertes par cette ancienne inspection. Le prototype n’est pas une version complète ou certifiée sur tous les téléphones.
+
+## Nouveautés des sources 0.2
+
+- **Réglages → API et clés** : identifiants chiffrés AES-GCM/Android Keystore, saisie masquée, suppression individuelle/globale ; aucun secret embarqué ni appel de vérification à l’enregistrement.
+- Recherches volontaires de paroles, comparaison de métadonnées, biographies FR puis anglais sur demande, identité et photos, pochettes d’affichage. Aperçu et choix explicite, sources/crédits sauvegardés, fichiers audio intacts.
+- Google Translate via **ML Kit sur l’appareil**, packs volontaires et diagnostics déclarés ; **Azure standard F0 uniquement sur demande explicite**, jamais fallback automatique.
+- Budget partagé de deux requêtes ; premier lot photo borné visant six vignettes décodables et distinctes, avec déduplication locale, pas six portraits garantis.
+- Migration SQLite v1 → v2 sans effacement volontaire des données.
+
+**[Mode d’emploi, identifiants nécessaires, confidentialité et limites exactes](docs/developpement/04-api-et-cles.md).** Aucun compte n’a été créé ni aucune clé réelle incluse. TheAudioDB/Deezer restent non activés faute d’accès gratuit confirmé. Les autres conditions d’admission et droits des contenus restent distincts de la possession d’une clé.
 
 ## Compiler et obtenir l’APK
 
 La compilation est exécutée par **GitHub Actions**, workflow [NovaListen — APK et tests](.github/workflows/novalisten-apk.yml), sur la branche de travail `arena/216bd0ac-nova-rush`.
 
 1. Ouvrir l’exécution correspondant au dernier commit dans l’onglet **Actions** du dépôt.
-2. Télécharger l’artefact **NovaListen-0.1.0-debug**.
-3. Extraire `NovaListen-0.1.0-debug.apk` du ZIP et le transférer sur le téléphone.
+2. Télécharger l’artefact **NovaListen-0.2.0-debug** seulement après le succès de la compilation **et des tests**.
+3. Extraire `NovaListen-0.2.0-debug.apk` du ZIP et le transférer sur le téléphone.
 4. Autoriser l’installation depuis le navigateur/gestionnaire de fichiers utilisé, puis installer.
 5. Dans NovaListen, toucher **Autoriser ma musique** et accorder l’accès aux fichiers audio.
 
@@ -43,7 +54,7 @@ python3 scripts/verify-project.py
 
 Le résultat local est `app/build/outputs/apk/debug/app-debug.apk`. Les téléchargements de dépendances ont lieu sur la machine de compilation, **pas au lancement de l’application**.
 
-## Fonctionnel dans 0.1
+## Socle local conservé de 0.1
 
 - MediaStore Android : indexation musicale, actualisation par ContentObserver, recherche insensible aux accents, six tris avec mémorisation.
 - Durées connues inférieures à 60 s exclues ; 60 s admises ; durées inconnues en attente et non jouables.
@@ -61,8 +72,8 @@ Le résultat local est `app/build/outputs/apk/debug/app-debug.apk`. Les téléch
 
 Ce n’est pas l’ensemble des 21 fiches de conception en une version. Voir [le périmètre et les choix techniques provisoires](docs/developpement/01-premiere-version.md).
 
-- API de paroles, métadonnées/pochettes, biographies/portraits ; aucune API activée ou clé incluse.
-- Traduction ML Kit / Azure F0, Fil Rouge, modèles locaux et les 17 playlists intelligentes.
+- Admission gratuite TheAudioDB/Deezer, collecte de portraits Genius/TheAudioDB/Discogs, cascade entièrement adaptative et moteurs directs privés non activés ; les limites des connecteurs actuels sont détaillées dans le guide API.
+- Fil Rouge, modèles locaux intelligents et les 17 playlists intelligentes.
 - Fusion des éditions d’un album, reconnaissance de l’identité des enregistrements, classification fiable Album/EP/Mixtape/Single/Participation.
 - Écriture de métadonnées dans les fichiers audio ; définition de sonnerie ; gain 200 %, égaliseur, minuterie et analyse audio.
 - Tous les modules et options de personnalisation de l’Accueil ; paramètres historiques restés ouverts dans la conception.
@@ -71,6 +82,10 @@ Ce n’est pas l’ensemble des 21 fiches de conception en une version. Voir [le
 
 ## Confidentialité
 
-Le manifeste ne demande **pas Internet**. Pas de publicité, compte, télémétrie, microphone ou localisation. Musique lue via les URI Android ; fichiers non déplacés ni modifiés par la lecture, les favoris, les thèmes, les playlists ou le masquage. Seule l’action explicite **Effacer** peut supprimer de l’audio. Les images choisies sont copiées dans le stockage privé de NovaListen. Sauvegarde automatique Android désactivée pour ne pas envoyer la base locale.
+Les sources 0.2 demandent **Internet** pour les commandes volontaires d’enrichissement et utilisent HTTPS uniquement. Le scan et la lecture restent locaux ; aucune collection, musique ou historique n’est envoyé automatiquement. Les champs de recherche affichés partent seulement sur commande ; Azure envoie la VO seulement après un consentement dédié. **ML Kit est facultatif mais ses diagnostics Google ne sont pas une promesse de zéro réseau** ; son initialisation automatique au lancement est retirée. Pas de compte obligatoire, publicité, microphone ou localisation.
+
+Les fichiers audio ne sont pas modifiés par les recherches, traductions, favoris, thèmes, playlists, pochettes d’affichage ou masquages. Seule l’action explicite **Effacer** peut supprimer de l’audio. Les images choisies, textes et crédits sont conservés dans le stockage privé. Sauvegarde/transfert automatique Android désactivés. Les secrets sont chiffrés sur le téléphone, jamais intégrés au dépôt, à l’APK ou aux workflows.
+
+La traduction locale est fournie par **Google Translate via ML Kit** ; [Google Cloud Translation](https://cloud.google.com/translate) et [déclaration des diagnostics](https://developers.google.com/ml-kit/android-data-disclosure). Le badge officiel et le disclaimer Google sont accessibles dans l’application.
 
 Les 21 [fiches de conception](docs/conception/01-accueil.md) conservent leur statut documentaire historique ; leur rédaction avant ce premier développement ne prouve pas qu’une fonction est déjà implémentée.

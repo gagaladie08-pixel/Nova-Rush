@@ -86,6 +86,42 @@ class NovaSmokeTest {
         compose.onNodeWithContentDescription("Afficher les paroles").performClick()
         compose.onNodeWithText("Vos mots, votre musique").assertIsDisplayed()
         screenshot("04-paroles-locales.png")
+        // Opening online tools is still local. Test only synthetic text and a deliberately missing key.
+        val requestsBefore = (app.remote.transport as com.novalisten.app.enrichment.RemoteHttp).requestCount
+        assertFalse(app.translation.activated)
+        kotlinx.coroutines.runBlocking {
+            app.credentials.remove(com.novalisten.app.enrichment.SecretSlot.AZURE)
+            app.repository.mutate { saveLyrics(long.toString(), com.novalisten.app.data.SavedLyrics("[00:01.000]Original synthetic test line", "Français manuel de test", "Fixture locale", "VF manuelle")) }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Traduire").performClick()
+        compose.onNodeWithTag("enrichment_screen").assertIsDisplayed()
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translate_local"))
+        compose.onNodeWithTag("translate_local").assertIsNotEnabled()
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translation_language_en"))
+        compose.onNodeWithTag("translation_language_en").performClick()
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translate_local"))
+        compose.onNodeWithTag("translate_local").assertIsNotEnabled() // language alone does not authorize Google
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translation_local_consent"))
+        compose.onNodeWithTag("translation_local_consent").performClick()
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translate_local"))
+        compose.onNodeWithTag("translate_local").assertIsEnabled() // not clicked: no SDK or pack activated
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translate_azure"))
+        compose.onNodeWithTag("translate_azure").assertIsNotEnabled()
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("azure_f0"))
+        compose.onNodeWithTag("azure_f0").performClick()
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translate_azure"))
+        compose.onNodeWithTag("translate_azure").assertIsNotEnabled() // F0 alone does not authorize text transmission
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("azure_consent"))
+        compose.onNodeWithTag("azure_consent").performClick()
+        compose.onNodeWithTag("translation_screen").performScrollToNode(hasTestTag("translate_azure"))
+        compose.onNodeWithTag("translate_azure").assertIsEnabled().performClick()
+        compose.waitUntil(10_000) { runCatching { compose.onNodeWithTag("translate_azure").assertIsNotEnabled(); true }.getOrDefault(false) }
+        assertEquals(requestsBefore, (app.remote.transport as com.novalisten.app.enrichment.RemoteHttp).requestCount)
+        assertFalse(app.translation.activated)
+        assertEquals("Français manuel de test", app.repository.data.value.lyrics[long.toString()]?.french)
+        screenshot("06-traduction-consentements.png")
+        compose.onNodeWithContentDescription("Fermer la recherche").performClick()
         compose.onNodeWithContentDescription("Réduire le player").performClick()
         compose.onNodeWithContentDescription("Pause").performClick()
     }

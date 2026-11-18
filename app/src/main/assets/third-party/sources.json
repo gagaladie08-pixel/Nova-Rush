@@ -28,5 +28,15 @@
     "name": "guava",
     "source": "https://github.com/google/guava/blob/master/LICENSE",
     "sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+  },
+  {
+    "name": "okhttp",
+    "source": "https://github.com/square/okhttp/blob/parent-4.12.0/LICENSE.txt",
+    "sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+  },
+  {
+    "name": "okio",
+    "source": "https://github.com/square/okio/blob/parent-3.6.0/LICENSE.txt",
+    "sha": "d645695673349e3947e8e5ae42332d0ac3164cd7"
   }
 ]

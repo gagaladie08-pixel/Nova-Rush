@@ -154,7 +154,7 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
                         TextButton(onSearchLyrics) { Icon(Icons.Outlined.Search, null); Text("Rechercher") }
                         TextButton(onTranslateLyrics, enabled = saved.original.isNotBlank()) { Icon(Icons.Outlined.Translate, null); Text("Traduire") }
                         val credit = if (french && saved.french.isNotBlank()) saved.frenchSource else saved.originalSource
-                        if (credit.isNotBlank()) TextButton({ provenance = credit }) { Text("Source") }
+                        if (credit.isNotBlank()) TextButton({ provenance = credit }) { Text(credit.lineSequence().firstOrNull().orEmpty().take(32)) }
                     }
                     if (french && saved.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
                     LyricsBody(text, timed, active, Modifier.weight(1f), vm::seek, onEditLyrics)
@@ -184,7 +184,7 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
             }
             if (!controls && !lyricsPage) TextButton({ controls = true }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()) { Text("Afficher les commandes") }
         }
-        provenance?.let { credit -> AlertDialog(onDismissRequest = { provenance = null }, title = { Text("Source des paroles") }, text = { LazyColumn { item { Text(credit) } } }, confirmButton = { TextButton({ provenance = null }) { Text("Fermer") } }) }
+        provenance?.let { credit -> AlertDialog(onDismissRequest = { provenance = null }, title = { Text("Source des paroles") }, text = { LazyColumn { item { SavedAttribution(credit) } } }, confirmButton = { TextButton({ provenance = null }) { Text("Fermer") } }) }
         if (queue) ModalBottomSheet(onDismissRequest = { queue = false }) {
             Text("File d’attente · ${playback.queue.size}", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
             LazyColumn(Modifier.fillMaxHeight(.7f)) {

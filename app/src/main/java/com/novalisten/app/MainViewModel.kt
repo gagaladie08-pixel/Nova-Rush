@@ -116,11 +116,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun favorite(track: Track) { viewModelScope.launch { repository.mutate { setFlag(track.id, "favorite", track.id !in repository.data.value.favorites) } } }
     fun hide(tracks: List<Track>) { viewModelScope.launch { repository.mutate { tracks.forEach { setFlag(it.id, "hidden", true) } }; message("Masqué dans toute l’application · fichier conservé") } }
     fun unhide(track: Track) { viewModelScope.launch { repository.mutate { setFlag(track.id, "hidden", false) } } }
-    fun saveLyrics(id: String, lyrics: SavedLyrics) { viewModelScope.launch { repository.mutate { saveLyrics(id, lyrics) }; message("Paroles sauvegardées dans NovaListen, hors ligne") } }
-    fun saveCover(id: String, cover: SavedCover?) { viewModelScope.launch { repository.mutate { saveCover(id, cover) }; message(if (cover == null) "Pochette du fichier rétablie dans l’affichage" else "Pochette d’affichage sauvegardée dans NovaListen, pas dans le fichier audio") } }
-    fun saveIdentity(id: String, mbid: String?) { viewModelScope.launch { repository.mutate { saveIdentity(id, mbid) } } }
+    private fun persist(success: String, operation: suspend () -> Unit) {
+        viewModelScope.launch {
+            try { operation(); if (success.isNotBlank()) message(success) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { message("La sauvegarde locale a échoué. Vos fichiers musicaux sont intacts ; vérifiez l’espace disponible et réessayez.") }
+        }
+    }
+    fun saveLyrics(id: String, lyrics: SavedLyrics) { persist("Paroles sauvegardées dans NovaListen, hors ligne") { repository.mutate { saveLyrics(id, lyrics) } } }
+    fun saveCover(id: String, cover: SavedCover?) { persist(if (cover == null) "Pochette du fichier rétablie dans l’affichage" else "Pochette d’affichage sauvegardée dans NovaListen, pas dans le fichier audio") { repository.mutate { saveCover(id, cover) } } }
+    fun saveIdentity(id: String, mbid: String?) { persist("") { repository.mutate { saveIdentity(id, mbid) } } }
     fun clearRemotePreviews() { viewModelScope.launch { remoteImages.clearPreviews() } }
-    fun saveArtist(id: String, note: ArtistNote) { viewModelScope.launch { repository.mutate { saveArtist(id, note) } } }
+    fun saveArtist(id: String, note: ArtistNote) { persist("") { repository.mutate { saveArtist(id, note) } } }
     fun createPlaylist(name: String, tracks: List<Track> = emptyList(), done: (LocalPlaylist) -> Unit = {}) {
         if (name.isBlank()) return
         viewModelScope.launch { done(repository.createPlaylist(name.take(100), eligible(tracks).map { it.id })) }

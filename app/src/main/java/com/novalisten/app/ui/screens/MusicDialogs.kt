@@ -166,7 +166,7 @@ fun LyricsEditor(track: Track, saved: SavedLyrics, vm: MainViewModel, onDismiss:
             TextButton({ import.launch(arrayOf("text/*", "application/octet-stream")) }) { Icon(Icons.Outlined.FileOpen, null); Spacer(Modifier.width(6.dp)); Text("Importer TXT / LRC") }
             Text("Sauvegarde dans NovaListen uniquement, pas dans le fichier audio. Les recherches et traductions demandent une commande distincte. Une VO modifiée invalide l’ancienne VF non corrigée ; les sources sont conservées avec mention des adaptations.", style = MaterialTheme.typography.bodySmall)
             val credit = if (editingFrench) saved.frenchSource else saved.originalSource
-            if (credit.isNotBlank()) Text("Source / crédits :\n$credit", style = MaterialTheme.typography.bodySmall)
+            if (credit.isNotBlank()) SavedAttribution(credit)
         }
     }, confirmButton = { TextButton({
         val voChanged = original != saved.original

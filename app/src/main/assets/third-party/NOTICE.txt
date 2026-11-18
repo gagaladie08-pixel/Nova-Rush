@@ -6,6 +6,15 @@ Kotlin — JetBrains s.r.o. and contributors — Apache 2.0.
 Kotlin coroutines — JetBrains s.r.o. and contributors — Apache 2.0.
 Coil — Coil Contributors — Apache 2.0.
 Guava — The Guava Authors — Apache 2.0.
+OkHttp / Okio — Square, Inc. and contributors — Apache 2.0.
+
+Optional ML Kit translation / Google Play services are Google SDKs subject to
+Google terms, not presented as wholly Apache-licensed NovaListen source:
+https://developers.google.com/ml-kit/terms
+https://developers.google.com/ml-kit/language/translation/translation-terms
+Google Translate attribution uses the official unmodified branding asset; see
+Google-Translate-Attribution.txt for source and hashes.
+https://developers.google.com/ml-kit/android-data-disclosure
 
 Upstream licence texts are included in this folder. Font-specific licences,
 copyright notices and exact provenance are included in ../font-licenses/.

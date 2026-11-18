@@ -1,5 +1,7 @@
 # NovaListen 0.1 — Essai sur téléphone
 
+> **Archive 0.1** : ce document décrit le premier APK, sans API. Pour les sources 0.2, voir [API et clés](04-api-et-cles.md). Les anciennes preuves ne valident pas la nouvelle version.
+
 ## Installer
 
 1. Télécharger le fichier **NovaListen-0.1.0-debug.apk**, pas seulement le ZIP d’artefact.

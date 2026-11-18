@@ -1,5 +1,7 @@
 # NovaListen 0.1 — Première phase de code
 
+> **Archive 0.1** : ce document décrit le premier APK, sans API. Pour les sources 0.2, voir [API et clés](04-api-et-cles.md). Les anciennes preuves ne valident pas la nouvelle version.
+
 ## Mandat et portée
 
 À la suite de « Codons l’appli et utiliser GitHub pour compiler et me donner le fichier apk », le dépôt contient désormais une **première implémentation Android**, distincte des documents de conception antérieurs. Leur mention « sans implémentation » décrit l’étape où ils ont été écrits ; le tableau du README et ce document sont l’état d’avancement logiciel.

@@ -142,7 +142,7 @@ class ApiIntegrationTest {
             NovaDatabase(context, name).use { db ->
                 db.saveArtist("test", com.novalisten.app.data.ArtistNote(biography = "Texte local de test", portrait = "file:///local-test.jpg", portraitSource = "Crédit local"))
                 db.writableDatabase.execSQL("CREATE TEMP TRIGGER fail_artist BEFORE INSERT ON artists BEGIN SELECT RAISE(ABORT, 'fixture rejection'); END")
-                try { db.saveArtist("test", com.novalisten.app.data.ArtistNote(portrait = "file:///new-test.jpg")); fail("A failed DB write must be reported") } catch (_: IllegalStateException) { }
+                try { db.saveArtist("test", com.novalisten.app.data.ArtistNote(portrait = "file:///new-test.jpg")); fail("A failed DB write must be reported") } catch (_: android.database.sqlite.SQLiteConstraintException) { }
                 val old = db.snapshot().artists.getValue("test")
                 assertEquals("file:///local-test.jpg", old.portrait); assertEquals("Crédit local", old.portraitSource)
             }
