@@ -15,6 +15,8 @@ concurrency:
 
 jobs:
   android:
+    # Publishing an already verified binary must not rebuild it with a new debug key.
+    if: ${{ !contains(github.event.head_commit.message, '[publish-apk]') }}
     name: Compiler, vérifier et tester Android
     runs-on: ubuntu-24.04
     timeout-minutes: 45
