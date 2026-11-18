@@ -51,6 +51,8 @@ fun ApiSettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         item { SectionHeader("Traduction locale facultative") }
         item { Notice("ML Kit : pas de clé. Packs téléchargés seulement par le bouton dédié. La traduction est calculée sur l’appareil ; le SDK Google déclare néanmoins des diagnostics d’appareil, d’application et d’usage après activation. Aucun SDK publicitaire ni analyse de votre collection. L’initialisation automatique de ML Kit au lancement est retirée.") }
         item { TextButton({ runCatching { uri.openUri("https://developers.google.com/ml-kit/android-data-disclosure") } }) { Text("Confidentialité et diagnostics ML Kit") } }
+        item { Notice("La commande Translate with Google utilise Google Translate sur l’appareil via ML Kit. Les traductions automatiques ne garantissent ni exactitude ni fidélité poétique ; l’attribution Google est affichée à côté des résultats.") }
+        item { TextButton({ runCatching { uri.openUri("https://cloud.google.com/translate") } }) { Text("À propos de Google Translate / Cloud Translation") } }
         item { SectionHeader("Vos identifiants sur ce téléphone") }
         item { Notice("Chiffrés par AES-GCM avec une clé Android Keystore. Jamais intégrés au code, à l’APK ou aux sauvegardes Android. La saisie est masquée, non restaurée après fermeture, et protégée contre les captures. Une clé enregistrée n’est pas une clé vérifiée. Un appareil compromis ne peut pas être rendu inviolable.") }
         if (feedback.isNotBlank()) item { Notice(feedback) }

@@ -93,7 +93,7 @@ fun HomeScreen(tracks: List<Track>, data: LocalData, vm: MainViewModel, onLibrar
                 leadingContent = { NovaIcon(Icons.Outlined.PushPin) }, trailingContent = { Icon(Icons.Outlined.ChevronRight, null) },
                 modifier = Modifier.padding(horizontal = 12.dp).clickable { onPlaylist(list.id) }, colors = ListItemDefaults.colors(containerColor = theme.surface))
         }
-        item { Notice("Version 0.1 · accueil essentiel. Les mixes avancés, bilans et autres modules de la conception seront ajoutés progressivement.") }
+        item { Notice("Accueil essentiel · version de test. Les mixes avancés, bilans et autres modules de la conception seront ajoutés progressivement.") }
         item { Spacer(Modifier.height(22.dp)) }
     }
 }

@@ -45,7 +45,7 @@ internal fun TranslationScreen(track: Track, vm: MainViewModel, onDismiss: () ->
             result = vm.translation.translate(plan, language) { completed, total -> progress = "$completed / $total lignes distinctes traduites localement" }
             engine = "Google Translate · ML Kit sur l’appareil"
             progress = "Traduction locale proposée, pas encore sauvegardée."
-        } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = sourceChosen()) { Text("Traduire avec Google · sur l’appareil") } }
+        } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = sourceChosen()) { Text("Translate with Google · sur l’appareil") } }
         item { WorkStatus(work) }
         if (progress.isNotBlank()) item { Notice(progress) }
         item { SectionHeader("Packs de langues · téléchargement volontaire") }

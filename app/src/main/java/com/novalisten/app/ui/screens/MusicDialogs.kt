@@ -160,6 +160,7 @@ fun LyricsEditor(track: Track, saved: SavedLyrics, vm: MainViewModel, onDismiss:
                 TextButton(onSearch) { Icon(Icons.Outlined.Search, null); Text("Rechercher en ligne") }
                 TextButton(onTranslate, enabled = saved.original.isNotBlank()) { Text("Traduire la VO sauvegardée") }
             }
+            if (editingFrench && saved.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
             Row { FilterChip(!editingFrench, { editingFrench = false }, { Text("Original") }); Spacer(Modifier.width(10.dp)); FilterChip(editingFrench, { editingFrench = true }, { Text("Français") }) }
             OutlinedTextField(if (editingFrench) french else original, { if (editingFrench) french = it.take(200_000) else original = it.take(200_000) }, Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 220.dp), label = { Text(if (editingFrench) "Votre version française" else "Texte ou LRC horodaté") })
             TextButton({ import.launch(arrayOf("text/*", "application/octet-stream")) }) { Icon(Icons.Outlined.FileOpen, null); Spacer(Modifier.width(6.dp)); Text("Importer TXT / LRC") }

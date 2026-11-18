@@ -102,6 +102,7 @@ object RemoteParsers {
         }
     }
     fun better(body: String, query: MusicQuery): List<LyricCandidate> {
+        if (body.trim() == "null") return emptyList()
         val root = jsonObject(body)
         val xml = root.str("ttml")
         if (xml.isBlank()) return emptyList()
@@ -109,13 +110,15 @@ object RemoteParsers {
         return if (text.isBlank()) emptyList() else listOf(LyricCandidate("better:${query.title}", query.title, query.artist, query.album, query.durationMs, Credit("Better Lyrics · cache public", "https://betterlyrics.org", details = "Origine du minutage non certifiée. TTML ramené à ses instants de ligne existants."), text, timing = LyricFormats.timing(text)))
     }
     fun textyl(body: String, query: MusicQuery): List<LyricCandidate> {
+        if (body.trim() == "null") return emptyList()
         val entries = JSONArray(body).objects()
         if (entries.isEmpty()) return emptyList()
-        if (entries.any { !it.has("seconds") || !it.optDouble("seconds", -1.0).let { n -> n.isFinite() && n >= 0 } }) throw RemoteFailure("Textyl : horodatage de ligne invalide.")
+        if (entries.any { !it.has("seconds") || !it.optDouble("seconds", -1.0).let { n -> n.isFinite() && n in 0.0..86_400.0 } }) throw RemoteFailure("Textyl : horodatage de ligne invalide.")
         val text = safeText(asLrc(entries.map { (it.optDouble("seconds") * 1000).toLong() to it.str("lyrics") }))
         return listOf(LyricCandidate("textyl:${query.title}", query.title, query.artist, query.album, query.durationMs, Credit("Textyl", "https://textyl.co/", details = "Provenance amont non fournie ; correspondance et droits à vérifier."), text, timing = LyricFormats.timing(text)))
     }
     fun ovh(body: String, query: MusicQuery): List<LyricCandidate> {
+        if (body.trim() == "null") return emptyList()
         val text = safeText(jsonObject(body).str("lyrics"))
         return if (text.isBlank()) emptyList() else listOf(LyricCandidate("ovh:${query.title}", query.title, query.artist, query.album, query.durationMs, Credit("lyrics.ovh", "https://lyrics.ovh/", details = "Peut réutiliser LRCLIB ; provenance amont non certifiée."), text))
     }

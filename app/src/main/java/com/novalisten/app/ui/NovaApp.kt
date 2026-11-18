@@ -139,7 +139,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                 }
                             }) { activeTab ->
                                 if (!library.permission && activeTab < 5) {
-                                    EmptyState("Votre musique vous attend", "Autorisez l’accès aux fichiers audio pour retrouver votre bibliothèque locale. Aucun compte, aucun envoi en ligne. Les fichiers de moins d’une minute sont exclus sans être supprimés.", Icons.Outlined.Headphones, Modifier.fillMaxSize(), action = {
+                                    EmptyState("Votre musique vous attend", "Autorisez l’accès aux fichiers audio pour retrouver votre bibliothèque locale. Le scan reste local ; les recherches en ligne sont facultatives et séparées. Les fichiers de moins d’une minute sont exclus sans être supprimés.", Icons.Outlined.Headphones, Modifier.fillMaxSize(), action = {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Button(onRequestAudio, Modifier.testTag("grant_audio")) { Text("Autoriser ma musique") }
                                             TextButton(onSystemSettings) { Text("Ouvrir les paramètres Android") }

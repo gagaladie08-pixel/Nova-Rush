@@ -34,17 +34,19 @@ internal class RemoteWork(private val scope: CoroutineScope) {
     var busy by mutableStateOf(false); private set
     var message by mutableStateOf("")
     private var job: Job? = null
+    private var generation = 0
     fun run(block: suspend () -> Unit) {
         if (busy) return
         busy = true; message = ""
+        val token = ++generation
         job = scope.launch {
             try { block() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (e: Exception) { message = e.publicMessage() }
-            finally { busy = false }
+            catch (e: Exception) { if (token == generation) message = e.publicMessage() }
+            finally { if (token == generation) busy = false }
         }
     }
-    fun cancel() { job?.cancel(); busy = false; message = "Opération annulée. Les contenus sauvegardés restent intacts." }
+    fun cancel() { generation++; job?.cancel(); busy = false; message = "Opération annulée. Les contenus sauvegardés restent intacts." }
 }
 @Composable internal fun rememberRemoteWork(): RemoteWork { val scope = rememberCoroutineScope(); return remember(scope) { RemoteWork(scope) } }
 
@@ -84,7 +86,7 @@ internal fun QueryFields(title: String, onTitle: (String) -> Unit, artist: Strin
 @Composable
 internal fun WorkStatus(work: RemoteWork) {
     if (work.busy) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text("Recherche en cours…", Modifier.weight(1f)); TextButton(work::cancel) { Text("Annuler") }
+        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text("Opération en cours…", Modifier.weight(1f)); TextButton(work::cancel) { Text("Annuler") }
     }
     if (work.message.isNotBlank()) Notice(work.message)
 }

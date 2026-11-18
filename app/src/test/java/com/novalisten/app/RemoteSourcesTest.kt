@@ -7,6 +7,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.net.InetAddress
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class RemoteSourcesTest {
     private val query = MusicQuery("Lumière d’essai", "Artiste de test", "Album original de test", 65000)
     private val mbid = "12345678-1234-1234-1234-123456789abc"
@@ -58,7 +59,7 @@ class RemoteSourcesTest {
     }
     @Test fun lrcRedInvalidIsrcIsNotUsedAsAPath() { assertTrue(RemoteParsers.lrcRed("""{"hits":[{"isrc":"../private","title":"Test"}]}""").isEmpty()) }
     @Test fun betterCacheRequestsIncludeAllFourFieldsAndNoKey() = runTest {
-        val fake = Fake("""{"ttml":"<tt><p>Essai original</p></tt>""")
+        val fake = Fake("""{"ttml":"<tt><p>Essai original</p></tt>"}""")
         RemoteSources(fake) { "test-only-not-a-real-key" }.lyrics(Provider.BETTER, query)
         val call = fake.calls.single(); assertEquals(setOf("s", "a", "al", "d"), call.params.keys); assertTrue(call.headers.isEmpty())
     }
@@ -127,6 +128,24 @@ class RemoteSourcesTest {
         assertThrows(IllegalArgumentException::class.java) { SecretSlot.GENIUS.validate("token\nX-Evil:1") }
         assertThrows(IllegalArgumentException::class.java) { SecretSlot.AZURE_REGION.validate("https://example.org") }
         assertEquals("test-only-123", SecretSlot.DISCOGS.validate(" test-only-123 "))
+    }
+    @Test fun fanartV32UsesDocumentedArrayAndProjectHeaders() = runTest {
+        val fake = Fake("""{"albums":[{"release_group_id":"$mbid","albumcover":[{"id":"1","url":"https://assets.fanart.tv/fanart/music/test/albumcover/test.jpg","copyright":"Créateur de test"}]}]}""")
+        val sources = RemoteSources(fake) { when (it) { SecretSlot.FANART -> "test-only-project"; SecretSlot.FANART_PERSONAL -> "test-only-personal"; else -> null } }
+        val image = sources.fanart(mbid, false).single()
+        val call = fake.calls.single()
+        assertEquals("/v3.2/music/albums/$mbid", call.path)
+        assertEquals(mapOf("api-key" to "test-only-project", "client-key" to "test-only-personal"), call.headers)
+        assertTrue(call.params.isEmpty()); assertTrue(image.preview.contains("/preview/")); assertFalse(image.licenceKnown)
+    }
+    @Test fun fanartArtistOnlyUsesPortraitsNotLogosOrBackgrounds() {
+        val image = RemoteParsers.fanart("""{"artistthumb":[{"id":"portrait","url":"https://assets.fanart.tv/fanart/music/test/artistthumb/a.jpg"}],"hdmusiclogo":[{"id":"logo"}],"artistbackground":[{"id":"background"}]}""", mbid, true).single()
+        assertEquals("fanart:portrait", image.id)
+    }
+    @Test fun known404NoLyricResultsAreEmptyNotProtectedAccess() {
+        assertTrue(RemoteParsers.better("null", query).isEmpty())
+        assertTrue(RemoteParsers.textyl("null", query).isEmpty())
+        assertTrue(RemoteParsers.ovh("null", query).isEmpty())
     }
     @Test fun translationKeepsTimestampsBlankLinesAndMetadata() {
         val plan = TranslationPlan("[ar:Test local]\n[00:01.234]Test line\n\n[00:04.000][00:08.000]Again")

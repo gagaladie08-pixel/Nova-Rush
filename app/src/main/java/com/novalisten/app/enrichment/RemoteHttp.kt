@@ -25,17 +25,18 @@ interface RemoteTransport {
 }
 
 /** One bounded scheduler, no cookies, no disk cache, no automatic retry or credential-bearing redirect. */
-class RemoteHttp : RemoteTransport {
-    private val limiter = RequestLimiter()
+class RemoteHttp(private val client: OkHttpClient = secureClient(), private val limiter: RequestLimiter = RequestLimiter()) : RemoteTransport {
     private val requests = java.util.concurrent.atomic.AtomicInteger()
     val requestCount: Int get() = requests.get()
-    private val client = OkHttpClient.Builder().connectTimeout(12, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
+    companion object {
+        private fun secureClient(): OkHttpClient = OkHttpClient.Builder().connectTimeout(12, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(35, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
         .dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> = Dns.SYSTEM.lookup(hostname).also { addresses ->
                 if (addresses.isEmpty() || addresses.any { !RemoteSafety.publicAddress(it) }) throw IOException("Adresse non publique")
             }
         }).build()
+    }
     private val userAgent = "NovaListen/${BuildConfig.VERSION_NAME} (https://github.com/gagaladie08-pixel/Nova-Rush)"
 
     override suspend fun request(provider: Provider, path: String, parameters: Map<String, String>, headers: Map<String, String>, jsonBody: String?): String {
@@ -64,7 +65,7 @@ class RemoteHttp : RemoteTransport {
         }
         when (reply.code) {
             401, 403 -> throw RemoteFailure(if (provider == Provider.BETTER) "Better Lyrics : accès protégé ou résultat hors cache. Aucune clé privée n’est utilisée." else "${provider.label} : accès refusé. Vérifiez la configuration ; ce n’est pas une absence de résultat.")
-            404 -> return if (provider in setOf(Provider.CAA, Provider.LRCLIB)) "null" else throw RemoteFailure("${provider.label} : ressource ou route introuvable.")
+            404 -> return if (provider in setOf(Provider.CAA, Provider.LRCLIB, Provider.BETTER, Provider.TEXTYL, Provider.OVH)) "null" else throw RemoteFailure("${provider.label} : ressource ou route introuvable.")
             in 300..399 -> throw RemoteFailure("${provider.label} : redirection refusée pour protéger les identifiants.")
             !in 200..299 -> throw RemoteFailure("${provider.label} : erreur HTTP ${reply.code}. Vos contenus restent inchangés.")
         }
