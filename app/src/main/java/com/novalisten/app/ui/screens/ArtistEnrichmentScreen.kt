@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.novalisten.app.MainViewModel
 import com.novalisten.app.data.*
 import com.novalisten.app.enrichment.*
@@ -71,65 +72,86 @@ internal fun ArtistPhotoSearch(request: EnrichmentRequest, vm: MainViewModel, on
     var name by remember { mutableStateOf(request.name) }
     var identities by remember { mutableStateOf(emptyList<ArtistCandidate>()) }
     var identity by remember { mutableStateOf<ArtistCandidate?>(null) }
-    var images by remember { mutableStateOf(emptyList<ImageCandidate>()) }
-    var notice by remember { mutableStateOf(emptyList<String>()) }
+    var ready by remember { mutableStateOf(emptyList<PreparedPhoto>()) }
+    var candidates by remember { mutableStateOf(emptyList<ImageCandidate>()) }
+    var notices by remember { mutableStateOf(emptyList<String>()) }
     var wikidata by remember { mutableStateOf(emptyList<ArtistCandidate>()) }
     var commonsPage by remember { mutableIntStateOf(1) }
     var openversePage by remember { mutableIntStateOf(1) }
-    var shown by remember { mutableIntStateOf(6) }
+    var showOther by remember { mutableStateOf(false) }
     var chosen by remember { mutableStateOf<ImageCandidate?>(null) }
     val work = rememberRemoteWork()
-    val knownMbid = vm.repository.data.value.identities["artist:${request.artistId}"]
-    fun append(incoming: List<ImageCandidate>) { images = (images + incoming).distinctBy { it.original.removePrefix("http://").removePrefix("https://") } }
+    val localData by vm.repository.data.collectAsStateWithLifecycle()
+    val knownMbid = localData.identities["artist:${request.artistId}"]
+    val currentPortrait = localData.artists[request.artistId]?.portrait
+    fun resetGallery() { ready = emptyList(); candidates = emptyList(); notices = emptyList(); commonsPage = 1; openversePage = 1; showOther = false }
+    fun append(incoming: List<ImageCandidate>) { candidates = (candidates + incoming).distinctBy { imageIdentity(it.original) }.take(120) }
+    suspend fun prepare(incoming: List<ImageCandidate>, target: Int) {
+        append(incoming)
+        val batch = PhotoDiscovery(vm.remoteImages::preparePhoto).discover(incoming, ready, target.coerceAtMost(60)) { count, attempts ->
+            work.message = "$count vignette(s) exploitable(s) · $attempts aperçu(s) examiné(s) dans ce lot."
+        }
+        ready = batch.photos
+        notices = notices + batch.warnings.map { "Aperçu : $it" }
+        notices = notices + "Lot borné : ${batch.attempted} aperçu(s) chargé(s), ${batch.probableDuplicates} doublon(s) probable(s), ${batch.unavailable} image(s) indisponible(s) ou trop petite(s), ${batch.deferredRights} licence(s) à examiner manuellement."
+        work.message = "${ready.size} vignette(s) prête(s), cible initiale : six distinctes. Sujet, identité et date restent à confirmer visuellement."
+    }
     fun searchImages() {
         val artist = identity ?: return
         work.run {
-            images = emptyList(); notice = emptyList(); shown = 6; commonsPage = 1; openversePage = 1
-            // Vague 1 (Genius/TheAudioDB) is deliberately skipped: photo rights/access unresolved.
+            if (ready.size >= 6) { work.message = "Six vignettes sont déjà prêtes : aucun nouvel appel. Les compléments restent volontaires."; return@run }
+            // Reuse P18/previews already examined. At most one metadata page per admissible source.
+            val found = mutableListOf<ImageCandidate>()
             coroutineScope {
                 launch {
-                    try { val found = vm.remote.commons(artist.name); append(found); notice = notice + "Commons : ${found.size} proposition(s)." }
+                    try { val result = vm.remote.commons(artist.name); found += result; notices = notices + "Commons : ${result.size} proposition(s)." }
                     catch (cancelled: CancellationException) { throw cancelled }
-                    catch (e: Exception) { notice = notice + "Commons : ${e.publicMessage()}" }
+                    catch (e: Exception) { notices = notices + "Commons : ${e.publicMessage()}" }
                 }
                 launch {
-                    try { val found = vm.remote.openverse(artist.name); append(found); notice = notice + "Openverse : ${found.size} proposition(s)." }
+                    try { val result = vm.remote.openverse(artist.name); found += result; notices = notices + "Openverse : ${result.size} proposition(s)." }
                     catch (cancelled: CancellationException) { throw cancelled }
-                    catch (e: Exception) { notice = notice + "Openverse : ${e.publicMessage()}" }
+                    catch (e: Exception) { notices = notices + "Openverse : ${e.publicMessage()}" }
                 }
             }
-            if (images.isEmpty()) work.message = "Aucune proposition reçue. Conservez le portrait actuel, corrigez l’identité ou choisissez une photo locale autorisée."
+            prepare(found, 6)
+            if (ready.isEmpty()) showOther = true
         }
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Notice("D’abord identifier l’artiste pour ne pas mélanger les homonymes, groupes et membres. Le nom / identifiant est envoyé aux sources demandées, pas votre collection. La photo actuelle reste inchangée jusqu’au choix final.") }
-        item { OutlinedTextField(name, { name = it.take(300); identity = null; images = emptyList() }, Modifier.fillMaxWidth().padding(20.dp), label = { Text("Nom et contexte de l’artiste") }, singleLine = true, enabled = !work.busy) }
+        item { Notice("D’abord identifier l’artiste pour éviter les homonymes, groupes et membres. Seul le nom / identifiant est envoyé aux sources demandées. La photo actuelle reste inchangée jusqu’au choix final.") }
+        if (currentPortrait != null) item { Column(Modifier.padding(horizontal = 20.dp)) { Text("Votre portrait sauvegardé · réutilisé localement"); Artwork(currentPortrait, request.name, Modifier.size(96.dp)) } }
+        item { OutlinedTextField(name, { name = it.take(300); identity = null; identities = emptyList(); wikidata = emptyList(); resetGallery() }, Modifier.fillMaxWidth().padding(20.dp), label = { Text("Nom et contexte de l’artiste") }, singleLine = true, enabled = !work.busy) }
         item { Button({ work.run { identities = vm.remote.artists(name); if (identities.isEmpty()) work.message = "Aucune identité MusicBrainz. Vous pouvez comparer Wikidata." } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = !work.busy && name.isNotBlank()) { Text("Identifier avec MusicBrainz") } }
         if (knownMbid != null && identity == null) item { TextButton({
-            identity = ArtistCandidate(knownMbid, request.name, "Association choisie précédemment", Credit("MusicBrainz", "https://musicbrainz.org/artist/$knownMbid", "Données de base CC0"), mbid = knownMbid)
-        }, Modifier.padding(horizontal = 20.dp)) { Text("Réutiliser mon association MusicBrainz") } }
+            resetGallery(); identity = ArtistCandidate(knownMbid, request.name, "Association choisie précédemment", Credit("MusicBrainz", "https://musicbrainz.org/artist/$knownMbid", "Données de base CC0"), mbid = knownMbid)
+        }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Réutiliser mon association MusicBrainz · sans appel") } }
         items(identities, key = { it.id }) { artist ->
             OutlinedCard(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
                 Column(Modifier.padding(12.dp)) {
-                    Text(artist.name, style = MaterialTheme.typography.titleMedium); Text(artist.description)
-                    CreditView(artist.credit)
-                    TextButton({ identity = artist; images = emptyList(); vm.saveIdentity("artist:${request.artistId}", artist.mbid) }, enabled = !work.busy) { Text("C’est cet artiste · mémoriser l’association") }
+                    Text(artist.name, style = MaterialTheme.typography.titleMedium); Text(artist.description); CreditView(artist.credit)
+                    TextButton({ resetGallery(); identity = artist; vm.saveIdentity("artist:${request.artistId}", artist.mbid) }, enabled = !work.busy) { Text("C’est cet artiste · mémoriser l’association") }
                 }
             }
         }
         identity?.let { artist ->
-            item { Notice("Identité retenue pour cette recherche : ${artist.name}\n${artist.description}\nUn identifiant ne certifie pas chaque photographie.") }
-            item { Button(::searchImages, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("search_artist_images"), enabled = !work.busy) { Text("Chercher des photos · Commons + Openverse") } }
+            item { Notice("Identité retenue : ${artist.name}\n${artist.description}\nUn identifiant ne certifie pas chaque photographie.") }
+            item { Notice("La recherche charge un premier lot de métadonnées Commons + Openverse (six par source), puis au plus douze aperçus ouverts pour viser six vignettes décodables, d’au moins 96 px, distinctes par URL et par comparaison visuelle locale. Arrêt dès la cible, pas de pagination automatique. Aucun visage n’est envoyé à un moteur d’analyse.") }
+            item { Button(::searchImages, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("search_artist_images"), enabled = !work.busy) { Text("Chercher six vignettes · Commons + Openverse") } }
         }
         item { WorkStatus(work) }
-        items(notice) { Notice(it) }
-        items(images.take(shown), key = { it.id }) { image -> ImageResultCard(image, vm, work.busy) { chosen = image } }
-        if (images.size > shown) item { TextButton({ shown += 6 }, Modifier.padding(horizontal = 20.dp)) { Text("Afficher les autres propositions déjà reçues") } }
+        items(notices) { Notice(it) }
+        items(ready, key = { it.image.id }) { photo -> ImageResultCard(photo.image, vm, work.busy, initialPreview = photo.preview) { chosen = photo.image } }
         identity?.let { artist ->
-            item { Notice("Premier lot : jusqu’à six propositions, pas six résultats garantis. Les aperçus sont chargés sur demande et soumis au même plafond de deux requêtes. Les pages suivantes sont volontaires et bornées.") }
-            item { TextButton({ work.run { val page = commonsPage + 1; val found = vm.remote.commons(artist.name, page); commonsPage = page; append(found); shown = images.size; work.message = "Commons · page $page : ${found.size} proposition(s)." } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Plus de photos · une page Commons") } }
-            item { TextButton({ work.run { val page = openversePage + 1; val found = vm.remote.openverse(artist.name, page); openversePage = page; append(found); shown = images.size; work.message = "Openverse · page $page : ${found.size} proposition(s)." } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Plus de photos · une page Openverse") } }
-            if (artist.mbid != null) item { TextButton({ work.run { val found = vm.remote.fanart(artist.mbid, true); append(found); shown = images.size; work.message = "fanart.tv : ${found.size} proposition(s), ni exactitude ni récence garanties." } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Ultime complément · fanart.tv (clé)") } }
+            item { Notice("Cible de six vignettes utiles, jamais une garantie d’exactitude ni de récence. Les doublons visuels sont une heuristique locale ; vous pouvez examiner les autres propositions. Les pages supplémentaires ne partent que sur commande, avec deux requêtes simultanées maximum pour tout ce parcours, aperçus compris.") }
+            item { TextButton({ work.run { val page = commonsPage + 1; val found = vm.remote.commons(artist.name, page); commonsPage = page; prepare(found, ready.size + 6) } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy && commonsPage < 5 && ready.size < 60) { Text("Plus de photos · une page Commons") } }
+            item { TextButton({ work.run { val page = openversePage + 1; val found = vm.remote.openverse(artist.name, page); openversePage = page; prepare(found, ready.size + 6) } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy && openversePage < 5 && ready.size < 60) { Text("Plus de photos · une page Openverse") } }
+            if (artist.mbid != null) item { TextButton({ work.run { val found = vm.remote.fanart(artist.mbid, true); append(found); showOther = true; work.message = "fanart.tv : ${found.size} proposition(s) à examiner manuellement, ni exactitude ni récence garanties. Pas d’aperçu sans vérification des droits." } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Ultime complément · fanart.tv (clé)") } }
+        }
+        val others = candidates.filter { image -> ready.none { imageIdentity(it.image.original) == imageIdentity(image.original) } }
+        if (others.isNotEmpty()) {
+            item { TextButton({ showOther = !showOther }, Modifier.padding(horizontal = 20.dp)) { Text(if (showOther) "Masquer les autres propositions" else "Examiner les ${others.size} autres propositions / doublons probables") } }
+            if (showOther) items(others, key = { it.id }) { image -> ImageResultCard(image, vm, work.busy) { chosen = image } }
         }
         item { SectionHeader("Comparer une identité Wikidata") }
         item { TextButton({ work.run { wikidata = vm.remote.wikidata(name) } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy && name.isNotBlank()) { Text("Chercher l’identité dans Wikidata") } }
@@ -139,19 +161,19 @@ internal fun ArtistPhotoSearch(request: EnrichmentRequest, vm: MainViewModel, on
                     Text("${artist.name} · ${artist.id}", style = MaterialTheme.typography.titleMedium); Text(artist.description); CreditView(artist.credit)
                     TextButton({ work.run {
                         val details = vm.remote.wikidataDetails(artist.id)
-                        identity = details; images = emptyList(); shown = 6
-                        if (details.mbid != null) vm.saveIdentity("artist:${request.artistId}", details.mbid)
-                        details.imageTitle?.let { append(vm.remote.commons(details.name, fileTitle = it)) }
-                        work.message = "Identité choisie : ${details.name}. ${if (details.imageTitle == null) "Pas de photo P18 renseignée." else "Piste P18 proposée, pas appliquée."} Les faits/records ne sont pas certifiés par Wikidata."
+                        resetGallery(); identity = details
+                        vm.saveIdentity("artist:${request.artistId}", details.mbid)
+                        details.imageTitle?.let { prepare(vm.remote.commons(details.name, fileTitle = it), 6) }
+                        notices = notices + "Piste P18 ${if (details.imageTitle == null) "absente" else "examinée, pas appliquée"}. Les faits/records ne sont pas certifiés par Wikidata."
                     } }, enabled = !work.busy) { Text("Choisir cette identité et examiner P18") }
                 }
             }
         }
-        item { Notice("Last.fm sert aux informations musicales, pas à collecter des portraits. Aucun scraping. Genius/TheAudioDB/Discogs restent sautés pour les photos faute d’admission établie. Les dates de publication/récupération ne sont jamais appelées dates de prise de vue.") }
+        item { Notice("Last.fm sert aux informations musicales, pas à collecter des portraits. Aucun scraping. Genius/TheAudioDB/Discogs restent sautés pour les photos faute d’admission établie. Les dates de publication/récupération ne sont jamais appelées dates de prise de vue. Budget de cette première interface : cinq pages manuelles par source, pas de découverte illimitée.") }
     }
     chosen?.let { image -> ImageSaveDialog(image, vm, { chosen = null }) { uri ->
         val old = vm.repository.data.value.artists[request.artistId] ?: ArtistNote()
-        vm.repository.mutate { saveArtist(request.artistId, old.copy(portrait = uri, portraitSource = image.credit.text() + "\n" + image.date)) }
+        vm.repository.mutate { saveArtist(request.artistId, old.copy(portrait = uri, portraitSource = image.credit.text() + "\n" + image.date + "\nCopie d’affichage JPEG redimensionnée par NovaListen.")) }
         vm.message("Portrait choisi sauvegardé hors ligne avec ses crédits")
         onDismiss()
     } }
@@ -168,7 +190,8 @@ internal fun CoverSearch(request: EnrichmentRequest, vm: MainViewModel, onDismis
     var images by remember { mutableStateOf(emptyList<ImageCandidate>()) }
     var chosen by remember { mutableStateOf<ImageCandidate?>(null) }
     val work = rememberRemoteWork()
-    val knownRelease = vm.repository.data.value.identities["album:$albumKey"]
+    val localData by vm.repository.data.collectAsStateWithLifecycle()
+    val knownRelease = localData.identities["album:$albumKey"]
     fun searchEdition(release: CatalogCandidate) {
         work.run {
             val id = release.releaseId ?: throw RemoteFailure("Identifiant d’édition absent.")
@@ -193,19 +216,19 @@ internal fun CoverSearch(request: EnrichmentRequest, vm: MainViewModel, onDismis
             }
         }
         items(images, key = { it.id }) { image -> ImageResultCard(image, vm, work.busy) { chosen = image } }
-        if (vm.repository.data.value.covers.containsKey(albumKey)) item { TextButton({ vm.saveCover(albumKey, null); onDismiss() }, Modifier.padding(horizontal = 20.dp)) { Text("Revenir à la pochette du fichier dans l’affichage") } }
+        if (localData.covers.containsKey(albumKey)) item { TextButton({ vm.saveCover(albumKey, null); onDismiss() }, Modifier.padding(horizontal = 20.dp)) { Text("Revenir à la pochette du fichier dans l’affichage") } }
         item { Notice("Les illustrations iTunes, Last.fm, Deezer et Discogs ne deviennent pas des pochettes permanentes. TheAudioDB est sauté faute d’accès gratuit confirmé. Aucun écrasement de la pochette actuelle après une recherche ou un échec.") }
     }
     chosen?.let { image -> ImageSaveDialog(image, vm, { chosen = null }) { uri ->
-        vm.repository.mutate { saveCover(albumKey, SavedCover(uri, image.credit.text())) }
+        vm.repository.mutate { saveCover(albumKey, SavedCover(uri, image.credit.text() + "\nCopie d’affichage JPEG redimensionnée par NovaListen.")) }
         vm.message("Pochette d’affichage sauvegardée dans NovaListen, pas dans l’audio")
         onDismiss()
     } }
 }
 
 @Composable
-internal fun ImageResultCard(image: ImageCandidate, vm: MainViewModel, blocked: Boolean, onChoose: () -> Unit) {
-    var localPreview by remember(image.id) { mutableStateOf<String?>(null) }
+internal fun ImageResultCard(image: ImageCandidate, vm: MainViewModel, blocked: Boolean, initialPreview: String? = null, onChoose: () -> Unit) {
+    var localPreview by remember(image.id, initialPreview) { mutableStateOf(initialPreview) }
     var allowPreview by remember(image.id) { mutableStateOf(false) }
     val work = rememberRemoteWork()
     OutlinedCard(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
@@ -242,6 +265,10 @@ internal fun ImageSaveDialog(image: ImageCandidate, vm: MainViewModel, onDismiss
         }
     }, confirmButton = { TextButton({ work.run {
         val uri = vm.remoteImages.save(image)
-        try { onSave(uri) } catch (e: Exception) { runCatching { java.io.File(java.net.URI(uri)).delete() }; throw e }
+        // Once bytes are ready, finalize the tiny local DB assignment even if this dialog closes.
+        // This prevents deleting a just-committed picture on coroutine cancellation during dispatch back.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            try { onSave(uri) } catch (e: Exception) { runCatching { java.io.File(java.net.URI(uri)).delete() }; throw e }
+        }
     } }, enabled = confirmed && !work.busy) { Text("Choisir et sauvegarder") } }, dismissButton = { TextButton(onDismiss, enabled = !work.busy) { Text("Annuler") } })
 }

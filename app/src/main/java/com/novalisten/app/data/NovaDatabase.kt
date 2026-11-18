@@ -89,24 +89,24 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         })
     }
     fun saveLyrics(id: String, lyrics: SavedLyrics) {
-        writableDatabase.insertWithOnConflict("lyrics", null, ContentValues().apply {
+        check(writableDatabase.insertWithOnConflict("lyrics", null, ContentValues().apply {
             put("track", id); put("original", lyrics.original); put("french", lyrics.french); put("original_source", lyrics.originalSource); put("french_source", lyrics.frenchSource)
-        }, SQLiteDatabase.CONFLICT_REPLACE)
+        }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde lyrics." }
     }
     fun saveCover(id: String, cover: SavedCover?) {
         if (cover == null) writableDatabase.delete("album_covers", "id=?", arrayOf(id))
-        else writableDatabase.insertWithOnConflict("album_covers", null, ContentValues().apply { put("id", id); put("uri", cover.uri); put("source", cover.source) }, SQLiteDatabase.CONFLICT_REPLACE)
+        else check(writableDatabase.insertWithOnConflict("album_covers", null, ContentValues().apply { put("id", id); put("uri", cover.uri); put("source", cover.source) }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde de la pochette." }
     }
     fun saveIdentity(id: String, mbid: String?) {
         if (mbid == null) writableDatabase.delete("identities", "id=?", arrayOf(id))
         else {
             com.novalisten.app.enrichment.RemoteSafety.mbid(mbid)
-            writableDatabase.insertWithOnConflict("identities", null, ContentValues().apply { put("id", id); put("mbid", mbid) }, SQLiteDatabase.CONFLICT_REPLACE)
+            check(writableDatabase.insertWithOnConflict("identities", null, ContentValues().apply { put("id", id); put("mbid", mbid) }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde de l’identité." }
         }
     }
     fun saveArtist(id: String, note: ArtistNote) {
-        writableDatabase.insertWithOnConflict("artists", null, ContentValues().apply {
+        check(writableDatabase.insertWithOnConflict("artists", null, ContentValues().apply {
             put("id", id); put("bio", note.biography); put("source", note.source); put("portrait", note.portrait); put("portrait_source", note.portraitSource)
-        }, SQLiteDatabase.CONFLICT_REPLACE)
+        }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde artists." }
     }
 }

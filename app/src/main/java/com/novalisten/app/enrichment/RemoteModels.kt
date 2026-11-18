@@ -104,7 +104,10 @@ object RemoteSafety {
     fun mbid(value: String): String { require(value.matches(Regex("[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}"))) { "Identifiant MusicBrainz invalide." }; return value }
     fun qid(value: String): String { require(value.matches(Regex("Q[1-9][0-9]*"))) { "Identifiant Wikidata invalide." }; return value }
     fun openLicence(value: String): Boolean {
-        val url = value.lowercase(Locale.ROOT).replace("http://", "https://")
-        return url.startsWith("https://creativecommons.org/licenses/by/") || url.startsWith("https://creativecommons.org/licenses/by-sa/") || url.startsWith("https://creativecommons.org/publicdomain/zero/") || url.startsWith("https://creativecommons.org/publicdomain/mark/")
+        val uri = runCatching { URI(value.trim().lowercase(Locale.ROOT)) }.getOrNull() ?: return false
+        if (uri.scheme !in setOf("https", "http") || uri.host !in setOf("creativecommons.org", "www.creativecommons.org") || uri.rawUserInfo != null || uri.port !in setOf(-1, 80, 443)) return false
+        val path = uri.path ?: return false
+        if (uri.normalize().path != path) return false
+        return Regex("^/(?:licenses/(?:by|by-sa)/(?:1\\.0|2\\.0|2\\.5|3\\.0|4\\.0)|publicdomain/(?:zero|mark)/1\\.0)/(?:deed(?:\\.[a-z-]+)?|legalcode(?:\\.[a-z-]+)?)?$").matches(path)
     }
 }

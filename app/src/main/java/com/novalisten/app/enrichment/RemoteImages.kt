@@ -17,10 +17,24 @@ class RemoteImages(private val context: Context, private val transport: RemoteTr
     suspend fun preview(image: ImageCandidate): String = withContext(Dispatchers.IO) {
         RemoteSafety.image(image.preview)
         RemoteSafety.image(image.original)
+        val name = MessageDigest.getInstance("SHA-256").digest((imageIdentity(image.original) + "\n" + image.preview).toByteArray()).joinToString("") { "%02x".format(it) }
+        val cached = File(folder, "$name.jpg")
+        if (cached.isFile && cached.length() > 0 && System.currentTimeMillis() - cached.lastModified() in 0..86_400_000) return@withContext Uri.fromFile(cached).toString()
         val bytes = transport.image(image.preview, 2_000_000)
         coroutineContext.ensureActive()
-        val name = MessageDigest.getInstance("SHA-256").digest(image.id.toByteArray()).joinToString("") { "%02x".format(it) }
-        writeImage(bytes, File(folder, "$name.jpg"), 640)
+        writeImage(bytes, cached, 640)
+    }
+    suspend fun preparePhoto(image: ImageCandidate): PreparedPhoto = withContext(Dispatchers.IO) {
+        val uri = preview(image)
+        coroutineContext.ensureActive()
+        val bitmap = BitmapFactory.decodeFile(File(java.net.URI(uri)).path) ?: throw RemoteFailure("Aperçu illisible.")
+        try {
+            require(bitmap.width >= 96 && bitmap.height >= 96) { "Aperçu trop petit pour une vignette utile." }
+            val sample = Bitmap.createScaledBitmap(bitmap, 9, 8, true)
+            val pixels = IntArray(72)
+            try { sample.getPixels(pixels, 0, 9, 0, 0, 9, 8) } finally { if (sample !== bitmap) sample.recycle() }
+            PreparedPhoto(image, uri, PhotoFingerprint.fromPixels(pixels, bitmap.width, bitmap.height))
+        } finally { bitmap.recycle() }
     }
     suspend fun save(image: ImageCandidate): String = withContext(Dispatchers.IO) {
         RemoteSafety.image(image.original)
@@ -40,7 +54,7 @@ class RemoteImages(private val context: Context, private val transport: RemoteTr
         var sample = 1
         while (bounds.outWidth / sample > maxDimension || bounds.outHeight / sample > maxDimension) sample *= 2
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: throw RemoteFailure("Image illisible.")
-        val temporary = File(destination.path + ".part")
+        val temporary = File(destination.path + ".part-${UUID.randomUUID()}")
         try {
             temporary.outputStream().use { if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)) throw RemoteFailure("Encodage d’image impossible.") }
             check(temporary.renameTo(destination))

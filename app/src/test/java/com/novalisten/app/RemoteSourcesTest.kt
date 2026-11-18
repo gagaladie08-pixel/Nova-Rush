@@ -147,6 +147,13 @@ class RemoteSourcesTest {
         assertTrue(RemoteParsers.textyl("null", query).isEmpty())
         assertTrue(RemoteParsers.ovh("null", query).isEmpty())
     }
+    @Test fun openLicenceDoesNotConfuseAllCreativeCommonsWithReusable() {
+        assertTrue(RemoteSafety.openLicence("https://creativecommons.org/licenses/by-sa/4.0/"))
+        assertTrue(RemoteSafety.openLicence("http://creativecommons.org/publicdomain/zero/1.0/"))
+        assertFalse(RemoteSafety.openLicence("https://creativecommons.org/licenses/by-nc/4.0/"))
+        assertFalse(RemoteSafety.openLicence("https://creativecommons.org.evil.example/licenses/by/4.0/"))
+        assertFalse(RemoteSafety.openLicence("https://creativecommons.org/licenses/by/../by-nc/4.0/"))
+    }
     @Test fun translationKeepsTimestampsBlankLinesAndMetadata() {
         val plan = TranslationPlan("[ar:Test local]\n[00:01.234]Test line\n\n[00:04.000][00:08.000]Again")
         assertEquals("[ar:Test local]\n[00:01.234]Ligne de test\n\n[00:04.000][00:08.000]Encore", plan.render(mapOf("Test line" to "Ligne de test", "Again" to "Encore")))

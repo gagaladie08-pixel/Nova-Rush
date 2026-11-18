@@ -106,6 +106,48 @@ class ApiIntegrationTest {
             }
         } finally { context.deleteDatabase(name) }
     }
+    @Test fun photoPreviewsReuseLocalBytesAndFingerprintDuplicateImages() = runBlocking {
+        val bitmap = android.graphics.Bitmap.createBitmap(320, 320, android.graphics.Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(android.graphics.Color.rgb(24, 135, 67))
+        val bytes = java.io.ByteArrayOutputStream().use { output -> bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
+        bitmap.recycle()
+        var downloads = 0
+        val transport = object : RemoteTransport {
+            override suspend fun request(provider: Provider, path: String, parameters: Map<String, String>, headers: Map<String, String>, jsonBody: String?): String = error("No API request")
+            override suspend fun image(url: String, maxBytes: Int): ByteArray { downloads++; return bytes }
+        }
+        val images = RemoteImages(context, transport)
+        images.clearPreviews()
+        val one = ImageCandidate("test:one", "Image synthétique", "https://example.org/test/one-preview.png", "https://example.org/test/one.png", Credit("Fixture", "https://example.org/"), true)
+        var saved: java.io.File? = null
+        try {
+            val first = images.preparePhoto(one)
+            val again = images.preparePhoto(one)
+            assertEquals(first.fingerprint, again.fingerprint); assertEquals(1, downloads)
+            val duplicate = images.preparePhoto(one.copy(id = "test:two", preview = "https://example.org/test/two-preview.png", original = "https://example.org/test/two.png"))
+            assertTrue(first.fingerprint.resembles(duplicate.fingerprint))
+            val result = PhotoDiscovery(images::preparePhoto).discover(listOf(one, duplicate.image))
+            assertEquals(1, result.photos.size); assertEquals(1, result.probableDuplicates); assertEquals(2, downloads)
+            val uri = images.save(one)
+            saved = java.io.File(java.net.URI(uri))
+            assertTrue(saved.isFile)
+            assertTrue(saved.canonicalPath.startsWith(java.io.File(context.filesDir, "images").canonicalPath + "/"))
+            assertEquals(3, downloads)
+        } finally { saved?.delete(); images.clearPreviews() }
+    }
+    @Test fun rejectedImageAssignmentDoesNotSilentlyReplaceLocalContent() {
+        val name = "api_save_failure_instrumentation.db"
+        context.deleteDatabase(name)
+        try {
+            NovaDatabase(context, name).use { db ->
+                db.saveArtist("test", com.novalisten.app.data.ArtistNote(biography = "Texte local de test", portrait = "file:///local-test.jpg", portraitSource = "Crédit local"))
+                db.writableDatabase.execSQL("CREATE TEMP TRIGGER fail_artist BEFORE INSERT ON artists BEGIN SELECT RAISE(ABORT, 'fixture rejection'); END")
+                try { db.saveArtist("test", com.novalisten.app.data.ArtistNote(portrait = "file:///new-test.jpg")); fail("A failed DB write must be reported") } catch (_: IllegalStateException) { }
+                val old = db.snapshot().artists.getValue("test")
+                assertEquals("file:///local-test.jpg", old.portrait); assertEquals("Crédit local", old.portraitSource)
+            }
+        } finally { context.deleteDatabase(name) }
+    }
     @Test fun mergedManifestDoesNotAutoinitializeMlKitOrRequestMicrophone() {
         @Suppress("DEPRECATION") val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PROVIDERS or PackageManager.GET_PERMISSIONS)
         assertFalse(info.providers.orEmpty().any { it.name.contains("MlKitInitProvider") })
