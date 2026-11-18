@@ -4,7 +4,7 @@
 
 Cette itération répond à la demande d’intégrer les API sans clé et de saisir les autres identifiants **dans l’application**, gratuitement. Elle ne crée aucun compte, n’active aucun abonnement et ne contient aucune clé de fournisseur. Les 21 fiches de conception restent la référence ; cette première interface n’en réalise pas toutes les fonctions avancées.
 
-La version des sources est **0.2.0 / code 2**. Le résultat d’une compilation et les essais sur émulateur doivent être vérifiés dans ses rapports ; l’ancienne validation de 0.1.0 ne valide pas ce code. Le compte rendu de livraison 0.2 sera ajouté une fois les tests terminés. Les documents 01–03 décrivent historiquement 0.1.
+La version des sources est **0.2.0 / code 2**. La compilation et les essais sur émulateur ont réussi dans l’exécution 44282482614 : **92 tests unitaires + 10 tests Android**. Voir le [compte rendu 0.2 et les limites exactes](05-verification-api-0.2.md) ; l’ancienne validation de 0.1.0 ne suffit pas à valider ce code. Les documents 01–03 décrivent historiquement 0.1.
 
 ## Où trouver les fonctions
 
@@ -76,7 +76,7 @@ Le badge officiel **powered by Google Translate**, récupéré sans modification
 
 ## Vérifications et limites
 
-Tests prévus dans cette itération : contrats JSON synthétiques, unités de temps, TTML/XXE, 404 vs refus/quota, redirections sûres, limites de taille, filtrage d’URL, plan LRC et traduction, plafond/annulation de l’ordonnanceur, budget photo et déduplication. Tests Android : coffre/Keystore, persistance et suppression, saisie non restaurée, migration SQLite, erreurs de sauvegarde, cache d’aperçus et manifeste fusionné. **Aucun secret réel n’est utilisé dans ces tests**.
+Couverture testée dans cette itération (détail et résultats dans le compte rendu lié ci-dessus) : contrats JSON synthétiques, unités de temps, TTML/XXE, 404 vs refus/quota, redirections sûres, limites de taille, filtrage d’URL, plan LRC et traduction, plafond/annulation de l’ordonnanceur, budget photo et déduplication. Tests Android : coffre/Keystore, persistance et suppression, saisie non restaurée, migration SQLite, erreurs de sauvegarde, cache d’aperçus et manifeste fusionné. **Aucun secret réel n’est utilisé dans ces tests**.
 
 Ces tests ne prouvent pas la disponibilité du service sur le téléphone, l’admission d’un compte, l’exactitude d’un texte/portrait, ni les droits du fournisseur. Les appels réels de traduction et packs, les quotas d’un compte et les essais sur appareil physique restent à effectuer volontairement. Listening Party, YouTube, Fil Rouge, modèles intelligents, tags audio originaux et autres fonctions non réalisées restent hors de cette livraison.
 

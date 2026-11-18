@@ -1,9 +1,17 @@
 # NovaListen
 
 Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.0, enrichissements en ligne facultatifs**.
-La validation de la nouvelle version est en cours ; ne pas confondre celle-ci avec le binaire 0.1 vérifié ci-dessous.
+La version 0.2 a été compilée et vérifiée : **92 tests unitaires + 10 tests Android 10 réussis**, lint sans erreur. [Compte rendu 0.2](docs/developpement/05-verification-api-0.2.md).
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
+
+## Validation actuelle — 0.2.0
+
+- [Compilation et tests réussis — exécution 44282482614](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44282482614), code applicatif `63702262c6d32b9b0356eaa038d9e5a3af256ba3`.
+- APK de **89 460 991 octets**, SHA-256 `deff51cbbcccfd4676c646cf8544760dcfca23f1c68b023ca1204ea9c1d82497`, Android 8+ universel.
+- Manifeste binaire contrôlé : Internet/HTTPS pour les commandes volontaires, pas de microphone/localisation, pas de provider automatique ML Kit. Aucun secret réel ou musique de démonstration inclus.
+- **Attention : signature debug différente de 0.1**. Android refuse normalement sa mise à jour directe ; une désinstallation effacerait les données privées sans export disponible. Voir le [compte rendu et les précautions d’installation](docs/developpement/05-verification-api-0.2.md).
+- [Mode d’emploi des API et clés](docs/developpement/04-api-et-cles.md). Les tests synthétiques ne prouvent pas la disponibilité/admission de chaque service sur le téléphone.
 
 ## Livraison historique vérifiée — 0.1.0
 

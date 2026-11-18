@@ -1,0 +1,91 @@
+name: NovaListen — Téléchargement API 0.2.0
+
+on:
+  push:
+    branches: [arena/216bd0ac-nova-rush]
+    paths: ['.github/workflows/novalisten-api-download.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: novalisten-api-download-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-verified-apk:
+    name: Publier le binaire 0.2.0 déjà testé, sans recompilation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Récupérer et reconstituer exactement l’APK validé
+        run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import zipfile
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          expected_commit = '63702262c6d32b9b0356eaa038d9e5a3af256ba3'
+          expected_sha = 'deff51cbbcccfd4676c646cf8544760dcfca23f1c68b023ca1204ea9c1d82497'
+          expected_size = 89460991
+          filename = 'NovaListen-0.2.0-debug.apk'
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+          build = api('actions/runs/44282482614')
+          assert build['conclusion'] == 'success' and build['head_sha'] == expected_commit
+          release = api('releases/449811770')
+          assert release['tag_name'] == 'novalisten-v0.2.0'
+          assert release['target_commitish'] == expected_commit and release['prerelease']
+          annotations = api('check-runs/134726508634/annotations?per_page=100')
+          manifest = next(json.loads(item['message']) for item in annotations if item.get('title') == 'NovaListen APK manifest')
+          assert (manifest['file'], manifest['commit'], manifest['bytes'], manifest['sha256']) == (filename, expected_commit, expected_size, expected_sha)
+          assert 1 <= len(manifest['parts']) <= 8
+          assert sum(part['bytes'] for part in manifest['parts']) == expected_size
+          folder = Path('artifacts')
+          folder.mkdir(exist_ok=True)
+          apk = folder / filename
+          digest = hashlib.sha256()
+          with apk.open('wb') as output:
+              for part in manifest['parts']:
+                  assert part['commit'] == expected_commit and 0 < part['bytes'] <= 20000000
+                  blob = api('git/blobs/' + part['blob'])
+                  assert blob['encoding'] == 'base64'
+                  data = base64.b64decode(blob['content'])
+                  assert len(data) == part['bytes'] and hashlib.sha256(data).hexdigest() == part['sha256']
+                  digest.update(data)
+                  output.write(data)
+          assert apk.stat().st_size == expected_size and digest.hexdigest() == expected_sha
+          with zipfile.ZipFile(apk) as archive:
+              assert archive.testzip() is None
+          (folder / 'SHA256SUMS.txt').write_text(expected_sha + '  ' + filename + '\n')
+          print('Binaire original 0.2.0 reconstitué et vérifié, sans compilation ni nouvelle signature.')
+          PY
+      - name: Vérifier l’empreinte avant transfert
+        working-directory: artifacts
+        run: sha256sum -c SHA256SUMS.txt
+      - name: Envoyer le fichier original et son empreinte
+        run: gh release upload novalisten-v0.2.0 artifacts/NovaListen-0.2.0-debug.apk artifacts/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Vérifier les fichiers hébergés et publier la version de test
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/releases/449811770']))
+          assets = {asset['name']: asset for asset in release['assets']}
+          apk = assets['NovaListen-0.2.0-debug.apk']
+          assert apk['state'] == 'uploaded' and apk['size'] == 89460991
+          assert 'SHA256SUMS.txt' in assets
+          if apk.get('digest'):
+              assert apk['digest'] == 'sha256:deff51cbbcccfd4676c646cf8544760dcfca23f1c68b023ca1204ea9c1d82497'
+          PY
+          gh release edit novalisten-v0.2.0 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+          gh api "repos/$GITHUB_REPOSITORY/releases/449811770" --jq '.assets[] | select(.name == "NovaListen-0.2.0-debug.apk") | "::notice title=Lien direct APK API::" + .browser_download_url'
