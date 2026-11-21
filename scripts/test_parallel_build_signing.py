@@ -21,6 +21,11 @@ class ParallelBuildSigningTest(unittest.TestCase):
         text = self.text.replace("application-label:'NovaListen Next'", "application: label='NovaListen Next' icon='res/drawable/ic_nova.xml'")
         self.assertEqual(build.LABEL, build.badging(text)['label'])
 
+    def test_current_aapt2_min_sdk_spelling_is_accepted_and_still_enforced(self):
+        text = self.text.replace('sdkVersion:', 'minSdkVersion:')
+        self.assertEqual(26, build.badging(text)['min_sdk'])
+        with self.assertRaises(ValueError): build.badging(text.replace("minSdkVersion:'26'", "minSdkVersion:'25'"))
+
     def test_distinct_launcher_label_and_minimum_version_are_checked(self):
         for text in [self.text.replace("'NovaListen Next'", "'NovaListen'"), self.text.replace("sdkVersion:'26'", "sdkVersion:'25'")]:
             with self.assertRaises(ValueError): build.badging(text)

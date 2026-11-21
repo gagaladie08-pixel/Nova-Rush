@@ -32,7 +32,7 @@ def badging(text):
     # rather than the application-label: entry used for a string resource.
     label = (re.search(r"^application-label:'([^']+)'", text, re.MULTILINE)
              or re.search(r"^application: label='([^']+)'", text, re.MULTILINE))
-    minimum = re.search(r"^sdkVersion:'([0-9]+)'", text, re.MULTILINE)
+    minimum = re.search(r"^(?:sdkVersion|minSdkVersion):'([0-9]+)'", text, re.MULTILINE)
     if not package or not label or not minimum:
         raise ValueError('Métadonnées APK absentes/incomplètes.')
     info = {'application_id': package[1], 'version_code': int(package[2]), 'version_name': package[3],
@@ -51,7 +51,7 @@ def prepare():
     source = ROOT / 'app/build/outputs/apk/debug/app-debug-unsigned.apk'
     binary_info = subprocess.check_output([str(sdk / 'aapt2'), 'dump', 'badging', str(source)], text=True, stderr=subprocess.STDOUT)
     if os.environ.get('GITHUB_ACTIONS') == 'true':
-        public_lines = '\n'.join(line for line in binary_info.splitlines() if line.startswith(('package:', 'sdkVersion:', 'application-label:', 'application:')))
+        public_lines = '\n'.join(line for line in binary_info.splitlines() if line.startswith(('package:', 'sdkVersion:', 'minSdkVersion:', 'targetSdkVersion:', 'application-label:', 'application:')))
         notice = public_lines.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
         print('::notice title=Next binary manifest::' + notice, flush=True)
     info = badging(binary_info)
