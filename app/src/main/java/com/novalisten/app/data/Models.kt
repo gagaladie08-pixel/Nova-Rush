@@ -30,12 +30,18 @@ data class Track(
     val isrc: String = "",
     val discNumber: Int = 0,
     val originalYear: Int = 0,
+    val albumCredits: List<ArtistCredit> = emptyList(),
+    val nativeAlbumArtist: String = "",
 ) {
     val playable: Boolean get() = durationMs >= MIN_TRACK_DURATION_MS
     val pending: Boolean get() = durationMs <= 0
     val artwork: String get() = displayCover ?: "content://media/external/audio/albumart/$albumId"
     val artistKey: String get() = artist.normalized()
     val albumKey: String get() = "$albumId:${(albumArtist.ifBlank { artist }).normalized()}"
+    // Keep the legacy cover key, but never mix distinct native releases in one edition.
+    val catalogAlbumArtist: String get() = nativeAlbumArtist.ifBlank { albumArtist }.ifBlank { artist }
+    val editionKey: String get() = if (!validMusicId(releaseId) && (albumId <= 0 || album.normalized() in setOf("", "album inconnu", "unknown album"))) "unidentified-album:$id"
+        else "$albumId:${catalogAlbumArtist.normalized()}" + if (validMusicId(releaseId)) ":release:${releaseId.lowercase(java.util.Locale.ROOT)}" else ""
 }
 
 data class LocalPlaylist(

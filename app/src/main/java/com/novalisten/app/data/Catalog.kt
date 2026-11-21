@@ -20,7 +20,7 @@ object ArtistCredits {
         return explicit.flatMap { part ->
             val slash = part.split('/').map(String::trim)
             val splitSlash = slash.size in 2..8 && slash.all { it.length > 1 } &&
-                (part.contains(" / ") || slash.all { it.artistNameKey() in knownNames } || slash.any { it.contains(' ') }) &&
+                (part.contains(" / ") || slash.any { it.artistNameKey() in knownNames }) &&
                 part.artistNameKey() !in protected
             val amp = part.split(Regex("\\s+&\\s+")).map(String::trim)
             when {
@@ -30,6 +30,8 @@ object ArtistCredits {
             }.map { ArtistCredit(it) }
         }.distinctBy { it.id }.take(16)
     }
+    fun mayBeMultiple(raw: String): Boolean = raw.artistNameKey() !in protected &&
+        (featuring.containsMatchIn(raw) || raw.any { it == ';' || it == '\u0000' || it == '/' } || Regex("\\s+&\\s+").containsMatchIn(raw))
     fun forTrack(track: Track, choices: CatalogChoices = CatalogChoices(), knownNames: Set<String> = emptySet()): List<ArtistCredit> =
         choices.artists[track.id] ?: track.credits.takeIf { it.isNotEmpty() } ?: parse(track.artist, knownNames)
 }
@@ -60,15 +62,20 @@ data class CatalogChoices(
     val separated: Set<String> = emptySet(),
 )
 data class ArtistGroup(val id: String, val name: String, val tracks: List<Track>, val mbid: String = "", val legacyId: String = name.artistNameKey(), val inheritLegacy: Boolean = true)
-data class AlbumEdition(val id: String, val name: String, val artist: String, val tracks: List<Track>, val kind: ReleaseKind) {
-    val artwork: String? get() = tracks.firstOrNull()?.artwork
+data class AlbumEdition(val id: String, val name: String, val artist: String, val tracks: List<Track>, val kind: ReleaseKind,
+                        val artistCredits: List<ArtistCredit> = emptyList()) {
+    val artwork: String? get() = (tracks.firstOrNull { it.displayCover != null } ?: tracks.firstOrNull())?.artwork
+    val releaseGroupId: String get() = tracks.map { it.releaseGroupId.lowercase(Locale.ROOT) }.distinct().singleOrNull()?.takeIf(::validMusicId).orEmpty()
+    val year: Int get() = tracks.map { it.originalYear.takeIf { year -> year > 0 } ?: it.year.takeIf { year -> year > 0 } ?: 0 }.filter { it > 0 }.minOrNull() ?: 0
 }
 data class AlbumGroup(val id: String, val name: String, val artist: String, val tracks: List<Track>,
                       val editions: List<AlbumEdition>, val originalId: String, val representativeId: String,
-                      val kind: ReleaseKind, val familyId: String? = null, val automaticFamily: Boolean = false) {
+                      val kind: ReleaseKind, val familyId: String? = null, val automaticFamily: Boolean = false, val groupingReason: String = "") {
     val representative: AlbumEdition get() = editions.first { it.id == representativeId }
     val artwork: String? get() = representative.artwork
     fun containsEdition(id: String): Boolean = editions.any { it.id == id }
+    fun containsTrack(id: String): Boolean = editions.any { edition -> edition.tracks.any { it.id == id } }
+    val year: Int get() = editions.first { it.id == originalId }.year
 }
 enum class CatalogSort(val label: String) { NAME_ASC("Nom A → Z"), NAME_DESC("Nom Z → A"), MOST_TRACKS("Plus de titres → moins de titres"), FEWEST_TRACKS("Moins de titres → plus de titres") }
 fun <T> sortCatalog(values: List<T>, sort: CatalogSort, name: (T) -> String, count: (T) -> Int): List<T> {
@@ -104,32 +111,34 @@ fun artistGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()
 fun artistNote(group: ArtistGroup, data: LocalData): ArtistNote = data.artists[group.id]
     ?: if (group.inheritLegacy) data.artists[group.legacyId] ?: ArtistNote() else ArtistNote()
 
-/** No suffix/title/track-count heuristic silently decides that releases or recordings are identical. */
+/** Edition relationships are local; recording identity remains separate from album title matching. */
 fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()): List<AlbumGroup> {
-    val editions = tracks.filter { it.playable }.distinctBy { it.id }.groupBy { it.albumKey }.map { (id, songs) ->
+    val editions = tracks.filter { it.playable }.distinctBy { it.id }.groupBy { it.editionKey }.map { (id, songs) ->
         val tagged = songs.map { it.releaseKind }.filter { it != ReleaseKind.UNKNOWN }.distinct().singleOrNull() ?: ReleaseKind.UNKNOWN
-        AlbumEdition(id, songs.first().album, songs.first().albumArtist.ifBlank { songs.first().artist },
-            songs.sortedWith(compareBy<Track> { it.discNumber }.thenBy { it.number }.thenBy { it.title.normalized() }.thenBy { it.id }), choices.kinds[id] ?: tagged)
+        val artist = songs.first().catalogAlbumArtist
+        val nativeCredits = songs.map { it.albumCredits }.filter { it.isNotEmpty() }.distinct().singleOrNull()
+        AlbumEdition(id, songs.first().album, artist,
+            songs.sortedWith(compareBy<Track> { it.discNumber }.thenBy { it.number }.thenBy { it.title.normalized() }.thenBy { it.id }),
+            choices.kinds[id] ?: choices.kinds[songs.first().albumKey] ?: tagged,
+            nativeCredits ?: ArtistCredits.parse(artist))
     }
-    val byEdition = choices.families.values.flatMap { family -> family.editions.map { it to family } }.toMap()
-    val buckets = editions.groupBy { edition ->
-        byEdition[edition.id]?.id ?: edition.tracks.map { it.releaseGroupId.lowercase(Locale.ROOT) }
-            .distinct().singleOrNull()?.takeIf { validMusicId(it) && edition.id !in choices.separated }?.let { "release-group:$it" } ?: edition.id
-    }
-    return buckets.map { (id, versions) ->
-        val family = versions.firstNotNullOfOrNull { byEdition[it.id] }
-        val ordered = versions.sortedWith(compareBy<AlbumEdition> { edition ->
-            edition.tracks.map { it.originalYear.takeIf { y -> y > 0 } ?: it.year.takeIf { y -> y > 0 } ?: Int.MAX_VALUE }.minOrNull() ?: Int.MAX_VALUE
-        }.thenBy { edition -> if (Regex("(?i)deluxe|expanded|anniversary|bonus|moonlight|reissue|réédition").containsMatchIn(edition.name)) 1 else 0 }.thenBy { it.name.normalized() }.thenBy { it.id })
+    return AlbumFamilies.group(editions, choices).map { bucket ->
+        val versions = bucket.editions
+        val family = bucket.family
+        val ordered = versions.sortedWith(compareBy<AlbumEdition> { if (AlbumFamilies.isRequestedOriginal(it)) 0 else 1 }
+            .thenBy { it.year.takeIf { year -> year > 0 } ?: Int.MAX_VALUE }
+            .thenBy { if (AlbumFamilies.baseTitle(it.name) != AlbumFamilies.titleKey(it.name)) 1 else 0 }
+            .thenBy { it.name.normalized() }.thenBy { it.id })
         val original = ordered.firstOrNull { it.id == family?.original } ?: ordered.first()
         val representative = ordered.firstOrNull { it.id == family?.representative } ?: original
         val sourceOrder = listOf(original) + ordered.filterNot { it.id == original.id }
         val unique = mutableListOf<Track>()
         sourceOrder.flatMap { it.tracks }.forEach { track -> if (unique.none { sameRecording(it, track, choices) }) unique += track }
         val kinds = ordered.map { it.kind }.filter { it != ReleaseKind.UNKNOWN }.distinct()
-        AlbumGroup(id, representative.name, representative.artist, unique, ordered, original.id, representative.id,
-            choices.kinds[id] ?: if (kinds.size == 1) kinds.first() else if (ordered.size == 1) representative.kind else ReleaseKind.UNKNOWN,
-            family?.id, id.startsWith("release-group:"))
+        AlbumGroup(bucket.id, representative.name, representative.artist, unique, ordered, original.id, representative.id,
+            choices.kinds[bucket.id] ?: AlbumFamilies.requestedKind(ordered)
+                ?: if (kinds.size == 1) kinds.first() else if (ordered.size == 1) representative.kind else ReleaseKind.UNKNOWN,
+            family?.id, family == null && (ordered.size > 1 || bucket.id != representative.id), bucket.reason)
     }.sortedBy { it.name.normalized() }
 }
 fun sameRecording(first: Track, second: Track, choices: CatalogChoices): Boolean {
@@ -141,7 +150,8 @@ fun sameRecording(first: Track, second: Track, choices: CatalogChoices): Boolean
     val sameId = id != null && id.equals(second.recordingId, true)
     val sameIsrc = first.isrc.matches(Regex("[A-Z]{2}[A-Z0-9]{3}[0-9]{7}")) && first.isrc == second.isrc
     return (sameId || sameIsrc) && first.title.normalized() == second.title.normalized() &&
-        first.artist.artistNameKey() == second.artist.artistNameKey() && kotlin.math.abs(first.durationMs - second.durationMs) <= 2000
+        ArtistCredits.forTrack(first, choices).map { it.id }.sorted() == ArtistCredits.forTrack(second, choices).map { it.id }.sorted() &&
+        kotlin.math.abs(first.durationMs - second.durationMs) <= 2000
 }
 fun validateFamily(family: AlbumFamily, choices: CatalogChoices) {
     require(family.id.isNotBlank() && family.editions.size in 2..100 && family.original in family.editions && family.representative in family.editions)

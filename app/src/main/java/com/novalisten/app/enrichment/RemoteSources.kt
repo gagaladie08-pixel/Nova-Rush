@@ -1,9 +1,12 @@
 package com.novalisten.app.enrichment
 
 import com.novalisten.app.BuildConfig
+import com.novalisten.app.data.artistNameKey
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
+
+private const val MIN_ARTIST_CONTEXT_DURATION = 60_000L
 
 /** Adapters never start themselves: explicit commands or the user-enabled current-track lyrics loader. */
 class RemoteSources(val transport: RemoteTransport, private val credential: suspend (SecretSlot) -> String?) : LyricLookup {
@@ -110,6 +113,37 @@ class RemoteSources(val transport: RemoteTransport, private val credential: susp
         require(name.isNotBlank() && name.length <= 300)
         return RemoteParsers.wikidataSearch(transport.request(Provider.WIKIDATA, "/w/api.php", mapOf("action" to "wbsearchentities", "search" to name, "language" to "fr", "uselang" to "fr", "type" to "item", "limit" to "5", "format" to "json")))
     }
+    /** A unique name result verifies a catalogue entity, not its attribution to a local file. */
+    suspend fun artistForCurrentRecording(request: ArtistRequest): String? {
+        val local = request.context ?: return null
+        if (local.title.isBlank() || local.title.length > 300 || local.album.length > 300 || local.durationMs < MIN_ARTIST_CONTEXT_DURATION || listOf(local.title, local.album, request.name).any { value -> value.any(Char::isISOControl) }) return null
+        val native = com.novalisten.app.data.validMusicId(local.recordingId)
+        val body = if (native) transport.request(Provider.MUSICBRAINZ, "/ws/2/recording/${RemoteSafety.mbid(local.recordingId)}", mapOf("inc" to "artist-credits+releases", "fmt" to "json"))
+            else {
+                if (local.album.isBlank() || local.album.artistNameKey() in setOf("album inconnu", "unknown album")) return null
+                transport.request(Provider.MUSICBRAINZ, "/ws/2/recording/", mapOf("query" to "recording:${term(local.title)} AND artist:${term(request.name)} AND release:${term(local.album)}", "fmt" to "json", "limit" to "12"))
+            }
+        val root = jsonObject(body)
+        val recordings = if (native) {
+            if (!root.str("id").equals(local.recordingId, true)) return null
+            listOf(root)
+        } else {
+            val results = root.objects("recordings")
+            // An incomplete result page cannot rule out another artist with the same name.
+            if (root.optInt("count", -1) !in 0..12 || root.optInt("count", -1) != results.size) return null
+            results.take(12)
+        }
+        val ids = recordings.filter { recording ->
+            recording.str("title").artistNameKey() == local.title.artistNameKey() && recording.optLong("length", 0) > 0 &&
+                kotlin.math.abs(recording.optLong("length", 0) - local.durationMs) <= 2000 &&
+                (native || recording.objects("releases").any { it.str("title").artistNameKey() == local.album.artistNameKey() })
+        }.flatMap { recording -> recording.objects("artist-credit").mapNotNull { credit ->
+            val artist = credit.optJSONObject("artist") ?: return@mapNotNull null
+            artist.str("id").takeIf { com.novalisten.app.data.validMusicId(it) &&
+                listOf(credit.str("name"), artist.str("name")).any { name -> name.artistNameKey() == request.name.artistNameKey() } }
+        } }.map { it.lowercase(java.util.Locale.ROOT) }.distinct()
+        return ids.singleOrNull()
+    }
     suspend fun artistWikidata(mbid: String): String? {
         val root = jsonObject(transport.request(Provider.MUSICBRAINZ, "/ws/2/artist/${RemoteSafety.mbid(mbid)}", mapOf("inc" to "url-rels", "fmt" to "json")))
         if (!root.str("id").equals(mbid, true) || root.str("type") !in setOf("Person", "Group", "Orchestra", "Choir", "Character", "Other")) return null
@@ -126,7 +160,7 @@ class RemoteSources(val transport: RemoteTransport, private val credential: susp
         fun strings(property: String): List<String> = claims.objects(property).filter { it.str("rank") != "deprecated" }.mapNotNull {
             it.optJSONObject("mainsnak")?.optJSONObject("datavalue")?.str("value")?.takeIf(String::isNotBlank)
         }.distinct()
-        if (!strings("P434").any { it.equals(mbid, true) }) return null
+        if (strings("P434").singleOrNull()?.equals(mbid, true) != true) return null
         return VerifiedArtistEntity(qid, entity.optJSONObject("sitelinks")?.optJSONObject("frwiki")?.str("title")?.takeIf(String::isNotBlank), strings("P18").singleOrNull())
     }
     suspend fun biographyForEntity(title: String, qid: String): Biography? {

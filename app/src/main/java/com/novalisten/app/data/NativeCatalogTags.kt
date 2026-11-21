@@ -7,7 +7,8 @@ import java.nio.ByteOrder
 
 /** Read-only, bounded ID3v2.3/2.4 and FLAC Vorbis comments. No audio hashes or remote scan. */
 data class NativeCatalogTags(val credits: List<ArtistCredit> = emptyList(), val releaseGroupId: String = "", val releaseId: String = "",
-                             val kind: ReleaseKind = ReleaseKind.UNKNOWN, val recordingId: String = "", val isrc: String = "", val disc: Int = 0, val originalYear: Int = 0)
+                             val kind: ReleaseKind = ReleaseKind.UNKNOWN, val recordingId: String = "", val isrc: String = "", val disc: Int = 0, val originalYear: Int = 0,
+                             val albumArtist: String = "", val albumCredits: List<ArtistCredit> = emptyList())
 object NativeCatalogTagReader {
     private const val LIMIT = 262_144
     fun read(input: InputStream): NativeCatalogTags = runCatching {
@@ -33,6 +34,7 @@ object NativeCatalogTagReader {
                     when {
                         id == "TXXX" -> { val text = text(body); val key = text.substringBefore('\u0000'); add(values, key, text.substringAfter('\u0000', "")) }
                         id == "TPE1" -> add(values, "ARTIST", text(body))
+                        id == "TPE2" -> add(values, "ALBUMARTIST", text(body))
                         id == "TSRC" -> add(values, "ISRC", text(body))
                         id == "TPOS" -> add(values, "DISCNUMBER", text(body))
                         id in setOf("TORY", "TDOR") -> add(values, "ORIGINALDATE", text(body))
@@ -60,14 +62,19 @@ object NativeCatalogTagReader {
         }
         fun all(key: String): List<String> = values[key].orEmpty().flatMap { it.split('\u0000') }.map(String::trim).filter { it.isNotEmpty() }
         fun first(vararg keys: String) = keys.firstNotNullOfOrNull { all(it).firstOrNull() }.orEmpty()
-        val names = all("ARTISTS").ifEmpty { all("ARTIST").takeIf { it.size > 1 }.orEmpty() }
+        val names = all("ARTISTS").flatMap { it.split(';') }.map(String::trim).filter(String::isNotBlank).ifEmpty { all("ARTIST").takeIf { it.size > 1 }.orEmpty() }
         val ids = all("MUSICBRAINZARTISTID").flatMap { it.split(';', '/') }.map(String::trim).filter(::validMusicId)
         val credits = if (names.isNotEmpty()) names.mapIndexed { index, name -> ArtistCredit(name, ids.getOrNull(index).orEmpty().takeIf { ids.size == names.size }.orEmpty()) }
-            else if (all("ARTIST").size == 1 && ids.size == 1 && ArtistCredits.parse(all("ARTIST").single()).size == 1) listOf(ArtistCredit(all("ARTIST").single(), ids.single())) else emptyList()
+            else if (all("ARTIST").size == 1 && ids.size == 1 && !ArtistCredits.mayBeMultiple(all("ARTIST").single())) listOf(ArtistCredit(all("ARTIST").single(), ids.single())) else emptyList()
+        val albumNames = all("ALBUMARTISTS").flatMap { it.split(';') }.map(String::trim).filter(String::isNotBlank).ifEmpty { all("ALBUMARTIST").takeIf { it.size > 1 }.orEmpty() }
+        val albumIds = all("MUSICBRAINZALBUMARTISTID").flatMap { it.split(';', '/') }.map(String::trim).filter(::validMusicId)
+        val albumArtist = all("ALBUMARTIST").joinToString("; ")
+        val albumCredits = if (albumNames.isNotEmpty()) albumNames.mapIndexed { index, name -> ArtistCredit(name, albumIds.getOrNull(index).orEmpty().takeIf { albumNames.size == albumIds.size }.orEmpty()) }
+            else if (albumArtist.isNotBlank() && albumIds.size == 1 && !ArtistCredits.mayBeMultiple(albumArtist)) listOf(ArtistCredit(albumArtist, albumIds.single())) else emptyList()
         NativeCatalogTags(credits, first("MUSICBRAINZRELEASEGROUPID").takeIf(::validMusicId).orEmpty(), first("MUSICBRAINZALBUMID", "MUSICBRAINZRELEASEID").takeIf(::validMusicId).orEmpty(),
             ReleaseKind.fromTag(first("RELEASETYPE", "MUSICBRAINZALBUMTYPE", "MUSICBRAINZRELEASETYPE")), first("MUSICBRAINZTRACKID", "MUSICBRAINZRECORDINGID").takeIf(::validMusicId).orEmpty(),
             first("ISRC").replace("-", "").uppercase(java.util.Locale.ROOT).takeIf { it.matches(Regex("[A-Z]{2}[A-Z0-9]{3}[0-9]{7}")) }.orEmpty(),
-            first("DISCNUMBER").substringBefore('/').toIntOrNull()?.coerceIn(0, 999) ?: 0, first("ORIGINALDATE", "ORIGINALYEAR").take(4).toIntOrNull()?.takeIf { it in 1000..2999 } ?: 0)
+            first("DISCNUMBER").substringBefore('/').toIntOrNull()?.coerceIn(0, 999) ?: 0, first("ORIGINALDATE", "ORIGINALYEAR").take(4).toIntOrNull()?.takeIf { it in 1000..2999 } ?: 0, albumArtist, albumCredits)
     }.getOrDefault(NativeCatalogTags())
     private fun add(values: MutableMap<String, MutableList<String>>, key: String, value: String) {
         val normalized = key.uppercase(java.util.Locale.ROOT).replace(Regex("[^A-Z0-9]"), "")

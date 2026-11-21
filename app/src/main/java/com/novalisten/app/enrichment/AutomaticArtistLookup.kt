@@ -3,25 +3,19 @@ package com.novalisten.app.enrichment
 import com.novalisten.app.data.artistNameKey
 import com.novalisten.app.data.validMusicId
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 
 /** No first-result/name-only assignment. MusicBrainz → Wikidata backlink → exact FR page / P18. */
 class AutomaticArtistLookup(private val remote: RemoteSources) : ArtistLookup {
     override suspend fun resolve(request: ArtistRequest, biography: Boolean, portrait: Boolean): ArtistResult {
         if (request.name.isBlank() || request.name.length > 300 || request.name.artistNameKey() in setOf("artiste inconnu", "unknown artist", "various artists", "artistes divers"))
             return ArtistResult(note = "Artiste non identifié : utilisez la correction locale des crédits.")
-        val mbid = if (validMusicId(request.mbid)) request.mbid else {
-            val matches = remote.artists(request.name).filter { it.name.artistNameKey() == request.name.artistNameKey() && validMusicId(it.mbid.orEmpty()) }.distinctBy { it.mbid }
-            if (matches.size != 1) return ArtistResult(note = "Identité absente ou homonymes : choisissez une association MusicBrainz depuis Photos en ligne.")
-            matches.single().mbid!!
-        }
+        val mbid = if (validMusicId(request.mbid)) request.mbid else remote.artistForCurrentRecording(request)
+            ?: return ArtistResult(note = "Le nom seul ne prouve pas l’identité de l’artiste de ce fichier. Aucun contenu attribué sans identifiant local/choisi ou concordance titre, album, durée et crédits du morceau écouté. Vous pouvez choisir l’association dans Photos en ligne.")
         val linked = remote.artistWikidata(mbid) ?: return ArtistResult(note = "Pas de lien d’identité Wikidata vérifiable. Aucun portrait choisi sur le seul nom.")
         val entity = remote.verifiedArtistEntity(linked, mbid)
             ?: return ArtistResult(note = "Les identifiants d’artiste ne concordent pas ; choix manuel nécessaire.")
         var bio: Biography? = null
         var selected: ImageCandidate? = null
-        var proposals = emptyList<ImageCandidate>()
         val notices = mutableListOf<String>()
         if (biography) try {
             if (entity.frenchTitle.isNullOrBlank()) notices += "Aucun article français lié. Une recherche anglaise reste proposée manuellement, sans traduction automatique."
@@ -38,22 +32,14 @@ class AutomaticArtistLookup(private val remote: RemoteSources) : ArtistLookup {
                 selected = images.singleOrNull()?.takeIf { automaticPortraitAllowed(it, title) }
             }
             if (selected == null) {
-                // Bounded first discovery, not a fallback to a random first portrait. No automatic pagination.
-                proposals = coroutineScope {
-                    val commons = async { safeImages { remote.commons(request.name) } }
-                    val openverse = async { safeImages { remote.openverse(request.name) } }
-                    (commons.await() + openverse.await()).distinctBy { imageIdentity(it.original) }.take(12)
-                }
-                notices += "Aucun portrait directement lié et admissible. Les propositions restent à choisir manuellement."
+                notices += "Aucun portrait directement lié et admissible. La cascade conditionnelle recherche un lot borné de propositions, sans choisir son premier résultat."
             } else notices += "Portrait Commons lié par Wikidata P18, identité croisée MusicBrainz/Wikidata, licence ouverte et crédits conservés. La date n’est pas présumée récente."
         }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) { notices += "Portrait : ${error.publicMessage()}" }
         if (bio != null) notices += "Introduction française conservée avec sa source ; pas de traduction automatique."
-        return ArtistResult(bio, selected, proposals, notices.joinToString("\n"), identityVerified = true)
+        return ArtistResult(bio, selected, note = notices.joinToString("\n"), identityVerified = true, verifiedMbid = mbid)
     }
-    private suspend fun safeImages(block: suspend () -> List<ImageCandidate>): List<ImageCandidate> = try { block() }
-        catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { emptyList() }
 }
 
 data class VerifiedArtistEntity(val qid: String, val frenchTitle: String?, val imageTitle: String?)

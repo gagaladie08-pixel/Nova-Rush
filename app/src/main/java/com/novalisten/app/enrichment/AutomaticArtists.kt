@@ -8,20 +8,21 @@ import kotlinx.coroutines.flow.asStateFlow
 interface ArtistLookup {
     suspend fun resolve(request: ArtistRequest, biography: Boolean, portrait: Boolean): ArtistResult
 }
-data class ArtistRequest(val id: String, val name: String, val mbid: String = "")
+data class ArtistRequest(val id: String, val name: String, val mbid: String = "", val context: ArtistLocalContext? = null)
 data class ArtistResult(val biography: Biography? = null, val portrait: ImageCandidate? = null,
-                        val proposals: List<ImageCandidate> = emptyList(), val note: String = "", val identityVerified: Boolean = false)
+                        val proposals: List<ImageCandidate> = emptyList(), val note: String = "", val identityVerified: Boolean = false, val verifiedMbid: String = "")
 data class ArtistAutomation(val biography: Boolean = true, val portrait: Boolean = true)
 data class ArtistPlayback(val trackId: String, val artists: List<ArtistRequest>, val playing: Boolean)
-data class AutoArtistState(val loading: Boolean = false, val note: String = "", val proposals: List<PreparedPhoto> = emptyList())
+data class AutoArtistState(val loading: Boolean = false, val note: String = "", val proposals: List<PreparedPhoto> = emptyList(), val verifiedMbid: String = "")
 
 /** Current listening only; bounded session cache, debounce, cancellation and transactional manual priority. */
 class AutomaticArtists(private val scope: CoroutineScope, private val lookup: ArtistLookup,
                        private val prepare: suspend (List<ImageCandidate>) -> List<PreparedPhoto>,
                        private val saveImage: suspend (ImageCandidate) -> String,
                        private val discardImage: suspend (String) -> Unit,
-                       private val persist: suspend (String, String, ArtistNote) -> Boolean,
-                       private val now: () -> Long = System::currentTimeMillis) {
+                       private val persist: suspend (String, ArtistRequest, ArtistNote) -> Boolean,
+                       private val now: () -> Long = System::currentTimeMillis,
+                       private val discoverPortraits: suspend (ArtistRequest, String) -> PortraitBatch? = { _, _ -> null }) {
     private data class CacheKey(val request: ArtistRequest, val bio: Boolean, val photo: Boolean)
     private val cache = linkedMapOf<CacheKey, Long>()
     private val _state = MutableStateFlow<Map<String, AutoArtistState>>(emptyMap())
@@ -58,11 +59,21 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
                             cache[wanted] = now() + 600_000
                             return@withTimeout
                         }
-                        val images = if (wanted.photo) listOfNotNull(result.portrait).ifEmpty { result.proposals } else emptyList()
-                        val prepared = if (images.isNotEmpty()) prepare(images) else emptyList()
-                        ensureActive()
-                        val selected = result.portrait?.takeIf { selected -> wanted.photo && prepared.any { it.image.id == selected.id } && selected.licenceKnown && !selected.needsOriginCheck }
-                        if (selected != null) pendingImage = saveImage(selected)
+                        var prepared = emptyList<PreparedPhoto>()
+                        var selected: ImageCandidate? = null
+                        var photoNotice = ""
+                        if (wanted.photo) try {
+                            val images = listOfNotNull(result.portrait).ifEmpty { result.proposals }
+                            prepared = if (images.isNotEmpty()) prepare(images) else emptyList()
+                            ensureActive()
+                            selected = result.portrait?.takeIf { candidate -> prepared.any { it.image.id == candidate.id } && automaticPortraitAllowed(candidate, candidate.title) }
+                            if (selected != null) pendingImage = saveImage(selected)
+                            else if (validMusicId(result.verifiedMbid)) {
+                                val batch = discoverPortraits(request, result.verifiedMbid)
+                                if (batch != null) prepared = batch.photos
+                            }
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (error: Exception) { photoNotice = "\nPortrait : ${error.publicMessage()}" }
                         ensureActive()
                         if (token != generation) return@withTimeout
                         val bio = result.biography?.takeIf { wanted.bio && it.language == "fr" }
@@ -70,11 +81,11 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
                             selected?.let { it.credit.text() + "\n" + it.date + "\nPortrait lié à l’identité vérifiée ; copie JPEG d’affichage NovaListen." }.orEmpty())
                         withContext(NonCancellable) {
                             if (token == generation) {
-                                val imageUsed = if (note.biography.isNotBlank() || note.portrait != null) persist(playback.trackId, request.id, note) else false
+                                val imageUsed = if (note.biography.isNotBlank() || note.portrait != null) persist(playback.trackId, request, note) else false
                                 if (imageUsed) pendingImage = null
                             }
                         }
-                        if (token == generation) publish(request.id, AutoArtistState(note = result.note, proposals = prepared))
+                        if (token == generation) publish(request.id, AutoArtistState(note = result.note + photoNotice, proposals = prepared, verifiedMbid = result.verifiedMbid))
                         cache[wanted] = now() + 600_000
                     }
                 } catch (_: TimeoutCancellationException) {

@@ -50,6 +50,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val automaticLyrics = app.automaticLyrics
     val automaticArtists = app.automaticArtists
     val artistPreferences = app.artistPreferences
+    val artistPortraits = app.artistPortraits
     private val _playerOpenRequests = MutableStateFlow(PlayerOpenRequest())
     val playerOpenRequests = _playerOpenRequests.asStateFlow()
     fun lyricsFor(id: String): SavedLyrics {
@@ -149,11 +150,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun saveArtistBiography(id: String, biography: String, source: String) { persist("Biographie choisie sauvegardée hors ligne") {
         val seed = artistNoteFor(id)
-        repository.mutate { val current = snapshot().artists[id] ?: seed; saveArtist(id, current.copy(biography = biography, source = source, biographyLocked = true)) }
+        repository.mutate { saveArtistBiography(id, biography, source, seed) }
     } }
     fun saveArtistPortrait(id: String, portrait: String?, source: String) { persist("Portrait choisi sauvegardé hors ligne") {
         val seed = artistNoteFor(id)
-        repository.mutate { val current = snapshot().artists[id] ?: seed; saveArtist(id, current.copy(portrait = portrait, portraitSource = source, portraitLocked = true)) }
+        repository.mutate { saveArtistPortrait(id, portrait, source, seed) }
+    } }
+    fun allowMissingArtistFields(id: String) { persist("Les champs vides de cette fiche peuvent être complétés pendant l’écoute, selon vos réglages") {
+        val seed = artistNoteFor(id)
+        repository.mutate { allowMissingArtistFields(id, seed) }
     } }
     fun correctArtists(track: String, names: List<String>?) { persist("Crédits corrigés dans NovaListen · fichiers inchangés") {
         repository.mutate { saveArtistCredits(track, names?.filter(String::isNotBlank)?.map { ArtistCredit(it.substringBefore('|').trim(), it.substringAfter('|', "").trim()) }) }

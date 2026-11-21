@@ -10,6 +10,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
+import com.novalisten.app.enrichment.ArtistRequest
+import com.novalisten.app.enrichment.artistRequestsForTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -98,7 +100,7 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
                     known(text(3), "Album inconnu"), c.getLong(4), known(text(5), ""), duration,
                     c.getLong(7) * 1000, c.getInt(8), c.getInt(9) % 1000, text(10), c.getLong(11), text(12),
                     credits = tags.credits, releaseGroupId = tags.releaseGroupId, releaseId = tags.releaseId, releaseKind = tags.kind,
-                    recordingId = tags.recordingId, isrc = tags.isrc, discNumber = tags.disc.takeIf { it > 0 } ?: (c.getInt(9) / 1000), originalYear = tags.originalYear,
+                    recordingId = tags.recordingId, isrc = tags.isrc, discNumber = tags.disc.takeIf { it > 0 } ?: (c.getInt(9) / 1000), originalYear = tags.originalYear, albumCredits = tags.albumCredits, nativeAlbumArtist = tags.albumArtist,
                 )
             }
         }
@@ -114,12 +116,14 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
             database.saveAutomaticLyrics(id, record).also { updateLocalData() }
         }
     }
-    suspend fun saveAutomaticArtist(trackId: String, artistId: String, note: ArtistNote): Boolean = withContext(Dispatchers.IO) {
+    suspend fun saveAutomaticArtist(trackId: String, request: ArtistRequest, note: ArtistNote): Boolean = withContext(Dispatchers.IO) {
         dataMutex.withLock {
             val local = _data.value
             val track = _library.value.tracks.firstOrNull { it.id == trackId && it.id !in local.hidden } ?: return@withLock false
-            val group = artistGroups(_library.value.tracks.filter { it.id !in local.hidden }, local.catalog).firstOrNull { it.id == artistId && it.tracks.any { song -> song.id == track.id } }
-                ?: return@withLock false
+            val groups = artistGroups(_library.value.tracks.filter { it.id !in local.hidden }, local.catalog)
+            if (artistRequestsForTrack(track, local, groups).none { it == request }) return@withLock false
+            val artistId = request.id
+            val group = groups.firstOrNull { it.id == artistId } ?: return@withLock false
             if (group.inheritLegacy && artistId !in local.artists) local.artists[group.legacyId]?.let { database.saveArtist(artistId, it) }
             database.saveAutomaticArtist(artistId, note).also { updateLocalData() }
         }

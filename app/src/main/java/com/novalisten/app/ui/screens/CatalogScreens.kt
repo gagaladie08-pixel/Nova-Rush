@@ -78,7 +78,7 @@ fun CatalogScreen(artists: Boolean, tracks: List<Track>, data: LocalData, vm: Ma
                     }
                 }
                 if (searching) SearchField(query, { query = it; selected = emptySet() }, if (artists) "Nom de l’artiste" else "Album, édition ou artiste")
-                if (!artists) Notice("Une carte par groupe d’éditions identifié ou confirmé. Types lus dans les tags disponibles ou choisis localement : un album avec un seul fichier ne devient pas un single. Appui long sur plusieurs cartes pour regrouper leurs éditions.")
+                if (!artists) Notice("Une carte par groupe d’éditions identifié ou confirmé. Relations demandées, identifiants locaux et preuves d’enregistrement partagées ; types lus dans les tags ou choisis localement : un album avec un seul fichier ne devient pas un single. Appui long sur plusieurs cartes pour regrouper leurs éditions.")
                 if (selected.isNotEmpty()) Column(Modifier.padding(horizontal = 20.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton({ vm.next(selectedTracks); selected = emptySet() }) { Text("Lire ensuite") }
@@ -170,6 +170,10 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
                         DropdownMenuItem({ Text("Rechercher une biographie en ligne") }, { menu = false; onBiography() })
                         DropdownMenuItem({ Text("Choisir une photo locale") }, { menu = false; onPortrait() })
                         DropdownMenuItem({ Text("Biographie locale et source") }, { menu = false; editing = true })
+                        if ((note.biographyLocked && note.biography.isBlank()) || (note.portraitLocked && note.portrait == null)) {
+                            DropdownMenuItem({ Text("Autoriser le remplissage des champs vides") }, { menu = false; vm.allowMissingArtistFields(group.id) })
+                        }
+
                     }
                 }
             }
@@ -199,7 +203,7 @@ fun AlbumDetail(group: AlbumGroup, data: LocalData, playback: PlaybackUi, vm: Ma
                 artistGroups(group.editions.flatMap { it.tracks }, data.catalog).forEach { artist ->
                     TextButton({ onArtist(artist.id) }) { Text(artist.name) }
                 }
-                Text("${group.kind.label} · ${group.tracks.size} titres locaux · ${totalDurationLabel(group.tracks.sumOf { it.durationMs })}")
+                Text("${if (group.year > 0) "${group.year} · " else ""}${group.kind.label} · ${group.tracks.size} titres locaux · ${totalDurationLabel(group.tracks.sumOf { it.durationMs })}")
                 Text("${group.editions.size} édition(s) · ordre d’origine retenu, puis ajouts", style = MaterialTheme.typography.bodySmall)
                 Row {
                     TextButton(onCovers) { Icon(Icons.Outlined.ImageSearch, null); Text("Pochette") }
@@ -220,7 +224,7 @@ fun AlbumDetail(group: AlbumGroup, data: LocalData, playback: PlaybackUi, vm: Ma
                         }
                     }
                 }
-                data.covers[group.representativeId]?.let { cover -> SavedAttribution("Pochette d’affichage seulement · fichiers intacts\n${cover.source}") }
+                data.covers[group.representative.tracks.first().albumKey]?.let { cover -> SavedAttribution("Pochette d’affichage seulement · fichiers intacts\n${cover.source}") }
             }
         }
     })

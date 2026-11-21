@@ -52,7 +52,8 @@ internal class RemoteWork(private val scope: CoroutineScope) {
 
 @Composable
 fun EnrichmentDialog(request: EnrichmentRequest, vm: MainViewModel, onDismiss: () -> Unit, onKeys: () -> Unit) {
-    DisposableEffect(Unit) { onDispose { vm.clearRemotePreviews() } }
+    // Shared working previews are bounded in cache; closing this screen must not delete
+    // previews still used by current-artist automation or another enrichment.
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().testTag("enrichment_screen")) {

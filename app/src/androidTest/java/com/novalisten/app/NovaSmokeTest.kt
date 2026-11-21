@@ -68,6 +68,12 @@ class NovaSmokeTest {
         compose.onNodeWithTag("full_player").assertIsDisplayed()
         compose.onNodeWithContentDescription("Réduire le player").performClick()
         compose.onNodeWithTag("mini_player").assertIsDisplayed()
+        compose.runOnIdle { vm.next(listOf(tracks.last())) }
+        compose.onNodeWithTag("full_player").assertDoesNotExist()
+        compose.activityRule.scenario.recreate()
+        compose.waitForIdle()
+        compose.onNodeWithTag("full_player").assertDoesNotExist()
+        compose.onNodeWithTag("mini_player").assertIsDisplayed()
         compose.runOnIdle { vm.seek(tracks.first().durationMs - 250) }
         compose.waitUntil(20_000) { vm.playback.value.currentId == second.toString() }
         compose.onNodeWithTag("full_player").assertDoesNotExist()

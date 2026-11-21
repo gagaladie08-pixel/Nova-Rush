@@ -16,7 +16,7 @@ import com.novalisten.app.MainActivity
 import com.novalisten.app.NovaApplication
 import com.novalisten.app.data.*
 import com.novalisten.app.enrichment.ArtistPlayback
-import com.novalisten.app.enrichment.ArtistRequest
+import com.novalisten.app.enrichment.artistRequestsForTrack
 import com.novalisten.app.enrichment.LyricPlayback
 import com.novalisten.app.enrichment.MusicQuery
 import kotlinx.coroutines.CoroutineScope
@@ -108,7 +108,8 @@ class PlaybackService : MediaSessionService() {
             combine(lyricPlayback, repository.library, repository.data, repository.localDataReady, app.artistPreferences.state) { playback, library, local, ready, settings ->
                 val active = playback?.takeIf { it.playing && it.trackId !in local.hidden }
                 val artists = if (active == null) emptyList() else artistGroups(playableTracks(library.tracks, local.hidden), local.catalog).filter { group -> group.tracks.any { it.id == active.trackId } }
-                val request = active?.let { ArtistPlayback(it.trackId, artists.map { group -> ArtistRequest(group.id, group.name, local.identities["artist:${group.id}"] ?: group.mbid) }, true) }
+                val track = active?.let { playing -> library.tracks.firstOrNull { it.id == playing.trackId } }
+                val request = track?.let { ArtistPlayback(it.id, artistRequestsForTrack(it, local, artists), true) }
                 app.automaticArtists.onPlayback(request, settings, artists.associate { it.id to artistNote(it, local) }, ready)
             }.collect { }
         }

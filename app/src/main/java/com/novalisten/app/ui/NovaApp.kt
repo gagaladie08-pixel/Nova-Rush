@@ -180,7 +180,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                     }
                                     3 -> {
                                         val album = albums.find { it.id == albumId }
-                                        if (album != null) AlbumDetail(album, data, playback, vm, actions, { albumId = null }, ::openArtist, onCovers = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, album.representative.tracks.first(), name = album.name, albumKey = album.representativeId) })
+                                        if (album != null) AlbumDetail(album, data, playback, vm, actions, { albumId = null }, ::openArtist, onCovers = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, album.representative.tracks.first(), name = album.name, albumKey = album.representative.tracks.first().albumKey) })
                                         else CatalogScreen(false, playable, data, vm, ::openArtist, ::openAlbum, { addTracks = it })
                                     }
                                     4 -> {
@@ -207,7 +207,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                 onEditLyrics = { editingLyrics = current }, onLyricsInfo = { lyricsInfo = current },
                 blocked = menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || lyricsInfo != null || deleteTracks != null || enrichment != null)
         }
-        menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { val matches = artists.filter { group -> group.tracks.any { it.id == track.id } }; if (matches.size == 1) openArtist(matches.single().id) else artistChoiceTrack = track }, { openAlbum(albums.firstOrNull { it.containsEdition(track.albumKey) }?.id ?: track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }, onOnlineLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onCatalog = { enrichment = EnrichmentRequest(EnrichmentMode.CATALOG, track) }, onCover = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, track) },
+        menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { val matches = artists.filter { group -> group.tracks.any { it.id == track.id } }; if (matches.size == 1) openArtist(matches.single().id) else artistChoiceTrack = track }, { openAlbum(albums.firstOrNull { it.containsTrack(track.id) }?.id ?: track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }, onOnlineLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onCatalog = { enrichment = EnrichmentRequest(EnrichmentMode.CATALOG, track) }, onCover = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, track) },
             hasLyrics = lyricsFor(track.id).original.isNotBlank(), onTranslateLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, track) },
             onEditLyrics = { editingLyrics = track }, onLyricsInfo = { lyricsInfo = track }, onCorrectArtists = { creditEditor = track }) }
         artistChoiceTrack?.let { track -> AlertDialog(onDismissRequest = { artistChoiceTrack = null }, title = { Text("Artistes du morceau") }, text = {

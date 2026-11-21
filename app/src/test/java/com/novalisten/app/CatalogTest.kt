@@ -18,7 +18,7 @@ class CatalogTest {
         assertEquals("Ariana Grande/Iggy Azalea", songs.first().artist)
     }
     @Test fun groupsAndPunctuationAreNotBlindlySplit() {
-        listOf("AC/DC", "Earth, Wind & Fire", "Tyler, the Creator", "Simon & Garfunkel", "A/B").forEach { name ->
+        listOf("AC/DC", "Earth, Wind & Fire", "Tyler, the Creator", "Simon & Garfunkel", "A/B", "An Unknown/Group With Spaces").forEach { name ->
             assertEquals(name, listOf(name), ArtistCredits.parse(name).map { it.name })
         }
     }
@@ -120,4 +120,83 @@ class CatalogTest {
         val group = albumGroups(songs).single(); assertEquals(ReleaseKind.UNKNOWN, group.kind)
         assertEquals(ReleaseKind.ALBUM, albumGroups(songs, CatalogChoices(kinds = mapOf(group.id to ReleaseKind.ALBUM))).single().kind)
     }
+    @Test fun theFameAndMonsterUseTheRequestedFamilyEvenWithDifferentNativeReleaseGroupsAndTypes() {
+        val one = track("original", artist = "Lady Gaga", album = "The Fame", number = 1).copy(albumArtist = "Lady Gaga", releaseGroupId = mb1, releaseKind = ReleaseKind.ALBUM, recordingId = mb1, year = 2008)
+        val second = one.copy(id = "second", title = "Second song", number = 2, recordingId = mb2)
+        val copy = one.copy(id = "copy", album = "The Fame Monster", albumId = 2, releaseGroupId = mb2, releaseKind = ReleaseKind.EP, year = 2009)
+        val extra = copy.copy(id = "extra", title = "New song", number = 2, recordingId = "")
+        val live = copy.copy(id = "live", title = "${one.title} (Live)", number = 3)
+        val source = listOf(copy, live, extra, second, one)
+        val group = albumGroups(source).single()
+        assertEquals("The Fame", group.name); assertEquals(one.editionKey, group.originalId); assertEquals(2008, group.year)
+        assertEquals(listOf("original", "second", "extra", "live"), group.tracks.map { it.id })
+        assertEquals(5, group.editions.sumOf { it.tracks.size }); assertEquals(ReleaseKind.ALBUM, group.kind)
+        assertTrue(group.automaticFamily); assertTrue(group.groupingReason.contains("explicitement demandée"))
+        assertEquals(2, albumGroups(source, CatalogChoices(separated = setOf(one.editionKey))).size)
+    }
+    @Test fun futureNostalgiaAndBothCommonMoonlightNameFormsUseOneRequestedCardWithoutNeedingAnApi() {
+        for (name in listOf("Future Nostalgia — Moonlight Edition", "Future Nostalgia (The Moonlight Edition)")) {
+            val original = track("one", artist = "Dua Lipa", album = "Future Nostalgia").copy(albumArtist = "Dua Lipa")
+            val extra = original.copy(id = "extra", album = name, albumId = 2)
+            val group = albumGroups(listOf(extra, original)).single()
+            assertEquals("Future Nostalgia", group.name); assertEquals(2, group.tracks.size)
+            assertEquals(ReleaseKind.ALBUM, group.kind)
+        }
+    }
+    @Test fun requestedNamesDoNotMergeCoversOtherArtistsSinglesOrConflictingAlbumArtistIdentities() {
+        val original = track("1", album = "The Fame").copy(albumArtist = "Lady Gaga")
+        val cover = original.copy(id = "2", album = "The Fame Monster", albumId = 2, albumArtist = "Another artist")
+        assertEquals(2, albumGroups(listOf(original, cover)).size)
+        val single = cover.copy(albumArtist = "Lady Gaga", releaseKind = ReleaseKind.SINGLE)
+        assertEquals(2, albumGroups(listOf(original, single)).size)
+        val namesakeOne = original.copy(albumCredits = listOf(ArtistCredit("Lady Gaga", mb1)))
+        val namesakeTwo = cover.copy(albumArtist = "Lady Gaga", albumCredits = listOf(ArtistCredit("Lady Gaga", mb2)))
+        assertEquals(2, albumGroups(listOf(namesakeOne, namesakeTwo)).size)
+    }
+    @Test fun identicalReleaseGroupTagsDoNotOverrideAContradictoryAlbumArtist() {
+        val one = track("1").copy(releaseGroupId = mb1, albumArtist = "First")
+        val two = one.copy(id = "2", albumId = 2, albumArtist = "Second")
+        assertEquals(2, albumGroups(listOf(one, two)).size)
+    }
+    @Test fun genericEditionMarkersNeedSharedRecordingEvidenceAndDoNotStripLiveOrRemixAlbumNames() {
+        val one = track("1").copy(recordingId = mb1)
+        val copy = one.copy(id = "2", albumId = 2, album = "${one.album} (Deluxe Edition)")
+        val group = albumGroups(listOf(copy, one)).single()
+        assertEquals(one.album, group.name); assertEquals(1, group.tracks.size)
+        assertEquals(2, albumGroups(listOf(one, copy.copy(recordingId = ""))).size)
+        assertEquals(2, albumGroups(listOf(one, copy.copy(album = "${one.album} (Live)"))).size)
+        assertEquals(2, albumGroups(listOf(one, copy.copy(album = "${one.album} (Remixes)"))).size)
+    }
+    @Test fun twoNativeReleasesSharingOneAndroidAlbumIdAreStillIdentifiableEditions() {
+        val one = track("1").copy(releaseId = mb1, releaseGroupId = mb1)
+        val two = one.copy(id = "2", releaseId = mb2)
+        val group = albumGroups(listOf(one, two)).single()
+        assertEquals(2, group.editions.size); assertNotEquals(one.editionKey, two.editionKey)
+        assertEquals(one.albumKey, two.albumKey) // Existing v4 cover associations have not been renamed.
+        assertTrue(group.containsTrack("2"))
+    }
+    @Test fun aNativeAlbumArtistGroupsCollaborationsWithoutRewritingTheOriginalCreditsOrCoverKeys() {
+        val one = track("1", artist = "One feat. Two").copy(albumArtist = "One feat. Two", nativeAlbumArtist = "One")
+        val two = one.copy(id = "2", artist = "One", albumArtist = "One", displayCover = "file:///old-cover.jpg")
+        val group = albumGroups(listOf(one, two)).single()
+        assertEquals(1, group.editions.size); assertEquals("One", group.artist)
+        assertEquals("file:///old-cover.jpg", group.artwork)
+        assertEquals("1:one feat. two", one.albumKey); assertEquals("One feat. Two", one.artist)
+    }
+    @Test fun unknownAlbumsAreNotAllCombinedIntoOneInventedRelease() {
+        val one = track("1", album = "Album inconnu")
+        assertEquals(2, albumGroups(listOf(one, one.copy(id = "2"))).size)
+    }
+
+    @Test fun aSavedRepresentativeChoiceAndANewNativeEditionKeepOneStableGroupId() {
+        val one = track("1").copy(releaseGroupId = mb1, albumCredits = listOf(ArtistCredit("Artiste synthétique", mb2)))
+        val two = one.copy(id = "2", albumId = 2)
+        val before = albumGroups(listOf(one, two)).single()
+        val family = AlbumFamily(before.id, setOf(one.editionKey, two.editionKey), one.editionKey, two.editionKey)
+        val third = one.copy(id = "3", albumId = 3, albumCredits = emptyList())
+        val after = albumGroups(listOf(one, two, third), CatalogChoices(families = mapOf(family.id to family))).single()
+        assertEquals(before.id, after.id); assertEquals(3, after.editions.size)
+        assertEquals(two.editionKey, after.representativeId)
+    }
+
 }

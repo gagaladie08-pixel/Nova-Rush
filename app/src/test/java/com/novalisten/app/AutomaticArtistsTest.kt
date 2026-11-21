@@ -19,7 +19,7 @@ class AutomaticArtistsTest {
     }
     private suspend fun prepared(images: List<ImageCandidate>) = images.map { PreparedPhoto(it, "file:///synthetic-preview.jpg", PhotoFingerprint(0, 128, 128, 128, 1000)) }
     private fun loader(scope: CoroutineScope, fake: Fake, saved: MutableList<Pair<String, ArtistNote>> = mutableListOf(), deleted: MutableList<String> = mutableListOf(), save: suspend (ImageCandidate) -> String = { "file:///synthetic.jpg" }, now: () -> Long = { 0 }) =
-        AutomaticArtists(scope, fake, ::prepared, save, { deleted += it }, { _, id, note -> saved += id to note; note.portrait != null }, now)
+        AutomaticArtists(scope, fake, ::prepared, save, { deleted += it }, { _, id, note -> saved += id.id to note; note.portrait != null }, now)
 
     @Test fun nothingIsSearchedForAPreparedQueuePauseMissingSnapshotOrDisabledFeatures() = runTest {
         val fake = Fake { _, _, _ -> ArtistResult() }; val auto = loader(this, fake)
@@ -101,4 +101,21 @@ class AutomaticArtistsTest {
         assertFalse(automaticPortraitAllowed(image.copy(title = "Singer logo.jpg"), "Singer logo.jpg"))
         assertFalse(automaticPortraitAllowed(image.copy(credit = image.credit.copy(provider = "Openverse")), "Singer.jpg"))
     }
+    @Test fun anImageFailureDoesNotDiscardAnAlreadyResolvedFrenchBiography() = runTest {
+        val fake = Fake { _, _, _ -> ArtistResult(bio, image, identityVerified = true) }
+        val saved = mutableListOf<Pair<String, ArtistNote>>()
+        val auto = loader(this, fake, saved, save = { throw RemoteFailure("Synthetic image failure") })
+        auto.onPlayback(playback, ArtistAutomation(), emptyMap(), true); advanceUntilIdle()
+        assertEquals(bio.text, saved.single().second.biography); assertNull(saved.single().second.portrait)
+    }
+    @Test fun collaboratorsAreCompletedOnceEachAndOnlyThoseOfThePlayingFile() = runTest {
+        val guest = ArtistRequest("guest", "Guest")
+        val fake = Fake { _, _, _ -> ArtistResult(biography = bio, identityVerified = true) }
+        val saved = mutableListOf<Pair<String, ArtistNote>>()
+        val auto = loader(this, fake, saved)
+        auto.onPlayback(playback.copy(artists = listOf(artist, guest, artist)), ArtistAutomation(), emptyMap(), true); advanceUntilIdle()
+        assertEquals(listOf(artist, guest), fake.requests)
+        assertEquals(listOf("singer", "guest"), saved.map { it.first })
+    }
+
 }

@@ -41,7 +41,7 @@ fun imageIdentity(url: String): String = runCatching {
 /** One bounded, user-requested batch. Reuse prepared results; stop at the target, never auto-page. */
 class PhotoDiscovery(private val prepare: suspend (ImageCandidate) -> PreparedPhoto) {
     suspend fun discover(candidates: List<ImageCandidate>, existing: List<PreparedPhoto> = emptyList(), target: Int = 6, maxPreviews: Int = 12,
-                         onProgress: (Int, Int) -> Unit = { _, _ -> }): PhotoDiscoveryResult {
+                         onPhotos: (List<PreparedPhoto>) -> Unit = {}, onProgress: (Int, Int) -> Unit = { _, _ -> }): PhotoDiscoveryResult {
         require(target in 1..60 && maxPreviews in 1..12)
         val accepted = existing.distinctBy { imageIdentity(it.image.original) }.take(target).toMutableList()
         val seen = accepted.mapTo(mutableSetOf()) { imageIdentity(it.image.original) }
@@ -73,6 +73,7 @@ class PhotoDiscovery(private val prepare: suspend (ImageCandidate) -> PreparedPh
                     else -> accepted += photo
                 }
             }
+            onPhotos(accepted.toList())
             onProgress(accepted.size, attempted)
         }
         return PhotoDiscoveryResult(accepted.toList(), attempted, duplicates, unavailable, deferredRights, warnings.distinct())

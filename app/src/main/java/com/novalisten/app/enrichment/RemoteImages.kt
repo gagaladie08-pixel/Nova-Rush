@@ -22,7 +22,7 @@ class RemoteImages(private val context: Context, private val transport: RemoteTr
         if (cached.isFile && cached.length() > 0 && System.currentTimeMillis() - cached.lastModified() in 0..86_400_000) return@withContext Uri.fromFile(cached).toString()
         val bytes = transport.image(image.preview, 2_000_000)
         coroutineContext.ensureActive()
-        writeImage(bytes, cached, 640)
+        writeImage(bytes, cached, 640).also { trimPreviews(cached) }
     }
     suspend fun preparePhoto(image: ImageCandidate): PreparedPhoto = withContext(Dispatchers.IO) {
         val uri = preview(image)
@@ -36,16 +36,34 @@ class RemoteImages(private val context: Context, private val transport: RemoteTr
             PreparedPhoto(image, uri, PhotoFingerprint.fromPixels(pixels, bitmap.width, bitmap.height))
         } finally { bitmap.recycle() }
     }
-    suspend fun save(image: ImageCandidate): String = withContext(Dispatchers.IO) {
-        RemoteSafety.image(image.original)
-        val bytes = transport.image(image.original)
-        coroutineContext.ensureActive()
-        val destination = File(context.filesDir, "images/remote-${UUID.randomUUID()}.jpg").apply { parentFile?.mkdirs() }
+    fun previewAvailable(photo: PreparedPhoto): Boolean = runCatching { File(java.net.URI(photo.preview)).isFile }.getOrDefault(false)
+    suspend fun save(image: ImageCandidate): String {
+        var destination: File? = null
         try {
-            val uri = writeImage(bytes, destination, 1600)
-            coroutineContext.ensureActive()
-            uri
-        } catch (e: Exception) { destination.delete(); throw e }
+            return withContext(Dispatchers.IO) {
+                RemoteSafety.image(image.original)
+                val bytes = transport.image(image.original)
+                coroutineContext.ensureActive()
+                val file = File(context.filesDir, "images/remote-${UUID.randomUUID()}.jpg").apply { parentFile?.mkdirs() }
+                destination = file
+                val uri = writeImage(bytes, file, 1600)
+                coroutineContext.ensureActive()
+                uri
+            }
+        } catch (error: Exception) {
+            // Includes cancellation while dispatching a completed IO result back to its caller.
+            destination?.delete()
+            throw error
+        }
+    }
+    private fun trimPreviews(keep: File) {
+        val files = folder.listFiles()?.filter { it.isFile && it.name.endsWith(".jpg") }?.sortedByDescending { it.lastModified() }.orEmpty()
+        var bytes = 0L
+        val now = System.currentTimeMillis()
+        files.forEachIndexed { index, file ->
+            bytes += file.length()
+            if (file != keep && (index >= 160 || bytes > 64_000_000 || now - file.lastModified() > 86_400_000)) file.delete()
+        }
     }
     private fun writeImage(bytes: ByteArray, destination: File, maxDimension: Int): String {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

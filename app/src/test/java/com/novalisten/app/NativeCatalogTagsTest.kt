@@ -56,4 +56,12 @@ class NativeCatalogTagsTest {
         val result = NativeCatalogTagReader.read(id3(frame("TSRC", "US-AAA-01-00001"), frame("TXXX", "MusicBrainz Release Track Id\u0000$groupId")).inputStream())
         assertEquals("USAAA0100001", result.isrc); assertEquals("", result.recordingId)
     }
+    @Test fun nativeAlbumArtistAndItsOwnMusicBrainzIdAreNotConfusedWithTrackArtistIds() {
+        val bytes = id3(frame("TPE1", "One feat. Two"), frame("TPE2", "One"), frame("TXXX", "MusicBrainz Album Artist Id\u0000$groupId"), frame("TXXX", "MusicBrainz Artist Id\u0000$artistId"))
+        val tags = NativeCatalogTagReader.read(bytes.inputStream())
+        assertEquals("One", tags.albumArtist)
+        assertEquals(ArtistCredit("One", groupId), tags.albumCredits.single())
+        assertTrue(tags.credits.isEmpty()) // A single artist MBID cannot identify both participants.
+    }
+
 }

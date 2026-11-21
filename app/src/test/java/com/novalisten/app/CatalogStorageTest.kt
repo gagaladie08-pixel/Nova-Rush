@@ -23,6 +23,20 @@ class CatalogStorageTest {
     private inline fun <T : SQLiteOpenHelper, R> T.withHelper(block: (T) -> R): R =
         try { block(this) } finally { close() }
 
+    private fun legacyDatabase(name: String, version: Int) = object : SQLiteOpenHelper(context, name, null, version) {
+            override fun onCreate(db: SQLiteDatabase) {
+                db.execSQL("CREATE TABLE flags(track TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)")
+                db.execSQL("CREATE TABLE playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL,tracks TEXT NOT NULL,created INTEGER NOT NULL,pinned INTEGER,cover TEXT)")
+                db.execSQL("CREATE TABLE listens(id INTEGER PRIMARY KEY AUTOINCREMENT,track TEXT NOT NULL,at INTEGER NOT NULL,zone TEXT NOT NULL,local_date TEXT NOT NULL,local_hour INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE lyrics(track TEXT PRIMARY KEY,original TEXT NOT NULL,french TEXT NOT NULL,original_source TEXT NOT NULL DEFAULT '',french_source TEXT NOT NULL DEFAULT '',original_timing TEXT NOT NULL DEFAULT '')")
+                if (version >= 4) db.execSQL("CREATE TABLE automatic_lyrics(track TEXT PRIMARY KEY,identity TEXT NOT NULL,original TEXT NOT NULL,original_source TEXT NOT NULL,original_timing TEXT NOT NULL DEFAULT '')")
+                db.execSQL("CREATE TABLE artists(id TEXT PRIMARY KEY,bio TEXT NOT NULL,source TEXT NOT NULL,portrait TEXT,portrait_source TEXT NOT NULL DEFAULT '')")
+                db.execSQL("CREATE TABLE album_covers(id TEXT PRIMARY KEY,uri TEXT NOT NULL,source TEXT NOT NULL)")
+                db.execSQL("CREATE TABLE identities(id TEXT PRIMARY KEY,mbid TEXT NOT NULL)")
+            }
+            override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = error("Unused")
+        }
+
     @Test fun catalogChoicesSurviveCloseAndReopenWithoutChangingExistingMusicData() = database { name ->
         val family = AlbumFamily("family:fixture", setOf("edition-one", "edition-two"), "edition-one", "edition-two")
         val lyrics = SavedLyrics("[00:01.000]Test", "Version française", "Source VO", "Source VF")
@@ -76,19 +90,7 @@ class CatalogStorageTest {
         }
     }
     @Test fun migrationFromV4IsAdditiveAndProtectsOldManualProfilesWithoutAssigningCollectiveProfilesToIndividuals() = database { name ->
-        val legacy = object : SQLiteOpenHelper(context, name, null, 4) {
-            override fun onCreate(db: SQLiteDatabase) {
-                db.execSQL("CREATE TABLE flags(track TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)")
-                db.execSQL("CREATE TABLE playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL,tracks TEXT NOT NULL,created INTEGER NOT NULL,pinned INTEGER,cover TEXT)")
-                db.execSQL("CREATE TABLE listens(id INTEGER PRIMARY KEY AUTOINCREMENT,track TEXT NOT NULL,at INTEGER NOT NULL,zone TEXT NOT NULL,local_date TEXT NOT NULL,local_hour INTEGER NOT NULL)")
-                db.execSQL("CREATE TABLE lyrics(track TEXT PRIMARY KEY,original TEXT NOT NULL,french TEXT NOT NULL,original_source TEXT NOT NULL DEFAULT '',french_source TEXT NOT NULL DEFAULT '',original_timing TEXT NOT NULL DEFAULT '')")
-                db.execSQL("CREATE TABLE automatic_lyrics(track TEXT PRIMARY KEY,identity TEXT NOT NULL,original TEXT NOT NULL,original_source TEXT NOT NULL,original_timing TEXT NOT NULL DEFAULT '')")
-                db.execSQL("CREATE TABLE artists(id TEXT PRIMARY KEY,bio TEXT NOT NULL,source TEXT NOT NULL,portrait TEXT,portrait_source TEXT NOT NULL DEFAULT '')")
-                db.execSQL("CREATE TABLE album_covers(id TEXT PRIMARY KEY,uri TEXT NOT NULL,source TEXT NOT NULL)")
-                db.execSQL("CREATE TABLE identities(id TEXT PRIMARY KEY,mbid TEXT NOT NULL)")
-            }
-            override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = error("Unused")
-        }
+        val legacy = legacyDatabase(name, 4)
         legacy.withHelper { helper -> helper.writableDatabase.apply {
             execSQL("INSERT INTO flags VALUES ('track',1,0)")
             execSQL("INSERT INTO lyrics VALUES ('track','Original','Français','VO','VF','')")
@@ -106,4 +108,51 @@ class CatalogStorageTest {
             assertFalse(state.artists.containsKey("one")); assertTrue(state.catalog.families.isEmpty())
         }
     }
+    @Test fun migrationFromV3RetainsNativeLyricTimingFrenchTextAndEmptyManualChoices() = database { name ->
+        legacyDatabase(name, 3).withHelper { helper -> helper.writableDatabase.apply {
+            execSQL("INSERT INTO lyrics VALUES ('track','Original','Français','VO','VF','native-words')")
+            execSQL("INSERT INTO artists VALUES ('artist','','Manual clearing',NULL,'')")
+            execSQL("INSERT INTO flags VALUES ('hidden',1,1)")
+            execSQL("INSERT INTO identities VALUES ('artist:artist','11111111-1111-1111-1111-111111111111')")
+        } }
+        NovaDatabase(context, name).withHelper { db ->
+            val state = db.snapshot()
+            assertEquals(5, db.readableDatabase.version)
+            assertEquals(SavedLyrics("Original", "Français", "VO", "VF", "native-words"), state.lyrics["track"])
+            assertTrue(state.automaticLyrics.isEmpty()); assertTrue(state.catalog.families.isEmpty())
+            assertTrue("hidden" in state.hidden); assertTrue("hidden" in state.favorites)
+            val note = state.artists.getValue("artist")
+            assertTrue(note.biographyLocked); assertTrue(note.portraitLocked)
+            db.saveAutomaticArtist("artist", ArtistNote("Not wanted", portrait = "file:///not-wanted.jpg"))
+            assertEquals(note, db.snapshot().artists.getValue("artist"))
+            assertEquals("11111111-1111-1111-1111-111111111111", state.identities["artist:artist"])
+        }
+    }
+    @Test fun fieldSpecificManualTransactionsDoNotRestoreAStalePortraitOrStaleBiography() = database { name ->
+        NovaDatabase(context, name).withHelper { db ->
+            val staleSeed = ArtistNote("Old legacy text", "Old credit")
+            db.saveArtistPortrait("artist", "file:///new.jpg", "New photo credit", staleSeed)
+            db.saveArtistBiography("artist", "New chosen text", "New text credit", staleSeed)
+            val saved = db.snapshot().artists.getValue("artist")
+            assertEquals("file:///new.jpg", saved.portrait); assertEquals("New photo credit", saved.portraitSource)
+            assertEquals("New chosen text", saved.biography); assertEquals("New text credit", saved.source)
+            assertTrue(saved.biographyLocked); assertTrue(saved.portraitLocked)
+            db.saveAutomaticArtist("artist", ArtistNote("Late biography", "Late credit", "file:///late.jpg", "Late photo credit"))
+            assertEquals(saved, db.snapshot().artists.getValue("artist"))
+        }
+    }
+    @Test fun deliberateClearingRemainsLockedUntilTheUserExplicitlyAllowsMissingFieldsAgain() = database { name ->
+        NovaDatabase(context, name).withHelper { db ->
+            db.saveArtistBiography("artist", "Chosen bio", "Credit")
+            db.saveArtistPortrait("artist", null, "")
+            db.saveAutomaticArtist("artist", ArtistNote("Auto bio", portrait = "file:///auto.jpg"))
+            assertNull(db.snapshot().artists.getValue("artist").portrait)
+            db.allowMissingArtistFields("artist")
+            assertTrue(db.saveAutomaticArtist("artist", ArtistNote("Still ignored", portrait = "file:///auto.jpg")))
+            val saved = db.snapshot().artists.getValue("artist")
+            assertEquals("Chosen bio", saved.biography); assertTrue(saved.biographyLocked)
+            assertEquals("file:///auto.jpg", saved.portrait); assertFalse(saved.portraitLocked)
+        }
+    }
+
 }

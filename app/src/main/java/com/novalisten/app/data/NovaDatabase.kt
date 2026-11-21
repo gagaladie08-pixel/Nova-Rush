@@ -43,7 +43,9 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
             createCatalogTable(db)
             db.execSQL("ALTER TABLE artists ADD COLUMN bio_locked INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE artists ADD COLUMN portrait_locked INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("UPDATE artists SET bio_locked = CASE WHEN bio <> '' THEN 1 ELSE 0 END, portrait_locked = CASE WHEN portrait IS NOT NULL THEN 1 ELSE 0 END")
+            // Before v5 every stored artist row came from a manual action. An empty field
+            // may have been intentionally cleared; never infer consent to replace it.
+            db.execSQL("UPDATE artists SET bio_locked = 1, portrait_locked = 1")
         }
     }
 
@@ -201,9 +203,29 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         db.beginTransaction()
         try { tracks.forEach { catalogChoice("recording", it, recording) }; db.setTransactionSuccessful() } finally { db.endTransaction() }
     }
-    /** Read again under the repository mutex; a manual edit made during a download always wins. */
-    fun saveAutomaticArtist(id: String, incoming: ArtistNote): Boolean {
-        val current = snapshot().artists[id] ?: ArtistNote()
+    private fun storedArtist(id: String): ArtistNote? = readableDatabase.rawQuery("SELECT bio,source,portrait,portrait_source,bio_locked,portrait_locked FROM artists WHERE id=?", arrayOf(id)).use { c ->
+        if (!c.moveToFirst()) null else ArtistNote(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4) != 0, c.getInt(5) != 0)
+    }
+    private inline fun <T> artistTransaction(block: () -> T): T {
+        val db = writableDatabase
+        db.beginTransaction()
+        try { return block().also { db.setTransactionSuccessful() } } finally { db.endTransaction() }
+    }
+    fun saveArtistBiography(id: String, biography: String, source: String, seed: ArtistNote = ArtistNote()) = artistTransaction {
+        val current = storedArtist(id) ?: seed
+        saveArtist(id, current.copy(biography = biography, source = source, biographyLocked = true))
+    }
+    fun saveArtistPortrait(id: String, portrait: String?, source: String, seed: ArtistNote = ArtistNote()) = artistTransaction {
+        val current = storedArtist(id) ?: seed
+        saveArtist(id, current.copy(portrait = portrait, portraitSource = source, portraitLocked = true))
+    }
+    fun allowMissingArtistFields(id: String, seed: ArtistNote = ArtistNote()) = artistTransaction {
+        val current = storedArtist(id) ?: seed
+        saveArtist(id, current.copy(biographyLocked = current.biographyLocked && current.biography.isNotBlank(), portraitLocked = current.portraitLocked && current.portrait != null))
+    }
+    /** Re-read and merge in one SQLite transaction as well as under the repository mutex. */
+    fun saveAutomaticArtist(id: String, incoming: ArtistNote): Boolean = artistTransaction {
+        val current = storedArtist(id) ?: ArtistNote()
         val updated = current.copy(
             biography = if (!current.biographyLocked && current.biography.isBlank()) incoming.biography else current.biography,
             source = if (!current.biographyLocked && current.biography.isBlank()) incoming.source else current.source,
@@ -211,7 +233,7 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
             portraitSource = if (!current.portraitLocked && current.portrait == null) incoming.portraitSource else current.portraitSource,
         )
         saveArtist(id, updated)
-        return incoming.portrait != null && updated.portrait == incoming.portrait
+        incoming.portrait != null && updated.portrait == incoming.portrait
     }
     fun saveArtist(id: String, note: ArtistNote) {
         check(writableDatabase.insertWithOnConflict("artists", null, ContentValues().apply {

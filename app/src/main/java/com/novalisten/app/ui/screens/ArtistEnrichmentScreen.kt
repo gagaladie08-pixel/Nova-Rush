@@ -18,9 +18,6 @@ import com.novalisten.app.MainViewModel
 import com.novalisten.app.data.*
 import com.novalisten.app.enrichment.*
 import com.novalisten.app.ui.components.*
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 
 @Composable
 internal fun BiographySearch(request: EnrichmentRequest, vm: MainViewModel, onDismiss: () -> Unit) {
@@ -61,7 +58,7 @@ internal fun BiographySearch(request: EnrichmentRequest, vm: MainViewModel, onDi
         }
     }, confirmButton = { TextButton({ saveWork.run {
         val seed = vm.artistNoteFor(request.artistId)
-        vm.repository.mutate { val old = snapshot().artists[request.artistId] ?: seed; saveArtist(request.artistId, old.copy(biography = bio.text, source = bio.credit.text(), biographyLocked = true)) }
+        vm.repository.mutate { saveArtistBiography(request.artistId, bio.text, bio.credit.text(), seed) }
         vm.message("Biographie choisie sauvegardée hors ligne avec ses crédits")
         onDismiss()
     } }, enabled = confirm && !saveWork.busy) { Text("Choisir cette biographie") } }, dismissButton = { TextButton({ selected = null }, enabled = !saveWork.busy) { Text("Annuler") } }) }
@@ -69,64 +66,50 @@ internal fun BiographySearch(request: EnrichmentRequest, vm: MainViewModel, onDi
 
 @Composable
 internal fun ArtistPhotoSearch(request: EnrichmentRequest, vm: MainViewModel, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf(request.name) }
+    var name by remember(request.artistId) { mutableStateOf(request.name) }
     var identities by remember { mutableStateOf(emptyList<ArtistCandidate>()) }
     var identity by remember { mutableStateOf<ArtistCandidate?>(null) }
     val automaticPhotos by vm.automaticArtists.state.collectAsStateWithLifecycle()
-    var ready by remember(request.artistId) { mutableStateOf(automaticPhotos[request.artistId]?.proposals.orEmpty()) }
-    var candidates by remember { mutableStateOf(emptyList<ImageCandidate>()) }
+    val auto = automaticPhotos[request.artistId]
+    var galleryTouched by remember(request.artistId) { mutableStateOf(false) }
+    var ready by remember(request.artistId) { mutableStateOf(auto?.proposals.orEmpty()) }
+    var batch by remember { mutableStateOf<PortraitBatch?>(null) }
     var notices by remember { mutableStateOf(emptyList<String>()) }
     var wikidata by remember { mutableStateOf(emptyList<ArtistCandidate>()) }
-    var commonsPage by remember { mutableIntStateOf(1) }
-    var openversePage by remember { mutableIntStateOf(1) }
+    var showSources by remember { mutableStateOf(false) }
     var showOther by remember { mutableStateOf(false) }
     var chosen by remember { mutableStateOf<ImageCandidate?>(null) }
     val work = rememberRemoteWork()
     val localData by vm.repository.data.collectAsStateWithLifecycle()
     val knownMbid = localData.identities["artist:${request.artistId}"]
-    val currentPortrait = localData.artists[request.artistId]?.portrait
-    fun resetGallery() { ready = emptyList(); candidates = emptyList(); notices = emptyList(); commonsPage = 1; openversePage = 1; showOther = false }
-    fun append(incoming: List<ImageCandidate>) { candidates = (candidates + incoming).distinctBy { imageIdentity(it.original) }.take(120) }
-    suspend fun prepare(incoming: List<ImageCandidate>, target: Int) {
-        append(incoming)
-        val batch = PhotoDiscovery(vm.remoteImages::preparePhoto).discover(incoming, ready, target.coerceAtMost(60)) { count, attempts ->
-            work.message = "$count vignette(s) exploitable(s) · $attempts aperçu(s) examiné(s) dans ce lot."
+    val currentPortrait = vm.artistNoteFor(request.artistId).portrait
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    fun retainedIdentity(mbid: String, description: String) = ArtistCandidate(mbid, request.name, description,
+        Credit("MusicBrainz", "https://musicbrainz.org/artist/$mbid", "Données de base CC0"), mbid = mbid)
+    fun subject(artist: ArtistCandidate) = PhotoSubject(artist.name, artist.mbid.orEmpty(), artist.id.takeIf { it.matches(Regex("Q[1-9][0-9]*")) }.orEmpty())
+    fun resetGallery() { galleryTouched = true; ready = emptyList(); batch = null; notices = emptyList(); showOther = false }
+    fun update(value: PortraitBatch) { batch = value; ready = value.photos }
+    LaunchedEffect(auto?.proposals, auto?.verifiedMbid) {
+        // Do not freeze an empty initial snapshot, or mix a later automatic lot into a manually changed identity.
+        if (!galleryTouched) {
+            ready = auto?.proposals.orEmpty()
+            auto?.verifiedMbid?.takeIf(::validMusicId)?.let { identity = retainedIdentity(it, "Identité croisée à partir du morceau écouté ; aucun nouvel appel.") }
         }
-        ready = batch.photos
-        notices = notices + batch.warnings.map { "Aperçu : $it" }
-        notices = notices + "Lot borné : ${batch.attempted} aperçu(s) chargé(s), ${batch.probableDuplicates} doublon(s) probable(s), ${batch.unavailable} image(s) indisponible(s) ou trop petite(s), ${batch.deferredRights} licence(s) à examiner manuellement."
-        work.message = "${ready.size} vignette(s) prête(s), cible initiale : six distinctes. Sujet, identité et date restent à confirmer visuellement."
     }
     fun searchImages() {
         val artist = identity ?: return
+        galleryTouched = true
         work.run {
-            if (ready.size >= 6) { work.message = "Six vignettes sont déjà prêtes : aucun nouvel appel. Les compléments restent volontaires."; return@run }
-            // Reuse P18/previews already examined. At most one metadata page per admissible source.
-            val found = mutableListOf<ImageCandidate>()
-            coroutineScope {
-                launch {
-                    try { val result = vm.remote.commons(artist.name); found += result; notices = notices + "Commons : ${result.size} proposition(s)." }
-                    catch (cancelled: CancellationException) { throw cancelled }
-                    catch (e: Exception) { notices = notices + "Commons : ${e.publicMessage()}" }
-                }
-                launch {
-                    try { val result = vm.remote.openverse(artist.name); found += result; notices = notices + "Openverse : ${result.size} proposition(s)." }
-                    catch (cancelled: CancellationException) { throw cancelled }
-                    catch (e: Exception) { notices = notices + "Openverse : ${e.publicMessage()}" }
-                }
-            }
-            prepare(found, 6)
-            if (ready.isEmpty()) showOther = true
+            update(vm.artistPortraits.initial(subject(artist), ::update))
+            work.message = "${ready.size} vignette(s) prête(s). Premier lot borné ; les compléments restent volontaires."
         }
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Notice("D’abord identifier l’artiste pour éviter les homonymes, groupes et membres. Seul le nom / identifiant est envoyé aux sources demandées. La photo actuelle reste inchangée jusqu’au choix final.") }
-        if (currentPortrait != null) item { Column(Modifier.padding(horizontal = 20.dp)) { Text("Votre portrait sauvegardé · réutilisé localement"); Artwork(currentPortrait, request.name, Modifier.size(96.dp)) } }
+        item { Notice("Identifiez l’artiste pour éviter les homonymes, groupes et membres. Cette recherche manuelle transmet seulement le nom / identifiant demandé. Le portrait actuel reste inchangé jusqu’au choix final.") }
+        if (currentPortrait != null) item { Column(Modifier.padding(horizontal = 20.dp)) { Text("Votre portrait sauvegardé · réutilisé localement"); Artwork(currentPortrait, request.name, Modifier.size(96.dp), round = true) } }
         item { OutlinedTextField(name, { name = it.take(300); identity = null; identities = emptyList(); wikidata = emptyList(); resetGallery() }, Modifier.fillMaxWidth().padding(20.dp), label = { Text("Nom et contexte de l’artiste") }, singleLine = true, enabled = !work.busy) }
         item { Button({ work.run { identities = vm.remote.artists(name); if (identities.isEmpty()) work.message = "Aucune identité MusicBrainz. Vous pouvez comparer Wikidata." } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = !work.busy && name.isNotBlank()) { Text("Identifier avec MusicBrainz") } }
-        if (knownMbid != null && identity == null) item { TextButton({
-            resetGallery(); identity = ArtistCandidate(knownMbid, request.name, "Association choisie précédemment", Credit("MusicBrainz", "https://musicbrainz.org/artist/$knownMbid", "Données de base CC0"), mbid = knownMbid)
-        }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Réutiliser mon association MusicBrainz · sans appel") } }
+        if (knownMbid != null && identity == null) item { TextButton({ resetGallery(); identity = retainedIdentity(knownMbid, "Association choisie précédemment") }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Réutiliser mon association MusicBrainz · sans appel") } }
         items(identities, key = { it.id }) { artist ->
             OutlinedCard(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
                 Column(Modifier.padding(12.dp)) {
@@ -137,22 +120,28 @@ internal fun ArtistPhotoSearch(request: EnrichmentRequest, vm: MainViewModel, on
         }
         identity?.let { artist ->
             item { Notice("Identité retenue : ${artist.name}\n${artist.description}\nUn identifiant ne certifie pas chaque photographie.") }
-            item { Notice("La recherche charge un premier lot de métadonnées Commons + Openverse (six par source), puis au plus douze aperçus ouverts pour viser six vignettes décodables, d’au moins 96 px, distinctes par URL et par comparaison visuelle locale. Arrêt dès la cible, pas de pagination automatique. Aucun visage n’est envoyé à un moteur d’analyse.") }
-            item { Button(::searchImages, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("search_artist_images"), enabled = !work.busy) { Text("Chercher six vignettes · Commons + Openverse") } }
+            item { Notice("Cascade : Genius + TheAudioDB si admis → Commons + Openverse → Discogs Artist si admis → fanart.tv si admis. Une source sans accès/droits compatibles est sautée sans requête. Cible : six vignettes utiles, au plus douze aperçus examinés dans le premier lot ; pas de pagination automatique. Les propositions apparaissent progressivement et restent à choisir.") }
+            item { Button(::searchImages, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("search_artist_images"), enabled = !work.busy) { Text("Rechercher les portraits · cascade admissible") } }
         }
         item { WorkStatus(work) }
         items(notices) { Notice(it) }
-        items(ready, key = { it.image.id }) { photo -> ImageResultCard(photo.image, vm, work.busy, initialPreview = photo.preview) { chosen = photo.image } }
+        // A selection never waits for all six previews. Cancel this subscriber, not other useful searches.
+        items(ready, key = { it.image.id }) { photo -> ImageResultCard(photo.image, vm, false, initialPreview = photo.preview) { work.cancel(); galleryTouched = true; chosen = photo.image } }
         identity?.let { artist ->
-            item { Notice("Cible de six vignettes utiles, jamais une garantie d’exactitude ni de récence. Les doublons visuels sont une heuristique locale ; vous pouvez examiner les autres propositions. Les pages supplémentaires ne partent que sur commande, avec deux requêtes simultanées maximum pour tout ce parcours, aperçus compris.") }
-            item { TextButton({ work.run { val page = commonsPage + 1; val found = vm.remote.commons(artist.name, page); commonsPage = page; prepare(found, ready.size + 6) } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy && commonsPage < 5 && ready.size < 60) { Text("Plus de photos · une page Commons") } }
-            item { TextButton({ work.run { val page = openversePage + 1; val found = vm.remote.openverse(artist.name, page); openversePage = page; prepare(found, ready.size + 6) } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy && openversePage < 5 && ready.size < 60) { Text("Plus de photos · une page Openverse") } }
-            if (artist.mbid != null) item { TextButton({ work.run { val found = vm.remote.fanart(artist.mbid, true); append(found); showOther = true; work.message = "fanart.tv : ${found.size} proposition(s) à examiner manuellement, ni exactitude ni récence garanties. Pas d’aperçu sans vérification des droits." } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy) { Text("Ultime complément · fanart.tv (clé)") } }
-        }
-        val others = candidates.filter { image -> ready.none { imageIdentity(it.image.original) == imageIdentity(image.original) } }
-        if (others.isNotEmpty()) {
-            item { TextButton({ showOther = !showOther }, Modifier.padding(horizontal = 20.dp)) { Text(if (showOther) "Masquer les autres propositions" else "Examiner les ${others.size} autres propositions / doublons probables") } }
-            if (showOther) items(others, key = { it.id }) { image -> ImageResultCard(image, vm, work.busy) { chosen = image } }
+            val currentBatch = batch ?: PortraitBatch(subject(artist), ready, reports = vm.artistPortraits.admissions(subject(artist)))
+            item { TextButton({ showSources = !showSources }, Modifier.padding(horizontal = 20.dp)) { Text(if (showSources) "Masquer le détail des sources" else "Sources, résultats et raisons des sauts") } }
+            if (showSources) items(currentBatch.reports, key = { "source_${it.source}" }) { report -> Notice("${report.source.label} · ${when (report.status) { PortraitStatus.SKIPPED -> "Sautée"; PortraitStatus.WAITING -> "Non explorée"; PortraitStatus.RESULTS -> "Propositions"; PortraitStatus.EMPTY -> "Page sans résultat"; PortraitStatus.FAILED -> "Erreur temporaire" }}\n${report.detail}") }
+            currentBatch.reports.filter { it.status != PortraitStatus.SKIPPED }.forEach { report ->
+                item { TextButton({ galleryTouched = true; work.run {
+                    update(vm.artistPortraits.more(currentBatch, report.source, ::update))
+                    work.message = "Une seule page supplémentaire examinée ; aucun redémarrage des autres sources."
+                } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy && (currentBatch.pages[report.source] ?: 0) < 5 && ready.size < 60) { Text("Plus de photos · une page ${report.source.label}") } }
+            }
+            val others = currentBatch.candidates.filter { image -> ready.none { imageIdentity(it.image.original) == imageIdentity(image.original) } }
+            if (others.isNotEmpty()) {
+                item { TextButton({ showOther = !showOther }, Modifier.padding(horizontal = 20.dp)) { Text(if (showOther) "Masquer les autres propositions" else "Examiner les ${others.size} autres propositions / doublons probables") } }
+                if (showOther) items(others, key = { it.id }) { image -> ImageResultCard(image, vm, false) { work.cancel(); chosen = image } }
+            }
         }
         item { SectionHeader("Comparer une identité Wikidata") }
         item { TextButton({ work.run { wikidata = vm.remote.wikidata(name) } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy && name.isNotBlank()) { Text("Chercher l’identité dans Wikidata") } }
@@ -164,17 +153,25 @@ internal fun ArtistPhotoSearch(request: EnrichmentRequest, vm: MainViewModel, on
                         val details = vm.remote.wikidataDetails(artist.id)
                         resetGallery(); identity = details
                         vm.saveIdentity("artist:${request.artistId}", details.mbid)
-                        details.imageTitle?.let { prepare(vm.remote.commons(details.name, fileTitle = it), 6) }
+                        details.imageTitle?.let {
+                            val images = vm.remote.commons(details.name, fileTitle = it)
+                            val prepared = PhotoDiscovery(vm.remoteImages::preparePhoto).discover(images).photos
+                            update(PortraitBatch(subject(details), prepared, images, vm.artistPortraits.admissions(subject(details))))
+                        }
                         notices = notices + "Piste P18 ${if (details.imageTitle == null) "absente" else "examinée, pas appliquée"}. Les faits/records ne sont pas certifiés par Wikidata."
                     } }, enabled = !work.busy) { Text("Choisir cette identité et examiner P18") }
                 }
             }
         }
-        item { Notice("Last.fm sert aux informations musicales, pas à collecter des portraits. Aucun scraping. Genius/TheAudioDB/Discogs restent sautés pour les photos faute d’admission établie. Les dates de publication/récupération ne sont jamais appelées dates de prise de vue. Budget de cette première interface : cinq pages manuelles par source, pas de découverte illimitée.") }
+        item { SectionHeader("Recours volontaires") }
+        item { TextButton({ runCatching { uriHandler.openUri("https://www.last.fm/") } }, Modifier.padding(horizontal = 20.dp)) { Text("Consulter Last.fm dans le navigateur") } }
+        item { TextButton({ runCatching { uriHandler.openUri("https://fanart.tv/") } }, Modifier.padding(horizontal = 20.dp)) { Text("Consulter fanart.tv · dernier recours externe") } }
+        item { TextButton({ runCatching { uriHandler.openUri("https://www.google.com/search?q=" + java.net.URLEncoder.encode("$name photo site officiel kit presse", "UTF-8")) } }, Modifier.padding(horizontal = 20.dp)) { Text("Rechercher un site officiel / kit presse") } }
+        item { Notice("Ces consultations externes sont volontaires, sans extraction ni sauvegarde des médias. Import local depuis le menu de la fiche artiste, seulement pour une image autorisée. Last.fm reste inclus comme repère/consultation, jamais comme collecteur de portraits. Les dates d’ajout ne sont pas des dates de prise de vue. Deux requêtes globales, aperçus et image choisie compris ; aucun service de reconnaissance faciale.") }
     }
     chosen?.let { image -> ImageSaveDialog(image, vm, { chosen = null }) { uri ->
         val seed = vm.artistNoteFor(request.artistId)
-        vm.repository.mutate { val old = snapshot().artists[request.artistId] ?: seed; saveArtist(request.artistId, old.copy(portrait = uri, portraitSource = image.credit.text() + "\n" + image.date + "\nCopie d’affichage JPEG redimensionnée par NovaListen.", portraitLocked = true)) }
+        vm.repository.mutate { saveArtistPortrait(request.artistId, uri, image.credit.text() + "\n" + image.date + "\nCopie d’affichage JPEG redimensionnée par NovaListen.", seed) }
         vm.message("Portrait choisi sauvegardé hors ligne avec ses crédits")
         onDismiss()
     } }

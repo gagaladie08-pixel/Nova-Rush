@@ -17,11 +17,16 @@ import com.novalisten.app.ui.components.Artwork
 fun albumInformation(group: AlbumGroup): String = buildString {
     appendLine("${group.name} · ${group.artist}")
     appendLine("${group.kind.label} · ${group.tracks.size} enregistrements locaux retenus")
-    appendLine(if (group.automaticFamily) "Lien de groupe d’éditions lu dans les tags MusicBrainz locaux, ou choix local sur ce lien." else "Regroupement local explicite, ou édition Android isolée.")
+    appendLine(group.groupingReason)
+    if (group.year > 0) appendLine("Année d’origine connue localement : ${group.year}")
     appendLine("Les titres seuls ne prouvent pas une identité d’enregistrement : les copies sans identifiant fiable restent distinctes jusqu’à votre confirmation.")
     group.editions.forEach { edition ->
         appendLine("\n${edition.name} · ${edition.artist} · ${edition.kind.label}")
         appendLine("${edition.tracks.size} fichier(s) admissible(s) · ${if (edition.id == group.originalId) "ordre d’origine retenu" else "édition supplémentaire"}${if (edition.id == group.representativeId) " · nom/pochette affichés" else ""}")
+        edition.tracks.forEach { song ->
+            appendLine("${if (song.discNumber > 0) "${song.discNumber}." else ""}${song.number.takeIf { it > 0 } ?: "?"} · ${song.title} · ${durationLabel(song.durationMs)}")
+            appendLine("${song.artist} · ${song.fileName}")
+        }
     }
     append("\nAucun fichier, tag, historique ou favori n’est fusionné ou supprimé. Les fichiers masqués ou de durée non admissible ne sont pas réintroduits.")
 }
