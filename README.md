@@ -1,19 +1,21 @@
 # NovaListen
 
-Lecteur musical Android local, utilisable hors ligne. **APK disponible : 0.2.3**, commandes dans la fenêtre réelle et paroles automatiques persistantes. **Nouvelles sources : 0.3.0, catalogue et artistes automatiques, en vérification sans nouvel APK**.
-**145 tests unitaires + 30 tests Android répétés sur trois configurations réussis** (Android 10, Android 15 gestuel, Android 15 trois boutons), lint sans erreur / 34 avertissements. [Validation 44930520156](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44930520156) · [périmètre, conservation locale, preuves et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Le rendu sur le téléphone de l'utilisateur reste à vérifier ; les preuves et binaires précédents ci-dessous restent historiques.
+Lecteur musical Android local, utilisable hors ligne. **APK disponible : 0.2.3**, commandes dans la fenêtre réelle et paroles automatiques persistantes. **Nouvelles sources : 0.3.0, catalogue et artistes automatiques, vérifiées sans génération d’APK**.
+**Pour l’APK 0.2.3 uniquement : 145 tests unitaires + 30 tests Android répétés sur trois configurations réussis** (Android 10, Android 15 gestuel, Android 15 trois boutons), lint sans erreur / 34 avertissements. [Validation 44930520156](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44930520156) · [périmètre, conservation locale, preuves et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Le rendu sur le téléphone de l'utilisateur reste à vérifier ; les preuves et binaires précédents ci-dessous restent historiques.
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
 
 ## Sources 0.3.0 — nouveau lot
 
 - Artistes et collaborations séparés, corrections locales et préservation des anciens profils.
-- Biographies FR et portraits pendant l’écoute, identité croisée et droits vérifiés avant attribution automatique, priorité aux choix manuels ; réglages indépendants.
-- Tri Artistes / Albums par nombre de titres dans les deux sens, éditions d’albums et liste commune, édition représentative, classification locale Albums / EP / Mixtapes et type à préciser.
+- Biographies FR et portraits pendant l’écoute, lien d’identité au morceau local puis vérification croisée et droits avant attribution automatique ; choix manuels prioritaires, réglages indépendants. Cascade photo conditionnelle avec raisons des sources sautées, résultats progressifs et cache partagé.
+- Tri Artistes / Albums par nombre de titres dans les deux sens, éditions d’albums et liste commune, édition représentative, classification locale Albums / EP / Mixtapes et type à préciser. Les relations The Fame / The Fame Monster et Future Nostalgia / Moonlight Edition demandées sont reconnues localement, sous garde d’artiste d’album.
 - Bibliothèque au démarrage et lecteur plein écran sur lancement volontaire, pas sur un passage naturel de piste.
 - Migration SQLite v5 additive ; aucun tag ou fichier audio modifié.
 
-**[Fonctionnement, limites des tags/identités et vérifications](docs/developpement/10-catalogue-et-artistes-automatiques.md).** Aucun APK 0.3.0 n’est livré : la clé privée de 0.2.3 reste à retrouver. Les résultats Android ci-dessous concernent exclusivement l’ancien APK 0.2.3.
+**Vérification des sources réussie : 240 tests JVM + 19 tests Python**, aucun échec ; application et tests Android compilés, lint sans erreur / 41 avertissements. [Exécution 44945580241](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44945580241), sources `5d1bc74`. Les tests Android 0.3.0 sont **compilés, pas exécutés** ; aucun essai sur téléphone ni appel API musicale réel validé. La découverte photo est actuellement admise pour Commons/Openverse ; les autres branches conditionnelles affichent leur motif de saut.
+
+**[Fonctionnement, limites des tags/identités et vérifications](docs/developpement/10-catalogue-et-artistes-automatiques.md).** Aucun APK 0.3.0 n’est livré : la clé privée de 0.2.3 reste à retrouver. Les résultats instrumentés Android ci-dessous concernent exclusivement l’ancien APK 0.2.3.
 
 ## Deux corrections — 0.2.3
 
@@ -27,7 +29,7 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 
 ## Signature des prochains APK
 
-Le certificat de **0.2.3 est désormais la référence obligatoire** : la chaîne de livraison d’APK bloque avant compilation si sa clé privée originale n’est pas fournie et vérifie le certificat de l’APK avant toute livraison. **Cette clé n’a pas été retrouvée lors de l’audit : une prochaine mise à jour compatible n’est pas encore garantie.** Aucun nouveau build ni nouvelle clé n’ont été lancés pour ce changement. [Audit, contrôles et condition de déblocage](docs/developpement/09-continuite-signature.md).
+Le certificat de **0.2.3 est désormais la référence obligatoire** : la chaîne de livraison d’APK bloque avant compilation si sa clé privée originale n’est pas fournie et vérifie le certificat de l’APK avant toute livraison. **Cette clé n’a pas été retrouvée lors de l’audit : une prochaine mise à jour compatible n’est pas encore garantie.** Aucun nouvel APK ni nouvelle clé n’ont été générés ; la vérification des sources ne produit aucun binaire installable. [Audit, contrôles et condition de déblocage](docs/developpement/09-continuite-signature.md).
 
 ## Historique 0.2.2 — swipes et commandes plein écran
 

@@ -12,7 +12,7 @@ Référence publique, dans `config/signing-policy.json` :
 
 **L’empreinte du certificat et celle du fichier APK sont deux valeurs différentes.** L’APK contient le certificat public, pas la clé privée nécessaire à une nouvelle signature. Recréer un keystore avec le même nom, alias et mot de passe ne recrée pas cette clé.
 
-Aucun nouveau build Android, aucune nouvelle clé et aucune publication d’APK n’ont été lancés pour ce changement. L’APK 0.2.3 et ses anciennes preuves ne sont pas modifiés.
+L’audit initial n’a lancé aucun build Android, nouvelle clé ou publication d’APK. Depuis, le mode séparé de vérification des sources 0.3.0 compile Kotlin et exécute des tests sans binaire installable ni signature ; voir la dernière section. L’APK 0.2.3 et ses anciennes preuves ne sont pas modifiés.
 
 ## Audit dédié à la clé 0.2.3
 
@@ -31,19 +31,20 @@ Les détails non sensibles sont conservés localement dans `artifacts/signature-
 1. La CI exige le secret Actions `NOVALISTEN_DEBUG_KEYSTORE_BASE64`, qui devra contenir **le keystore original retrouvé**, pas une clé nouvellement générée. Base64 est un encodage, pas un chiffrement ; le fichier ne doit jamais être ajouté au dépôt, au chat ou à un artefact public.
 2. `scripts/signing_policy.py prepare` refuse une valeur absente/invalide. Il restaure temporairement le fichier **hors du dépôt**, avec répertoire privé `0700` et fichier `0600`.
 3. `keytool` doit exporter un certificat dont le SHA-256 correspond exactement à la référence, puis réussir une demande de certificat utilisant **la clé privée existante**. Un magasin ne contenant que le certificat public ne suffit pas. Aucune génération de clé n’est prévue.
-4. Gradle reçoit uniquement le chemin de cette copie. En CI, un chemin absent est bloquant ; un chemin fourni doit désigner un fichier existant. Aucun repli automatique sur la clé debug d’un nouveau runner n’est autorisé en CI.
+4. Gradle reçoit uniquement le chemin de cette copie. En CI de livraison, un chemin absent bloque la configuration. **En local aussi**, tout graphe d’assemblage/signature/installation exige le keystore original et sa vérification de certificat/clé privée via `verify-keystore`, avant exécution des tâches. Aucun repli sur une nouvelle clé debug implicite n’est permis. La clé originale doit rester hors du dépôt.
 5. Après compilation, `apksigner verify --verbose --print-certs` doit valider la signature réelle de l’APK et retourner **un seul signataire, celui de 0.2.3**, avant sa copie parmi les livrables ou son transfert.
 6. La copie temporaire est supprimée après les opérations Gradle, même en cas d’échec. Ni son contenu ni son encodage ne sont journalisés ou publiés.
 
 **Tant que le vrai keystore n’est pas disponible, la chaîne CI de livraison d’APK s’arrêtera avant la compilation.** Il ne faut pas supprimer le contrôle ou remplacer l’empreinte pour obtenir artificiellement un build vert.
 
-La signature locale par défaut reste possible pour le développement hors CI, mais un tel APK n’est pas un livrable compatible : il ne doit pas être remis comme mise à jour de 0.2.3. Toute livraison doit passer par le contrôle du certificat de référence.
+**La signature locale debug implicite est désormais bloquée aussi**, pas seulement la livraison CI. Compiler les sources sans APK reste possible via le mode prévu ci-dessous. Toute livraison reste soumise au contrôle de la signature réelle de l’APK.
 
 ## Vérifications réalisées et limites
 
-- **16 tests Python synthétiques** : secret absent/invalide/trop volumineux, permissions du fichier, certificat différent, certificat sans clé privée, échec d’outil, nettoyage, absence d’export de données sensibles, APK absent/invalide et signataires absents/différents/multiples.
+- **19 tests Python synthétiques** : secret absent/invalide/trop volumineux, permissions du fichier, certificat différent, certificat sans clé privée, échec d’outil, nettoyage, absence d’export de données sensibles, APK absent/invalide et signataires absents/différents/multiples.
 - Contrôle d’intégrité du projet et vérification des différences Git.
-- Les réponses de `keytool` et d’`apksigner` sont simulées dans ces tests. Le JDK et le SDK Android ne sont pas disponibles localement : **pas de nouvelle exécution Gradle, de validation réelle de keystore ou d’installation de mise à jour**. Les résultats Android historiques de 0.2.3 ne valident pas ces nouveaux changements de CI.
+- [Vérification des sources 44945580241](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44945580241), sources `5d1bc7465c1a8614cb1df6a7f1a70a18a592783f` : les deux tentatives contrôlées d’assemblage sont **refusées avant exécution des tâches**, en mode sources et en simulant un environnement local sans clé originale. L’absence de binaire et de `~/.android/debug.keystore` implicite est contrôlée après les tests ; les 19 tests Python passent aussi sur ce runner.
+- Les réponses de `keytool` et d’`apksigner` sont simulées dans ces tests. **Aucune validation réelle d’un keystore retrouvé ni installation de mise à jour** : la clé reste absente. Le JDK/SDK restent indisponibles dans l’espace local ; les compilations Gradle des nouvelles sources sont exécutées par la CI distincte, sans signature ni APK. Les résultats Android historiques de 0.2.3 ne valident pas la nouvelle interface 0.3.0.
 
 Commandes hors compilation :
 
@@ -61,4 +62,4 @@ Si la clé originale ne peut pas être récupérée, signer un nouvel APK avec c
 
 ## Vérification des sources 0.3.0, sans livraison
 
-Un workflow distinct peut compiler Kotlin, les tests Android et exécuter les tests JVM/lint sans clé avec `NOVALISTEN_VERIFY_SOURCES=true`. Ce mode retire toute signature et refuse dans le graphe Gradle les tâches d’assemblage, signature, installation et production d’APK/AAB ; le pont de transfert refuse également un APK. Une tentative contrôlée d’assemblage doit être rejetée avant exécution des tâches. **Ce n’est ni un nouveau keystore, ni un APK de remplacement, ni un contournement du contrôle de livraison.** Voir [le lot 0.3.0](10-catalogue-et-artistes-automatiques.md).
+Un workflow distinct peut compiler Kotlin, les tests Android et exécuter les tests JVM/lint sans clé avec `NOVALISTEN_VERIFY_SOURCES=true`. Ce mode retire toute signature et refuse dans le graphe Gradle les tâches d’assemblage, signature, installation et production d’APK/AAB ; le pont de transfert refuse également un APK. Une tentative contrôlée d’assemblage est rejetée avant exécution des tâches. La CI vérifie aussi qu’aucun APK/AAB, keystore ou `~/.android/debug.keystore` implicite n’a été généré. **Ce n’est ni un nouveau keystore, ni un APK de remplacement, ni un contournement du contrôle de livraison.** Voir [le lot 0.3.0](10-catalogue-et-artistes-automatiques.md).
