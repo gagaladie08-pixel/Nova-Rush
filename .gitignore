@@ -13,6 +13,8 @@ local.properties
 *.pfx
 captures/
 artifacts/
+# Private signing keys, passwords and owner-only recovery bundles — NEVER publish.
+private-signing/
 .DS_Store
 
 __pycache__/

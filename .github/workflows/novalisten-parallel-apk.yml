@@ -1,0 +1,75 @@
+name: NovaListen Next — compilation sans clé privée
+
+on:
+  push:
+    branches: [arena/216bd0ac-nova-rush]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+concurrency:
+  group: novalisten-next-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unsigned:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[parallel-apk]') }}
+    name: APK parallèle non signé, tests et lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NOVALISTEN_PREPARE_PARALLEL: 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+      - name: Intégrité et protections des deux identités
+        run: |
+          python3 scripts/verify-project.py
+          python3 -m unittest discover -s scripts -p 'test_*signing*.py' -v
+          if ./gradlew --no-daemon --console=plain help > "$RUNNER_TEMP/legacy-id-refused.log" 2>&1; then
+            echo '::error::La préparation parallèle ne doit jamais accepter l’identifiant historique.'
+            exit 1
+          fi
+          grep -F 'Préparation parallèle interdite pour l’identifiant historique' "$RUNNER_TEMP/legacy-id-refused.log"
+      - name: Compiler Next sans clé, tester et analyser
+        run: scripts/gradle-ci.sh -PnovalistenParallel=true testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug
+      - name: Confirmer qu’aucune clé privée implicite n’a été créée
+        if: always()
+        run: |
+          test ! -e "$HOME/.android/debug.keystore"
+          test ! -e private-signing
+          if find app/build artifacts -type f \( -name '*.keystore' -o -name '*.jks' -o -name '*.p12' -o -name '*.pfx' \) -print -quit 2>/dev/null | grep -q .; then
+            echo '::error::Fichier de signature inattendu en CI.'
+            exit 1
+          fi
+      - name: Contrôler l’identité, l’absence de signature et l’alignement
+        run: python3 scripts/prepare_parallel_build.py prepare
+      - name: Intermédiaires publics seulement, pas un APK livré
+        uses: actions/upload-artifact@v7
+        with:
+          name: NovaListen-Next-unsigned-for-local-signing
+          path: |
+            artifacts/parallel-build/
+            artifacts/diagnostics/
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 14
+      - name: Pont public des seuls intermédiaires autorisés
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/prepare_parallel_build.py transfer
+      - name: Journaux et rapports, jamais de clé
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/github-transfer.py
