@@ -31,15 +31,25 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
     private var job: Job? = null
     private var generation = 0
 
+    // Share attempts across tracks only when their own native/chosen MBID proves the identity.
+    // Otherwise the current file's context remains part of the key; fields expire independently.
+    private fun cacheRequest(request: ArtistRequest): ArtistRequest = if (validMusicId(request.mbid)) request.copy(context = null) else request
+    private fun rememberAttempt(wanted: CacheKey, duration: Long) {
+        val request = cacheRequest(wanted.request)
+        if (wanted.bio) cache[CacheKey(request, true, false)] = now() + duration
+        if (wanted.photo) cache[CacheKey(request, false, true)] = now() + duration
+    }
+
     fun onPlayback(playback: ArtistPlayback?, settings: ArtistAutomation, notes: Map<String, ArtistNote>, ready: Boolean) {
         val key = playback?.takeIf { it.playing }?.let { "${it.trackId}|${it.artists}|$settings" }.orEmpty()
         if (key != current) { generation++; job?.cancel(); job = null; current = key; _state.value = _state.value.mapValues { it.value.copy(loading = false) } }
         if (key.isEmpty() || !ready || (!settings.biography && !settings.portrait) || job?.isActive == true) return
         val needed = playback!!.artists.distinctBy { it.id }.take(16).mapNotNull { request ->
             val saved = notes[request.id] ?: ArtistNote()
-            val bio = settings.biography && !saved.biographyLocked && saved.biography.isBlank()
-            val photo = settings.portrait && !saved.portraitLocked && saved.portrait == null
-            CacheKey(request, bio, photo).takeIf { (bio || photo) && (cache[it] ?: 0) <= now() }
+            val identity = cacheRequest(request)
+            val bio = settings.biography && !saved.biographyLocked && saved.biography.isBlank() && (cache[CacheKey(identity, true, false)] ?: 0) <= now()
+            val photo = settings.portrait && !saved.portraitLocked && saved.portrait == null && (cache[CacheKey(identity, false, true)] ?: 0) <= now()
+            CacheKey(request, bio, photo).takeIf { bio || photo }
         }
         if (needed.isEmpty()) return
         val token = ++generation
@@ -56,12 +66,13 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
                         ensureActive()
                         if (!result.identityVerified || token != generation) {
                             publish(request.id, AutoArtistState(note = result.note.ifBlank { "Identité ambiguë : aucun contenu attribué automatiquement." }))
-                            cache[wanted] = now() + 600_000
+                            rememberAttempt(wanted, 600_000)
                             return@withTimeout
                         }
                         var prepared = emptyList<PreparedPhoto>()
                         var selected: ImageCandidate? = null
                         var photoNotice = ""
+                        var photoFailed = false
                         if (wanted.photo) try {
                             val images = listOfNotNull(result.portrait).ifEmpty { result.proposals }
                             prepared = if (images.isNotEmpty()) prepare(images) else emptyList()
@@ -70,10 +81,15 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
                             if (selected != null) pendingImage = saveImage(selected)
                             else if (validMusicId(result.verifiedMbid)) {
                                 val batch = discoverPortraits(request, result.verifiedMbid)
-                                if (batch != null) prepared = batch.photos
+                                if (batch != null) {
+                                    prepared = batch.photos
+                                    val failures = batch.reports.filter { it.status == PortraitStatus.FAILED }
+                                    photoFailed = failures.isNotEmpty()
+                                    photoNotice = failures.joinToString("") { "\n${it.source.label} : ${it.detail}" }
+                                }
                             }
                         } catch (cancelled: CancellationException) { throw cancelled }
-                        catch (error: Exception) { photoNotice = "\nPortrait : ${error.publicMessage()}" }
+                        catch (error: Exception) { photoFailed = true; photoNotice = "\nPortrait : ${error.publicMessage()}" }
                         ensureActive()
                         if (token != generation) return@withTimeout
                         val bio = result.biography?.takeIf { wanted.bio && it.language == "fr" }
@@ -86,15 +102,15 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
                             }
                         }
                         if (token == generation) publish(request.id, AutoArtistState(note = result.note + photoNotice, proposals = prepared, verifiedMbid = result.verifiedMbid))
-                        cache[wanted] = now() + 600_000
+                        rememberAttempt(wanted, if (photoFailed) 120_000 else 600_000)
                     }
                 } catch (_: TimeoutCancellationException) {
                     if (token == generation) publish(request.id, AutoArtistState(note = "Recherche automatique bornée interrompue. Les choix locaux restent disponibles ; les recherches manuelles restent accessibles."))
-                    cache[wanted] = now() + 120_000
+                    rememberAttempt(wanted, 120_000)
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
                     if (token == generation) publish(request.id, AutoArtistState(note = error.publicMessage()))
-                    cache[wanted] = now() + 120_000
+                    rememberAttempt(wanted, 120_000)
                 } finally {
                     pendingImage?.let { image -> withContext(NonCancellable) { discardImage(image) } }
                 }

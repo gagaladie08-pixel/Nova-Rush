@@ -141,4 +141,15 @@ class PortraitCascadeTest {
         cascade.initial(subject)
         assertEquals(6, catalog.calls.size); assertEquals(2, prepared.size)
     }
+    @Test fun failedDiscoveryDoesNotSkipTheUnreceivedFirstPageWhenTheUserRetries() = runTest {
+        val catalog = Catalog().apply { failures += PortraitSource.COMMONS }
+        val cascade = PortraitCascade(this, catalog, ::prepare)
+        val first = cascade.initial(subject)
+        assertFalse(PortraitSource.COMMONS in first.pages)
+        catalog.failures.clear(); catalog.images[PortraitSource.COMMONS to 1] = listOf(image(0))
+        val retried = cascade.more(first, PortraitSource.COMMONS)
+        assertEquals(PortraitSource.COMMONS to 1, catalog.calls.last())
+        assertEquals(1, retried.photos.size)
+    }
+
 }

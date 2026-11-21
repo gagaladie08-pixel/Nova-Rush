@@ -118,4 +118,45 @@ class AutomaticArtistsTest {
         assertEquals(listOf("singer", "guest"), saved.map { it.first })
     }
 
+    @Test fun anIdentifiedArtistDoesNotRepeatPortraitSearchForEveryTrackOrAfterOnlyTheBiographyWasFilled() = runTest {
+        val native = artist.copy(mbid = "11111111-1111-1111-1111-111111111111", context = ArtistLocalContext("One song", "One album", 65000))
+        val fake = Fake { _, _, _ -> ArtistResult(biography = bio, identityVerified = true) }
+        val saved = mutableListOf<Pair<String, ArtistNote>>()
+        val auto = loader(this, fake, saved)
+        auto.onPlayback(playback.copy(artists = listOf(native)), ArtistAutomation(), emptyMap(), true); advanceUntilIdle()
+        val next = native.copy(context = ArtistLocalContext("Second song", "Second album", 65000))
+        auto.onPlayback(playback.copy(trackId = "next", artists = listOf(next)), ArtistAutomation(), mapOf(native.id to saved.single().second), true); advanceUntilIdle()
+        assertEquals(1, fake.requests.size)
+    }
+
+    @Test fun anUnidentifiedArtistsDifferentFileContextCanResolveDespiteThePreviousFilesNoMatch() = runTest {
+        val first = artist.copy(context = ArtistLocalContext("One song", "One album", 65000))
+        val fake = Fake { _, _, _ -> ArtistResult(note = "Ambiguous fixture") }
+        val auto = loader(this, fake)
+        auto.onPlayback(playback.copy(artists = listOf(first)), ArtistAutomation(), emptyMap(), true); advanceUntilIdle()
+        val next = first.copy(context = ArtistLocalContext("Second song", "Second album", 65000))
+        auto.onPlayback(playback.copy(trackId = "next", artists = listOf(next)), ArtistAutomation(), emptyMap(), true); advanceUntilIdle()
+        assertEquals(listOf(first, next), fake.requests)
+    }
+
+    @Test fun aFailedPortraitUsesTheShortCacheAndRetriesWithoutFetchingTheSavedBiographyAgain() = runTest {
+        val flags = mutableListOf<Pair<Boolean, Boolean>>()
+        val fake = Fake { _, biography, portrait ->
+            flags += biography to portrait
+            ArtistResult(biography = bio.takeIf { biography }, portrait = image.takeIf { portrait }, identityVerified = true)
+        }
+        var now = 0L
+        val saved = mutableListOf<Pair<String, ArtistNote>>()
+        val auto = loader(this, fake, saved, save = { throw RemoteFailure("Synthetic image failure") }, now = { now })
+        auto.onPlayback(playback, ArtistAutomation(), emptyMap(), true); advanceUntilIdle()
+        val notes = mapOf(artist.id to saved.single().second)
+        auto.onPlayback(playback.copy(trackId = "two"), ArtistAutomation(), notes, true); advanceUntilIdle()
+        assertEquals(1, fake.requests.size)
+        now = 120001
+        auto.onPlayback(playback.copy(trackId = "three"), ArtistAutomation(), notes, true); advanceUntilIdle()
+        assertEquals(listOf(true to true, false to true), flags)
+        assertEquals(bio.text, saved.single().second.biography)
+        assertTrue(auto.state.value.getValue(artist.id).note.contains("Synthetic image failure"))
+    }
+
 }

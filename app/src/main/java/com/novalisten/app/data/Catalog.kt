@@ -157,6 +157,7 @@ fun sameRecording(first: Track, second: Track, choices: CatalogChoices): Boolean
     val id = first.recordingId.takeIf(::validMusicId)
     val sameId = id != null && id.equals(second.recordingId, true)
     val sameIsrc = first.isrc.matches(Regex("[A-Z]{2}[A-Z0-9]{3}[0-9]{7}")) && first.isrc == second.isrc
+    if (!sameId && !sameIsrc) return false
     val structuredNames = (first.credits + second.credits + choices.artists[first.id].orEmpty() + choices.artists[second.id].orEmpty()).map { it.name.artistNameKey() }.toSet()
     val firstArtists = ArtistCredits.forTrack(first, choices, structuredNames)
     val secondArtists = ArtistCredits.forTrack(second, choices, structuredNames)

@@ -132,7 +132,7 @@ class PortraitCascade(private val scope: CoroutineScope, private val catalog: Po
             replies.forEach { (source, images, error) ->
                 val status = when { error != null -> PortraitStatus.FAILED; images.isEmpty() -> PortraitStatus.EMPTY; else -> PortraitStatus.RESULTS }
                 val report = PortraitReport(source, status, error ?: if (images.isEmpty()) "Aucune proposition dans cette page." else "${images.size} proposition(s) ; sujet, licence et date restent à vérifier.")
-                batch = batch.copy(reports = batch.reports.map { if (it.source == source) report else it }, pages = batch.pages + (source to 1))
+                batch = batch.copy(reports = batch.reports.map { if (it.source == source) report else it }, pages = if (error == null) batch.pages + (source to 1) else batch.pages)
             }
             batch = batch.copy(candidates = (batch.candidates + found).distinctBy { imageIdentity(it.original) }.take(120))
             publish(batch)
