@@ -72,5 +72,49 @@ locale décrite ici.
 7. Seul l’APK signé et vérifié peut être remis. Ni APK non signé, ni archive
    privée ne doivent être confondus avec le livrable installable.
 
-Les résultats de compilation et les contrôles du binaire seront ajoutés après leur
-exécution. Les anciens résultats instrumentés 0.2.3 ne prouvent pas le rendu Next.
+## Binaire signé remis
+
+- Fichier : **`NovaListen-Next-0.3.0-debug.apk`**, **89 793 676 octets** (89,8 Mo).
+- Version **0.3.0 / code 6**, Android **8+ (API 26)**, cible API 35.
+- SHA-256 du fichier : `3a15fc41a8beffcb02c262b6759867df6c4113262f3812a99811fce6f01c52ec`.
+- Certificat : celui de Next épinglé ci-dessus ; **un seul signataire, v2 + v3**.
+  Ni la signature 0.2.3 ni un keystore debug implicite n’ont été employés.
+- Sources exactes du binaire : `b65348dc73075eb2a21b74cdcfe319b769175e8b`.
+  La correction locale du passage du mot de passe PKCS12 et les références de
+  cet APK sont dans `ffbc43671ae710c9efcbc5d7bb05067eb9089339` ; pas de recompilation
+  ni de remplacement du binaire après signature/essais.
+- Inspection indépendante du manifeste binaire et de son certificat avec
+  Androguard, puis vérification cryptographique par apksigner. Nom de lanceur,
+  activité réelle, version, niveaux SDK et permissions contrôlés ; aucune clé
+  privée, mot de passe de signature ou musique de démonstration embarqués.
+
+L’APK signé est remis comme fichier dans la session. Pour récupérer exactement
+ce binaire public par l’API GitHub, avec GitHub CLI configuré :
+
+```sh
+python3 scripts/parallel_install_smoke.py fetch
+# .cache/next-device-check/NovaListen-Next-0.3.0-debug.apk
+```
+
+`config/next-apk-under-test.json` épingle son SHA-256, son certificat, son build et
+ses parties publiques ; le téléchargement vérifie chaque partie puis le tout.
+Ce mécanisme ne lit ni ne transfère la sauvegarde privée de signature.
+
+## Résultats vérifiés
+
+- [Compilation Next 44949752140](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44949752140) : **240 tests JVM et 49 tests Python réussis**, compilation des tests Android, lint **42 avertissements / zéro erreur**, contrôle de l’identifiant réel, de l’alignement et de l’absence de signature/clé implicite avant signature locale.
+- [Sources seules 44949752175](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44949752175), puis [44950357594](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44950357594) au commit de l’outil final : **240 tests JVM + 49 tests Python réussis**, compilation des tests Android, lint 41 avertissements / zéro erreur et refus des assemblages historiques vérifiés. Le 42e avertissement Next est la ressource de l’ancien nom `app_name` devenue inutilisée par son nom de lanceur distinct.
+- [Installation côte à côte 44950357575](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44950357575) : **Android 10 / API 29** (job `136986697682`) et **Android 15 / API 35** (job `136986698030`) réussis sur émulateurs. C’est le **même APK signé et haché** que celui remis, pas une reconstruction de test.
+- Sur chaque émulateur : certificats des deux vrais APK vérifiés, installation de 0.2.3 puis Next sans désinstallation, deux UID Android distincts, fichier synthétique privé de 0.2.3 préservé, réinstallation `-r` **du même APK Next signé** préservant aussi son fichier privé, lancement de l’activité Next réussi, navigation Bibliothèque visible et aucun plantage de démarrage Next détecté.
+
+Les rapports téléchargés/hachés sont conservés sous `artifacts/ci-44949752140/`,
+`artifacts/ci-44949752175/`, `artifacts/ci-44950357594/` et
+`artifacts/ci-44950357575/` (ignorés par Git), avec
+`artifacts/APK-INFO-Next-0.3.0.json` et la somme du fichier remis.
+
+**Limites :** ces deux essais d’installation/démarrage ne sont **pas la suite
+instrumentée complète** ni un essai des galeries/API réelles. Les tests Android
+complets de 0.3.0 sont compilés, pas exécutés. Aucun essai sur le téléphone de
+l’utilisateur, aucune migration automatique des données 0.2.3 vers Next ni
+validation d’une future version différente ne sont prétendus. Les anciens
+résultats instrumentés 0.2.3 restent historiques et distincts.

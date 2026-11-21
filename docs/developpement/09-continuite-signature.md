@@ -2,6 +2,8 @@
 
 ## État : livraison protégée, clé privée originale non retrouvée
 
+> **Décision ultérieure distincte :** l’utilisateur a choisi une [installation parallèle NovaListen Next 0.3.0](11-installation-parallele-et-cle-next.md), avec un autre identifiant et une clé privée sauvegardée dont il a confirmé la conservation. Cet APK peut s’installer à côté de 0.2.3 ; il ne remplace pas sa signature, n’efface pas ses données et ne débloque pas sa mise à jour. La référence et les protections historiques ci-dessous restent inchangées.
+
 La demande est de conserver **exactement le certificat de l’APK 0.2.3 déjà livré**, afin de permettre les prochaines mises à jour sans désinstaller l’application ni effacer ses données privées.
 
 Référence publique, dans `config/signing-policy.json` :
@@ -44,7 +46,7 @@ Les détails non sensibles sont conservés localement dans `artifacts/signature-
 - **19 tests Python synthétiques** : secret absent/invalide/trop volumineux, permissions du fichier, certificat différent, certificat sans clé privée, échec d’outil, nettoyage, absence d’export de données sensibles, APK absent/invalide et signataires absents/différents/multiples.
 - Contrôle d’intégrité du projet et vérification des différences Git.
 - [Vérification des sources 44945580241](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44945580241), sources `5d1bc7465c1a8614cb1df6a7f1a70a18a592783f` : les deux tentatives contrôlées d’assemblage sont **refusées avant exécution des tâches**, en mode sources et en simulant un environnement local sans clé originale. L’absence de binaire et de `~/.android/debug.keystore` implicite est contrôlée après les tests ; les 19 tests Python passent aussi sur ce runner.
-- Les réponses de `keytool` et d’`apksigner` sont simulées dans ces tests. **Aucune validation réelle d’un keystore retrouvé ni installation de mise à jour** : la clé reste absente. Le JDK/SDK restent indisponibles dans l’espace local ; les compilations Gradle des nouvelles sources sont exécutées par la CI distincte, sans signature ni APK. Les résultats Android historiques de 0.2.3 ne valident pas la nouvelle interface 0.3.0.
+- Les réponses de `keytool` et d’`apksigner` sont simulées dans ces tests historiques. **Aucune validation réelle d’un keystore 0.2.3 retrouvé ni installation de sa mise à jour** : sa clé reste absente. Depuis la décision parallèle, un runtime Java local et apksigner permettent de signer et vérifier **uniquement Next**, avec sa propre sauvegarde vérifiée ; sa compilation sans clé est distincte du mode sources seules. Les résultats et limites Next figurent dans sa fiche, sans attribuer les anciens résultats instrumentés 0.2.3 à la nouvelle interface.
 
 Commandes hors compilation :
 

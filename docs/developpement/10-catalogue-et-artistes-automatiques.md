@@ -2,7 +2,7 @@
 
 ## État de livraison
 
-Lot autorisé par **« Je valide tout maintenant code les »**, implémenté après 0.2.3. **Vérifications des nouvelles sources sans génération d’APK ; aucun APK 0.3.0 livré.** La signature exigée reste exactement celle de 0.2.3. Le keystore original n’est toujours pas retrouvé : la livraison reste bloquée, sans clé de remplacement ni désinstallation conseillée.
+Lot autorisé par **« Je valide tout maintenant code les »**, implémenté après 0.2.3. La mise à jour de l’identifiant historique reste bloquée : sa clé originale n’est toujours pas retrouvée et aucune clé n’est substituée. **Après choix explicite de l’installation parallèle, un APK distinct NovaListen Next 0.3.0 est désormais signé et remis**, sans remplacer 0.2.3. Nouvelle identité, sauvegarde privée confirmée, binaire exact et essais de coexistence Android 10/15 : voir [l’installation parallèle](11-installation-parallele-et-cle-next.md). Les résultats ci-dessous décrivent le lot source et ses vérifications antérieures ; ceux du binaire Next sont détaillés dans cette fiche dédiée.
 
 Un workflow distinct compile Kotlin (application et tests Android), exécute les tests JVM et lint. Son mode Gradle interdit assemblage, signature, installation et production d’APK/AAB. Le pont de transfert refuse aussi tout APK dans ce mode. Une tentative contrôlée d’`assembleDebug` est rejetée avant exécution des tâches ; l’absence de binaire et de clé debug implicite est contrôlée. Cela **ne remplace pas les essais d’interface sur appareil**.
 

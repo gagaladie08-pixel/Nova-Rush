@@ -1,9 +1,17 @@
 # NovaListen
 
-Lecteur musical Android local, utilisable hors ligne. **APK disponible : 0.2.3**, commandes dans la fenêtre réelle et paroles automatiques persistantes. **Nouvelles sources : 0.3.0, catalogue et artistes automatiques, vérifiées sans génération d’APK**.
+Lecteur musical Android local, utilisable hors ligne. **Nouveau : NovaListen Next 0.3.0**, APK signé contenant les nouveautés catalogue/artistes, **installable à côté de NovaListen 0.2.3**. Ce n’est pas une mise à jour de son ancienne installation : sa clé reste non retrouvée. L’ancien APK et ses données ne sont pas remplacés.
 **Pour l’APK 0.2.3 uniquement : 145 tests unitaires + 30 tests Android répétés sur trois configurations réussis** (Android 10, Android 15 gestuel, Android 15 trois boutons), lint sans erreur / 34 avertissements. [Validation 44930520156](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44930520156) · [périmètre, conservation locale, preuves et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Le rendu sur le téléphone de l'utilisateur reste à vérifier ; les preuves et binaires précédents ci-dessous restent historiques.
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
+
+## APK 0.3.0 — NovaListen Next, installation parallèle
+
+- Fichier remis : **`NovaListen-Next-0.3.0-debug.apk`**, **89 793 676 octets** (89,8 Mo), Android 8+.
+- Nom de lanceur **NovaListen Next**, identifiant stable `com.novalisten.app.next` ; l’ancienne application reste installée, sans transfert automatique de ses choix/réglages.
+- Nouvelle clé privée conservée hors de Git/GitHub, **restauration de sa sauvegarde vérifiée et copie indépendante confirmée par l’utilisateur**. Empreinte publique épinglée ; aucune nouvelle clé automatique pour les mises à jour Next.
+- SHA-256 du fichier : `3a15fc41a8beffcb02c262b6759867df6c4113262f3812a99811fce6f01c52ec`.
+- **[Binaire exact, récupération par API, signature, sauvegarde et preuves](docs/developpement/11-installation-parallele-et-cle-next.md)**. Le fichier signé est remis dans la session ; les liens de téléchargement 0.2.3 et antérieurs ci-dessous restent historiques, pas des liens vers Next.
 
 ## Sources 0.3.0 — nouveau lot
 
@@ -13,9 +21,11 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 - Bibliothèque au démarrage et lecteur plein écran sur lancement volontaire, pas sur un passage naturel de piste.
 - Migration SQLite v5 additive ; aucun tag ou fichier audio modifié.
 
-**Vérification des sources réussie : 240 tests JVM + 19 tests Python**, aucun échec ; application et tests Android compilés, lint sans erreur / 41 avertissements. [Exécution 44945580241](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44945580241), sources `5d1bc74`. Les tests Android 0.3.0 sont **compilés, pas exécutés** ; aucun essai sur téléphone ni appel API musicale réel validé. La découverte photo est actuellement admise pour Commons/Openverse ; les autres branches conditionnelles affichent leur motif de saut.
+**240 tests JVM + 49 tests Python réussis**, application et tests Android compilés. [Compilation Next 44949752140](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44949752140), sources `b65348d` : lint sans erreur / 42 avertissements (41 pour le mode sources historique). **[Installation côte à côte et démarrage réussis sur émulateurs Android 10 et 15](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44950357575)** avec exactement l’APK signé remis : deux UID distincts, données synthétiques privées de l’ancien préservées, celles de Next conservées après réinstallation du même APK signé.
 
-**[Fonctionnement, limites des tags/identités et vérifications](docs/developpement/10-catalogue-et-artistes-automatiques.md).** Aucun APK 0.3.0 n’est livré : la clé privée de 0.2.3 reste à retrouver. Les résultats instrumentés Android ci-dessous concernent exclusivement l’ancien APK 0.2.3.
+Ce sont des essais ciblés d’installation/démarrage, **pas la suite instrumentée complète 0.3.0**, qui reste compilée mais non exécutée. Aucun essai sur téléphone ni appel API musicale réel validé. La découverte photo est actuellement admise pour Commons/Openverse ; les autres branches conditionnelles affichent leur motif de saut.
+
+**[Fonctionnement, limites des tags/identités et vérifications](docs/developpement/10-catalogue-et-artistes-automatiques.md).** Next est une installation parallèle explicitement choisie ; les résultats instrumentés complets ci-dessous concernent exclusivement l’ancien APK 0.2.3.
 
 ## Deux corrections — 0.2.3
 
@@ -29,7 +39,9 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 
 ## Signature des prochains APK
 
-Le certificat de **0.2.3 est désormais la référence obligatoire** : la chaîne de livraison d’APK bloque avant compilation si sa clé privée originale n’est pas fournie et vérifie le certificat de l’APK avant toute livraison. **Cette clé n’a pas été retrouvée lors de l’audit : une prochaine mise à jour compatible n’est pas encore garantie.** Aucun nouvel APK ni nouvelle clé n’ont été générés ; la vérification des sources ne produit aucun binaire installable. [Audit, contrôles et condition de déblocage](docs/developpement/09-continuite-signature.md).
+Pour l’identifiant historique `com.novalisten.app`, le certificat de **0.2.3 reste obligatoire** : sa chaîne de livraison bloque sans la clé privée originale, toujours non retrouvée. Aucune substitution ou désinstallation n’est effectuée. [Audit et blocage historique](docs/developpement/09-continuite-signature.md).
+
+**Next est une identité distincte**, autorisée ensuite pour l’installation parallèle : clé privée créée une seule fois, sauvegarde récupérable vérifiée et conservée par l’utilisateur, certificat épinglé. Compilation sans clé en CI, signature locale contrôlée ; cette nouvelle clé ne permet pas de mettre à jour 0.2.3. [Procédure et limites Next](docs/developpement/11-installation-parallele-et-cle-next.md).
 
 ## Historique 0.2.2 — swipes et commandes plein écran
 
