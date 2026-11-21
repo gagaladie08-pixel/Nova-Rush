@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.novalisten.app.INITIAL_TAB
 import com.novalisten.app.MainViewModel
+import com.novalisten.app.PlayerPresentation
 import com.novalisten.app.data.*
 import com.novalisten.app.enrichment.resolveLyrics
 import com.novalisten.app.ui.components.*
@@ -41,7 +43,6 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     val data by vm.repository.data.collectAsStateWithLifecycle()
     val playback by vm.playback.collectAsStateWithLifecycle()
     val playerRequest by vm.playerOpenRequests.collectAsStateWithLifecycle()
-    var consumedPlayRequest by rememberSaveable { mutableStateOf("") }
     val automatic by vm.automaticLyrics.state.collectAsStateWithLifecycle()
     fun lyricsFor(id: String) = resolveLyrics(id, data.lyrics[id], automatic,
         data.automaticLyrics[id]?.forTrack(library.tracks.firstOrNull { it.id == id }))
@@ -55,7 +56,10 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     var artistLibrary by rememberSaveable { mutableStateOf(false) }
     var albumId by rememberSaveable { mutableStateOf<String?>(null) }
     var playlistId by rememberSaveable { mutableStateOf<String?>(null) }
-    var playerOpen by rememberSaveable { mutableStateOf(false) }
+    var presentation by rememberSaveable(stateSaver = listSaver<PlayerPresentation, Any>(
+        save = { listOf(it.open, it.consumedToken) }, restore = { PlayerPresentation(it[0] as Boolean, it[1] as String) }
+    )) { mutableStateOf(PlayerPresentation()) }
+    val playerOpen = presentation.open
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var artistChoiceTrack by remember { mutableStateOf<Track?>(null) }
     var creditEditor by remember { mutableStateOf<Track?>(null) }
@@ -73,15 +77,10 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
-    LaunchedEffect(playback.currentId) { if (playback.currentId == null) playerOpen = false }
-    LaunchedEffect(playerRequest.token) {
-        if (playerRequest.token.isNotBlank() && playerRequest.token != consumedPlayRequest) {
-            consumedPlayRequest = playerRequest.token
-            playerOpen = true
-        }
-    }
-    fun openArtist(id: String) { tab = 2; artistId = artists.firstOrNull { it.id == id || (it.inheritLegacy && it.legacyId == id) }?.id ?: id; artistLibrary = false; route = ""; playerOpen = false }
-    fun openAlbum(id: String) { tab = 3; albumId = id; route = ""; playerOpen = false }
+    LaunchedEffect(playback.currentId) { presentation = presentation.onPlayback(playback.currentId) }
+    LaunchedEffect(playerRequest.token) { presentation = presentation.accept(playerRequest) }
+    fun openArtist(id: String) { tab = 2; artistId = artists.firstOrNull { it.id == id || (it.inheritLegacy && it.legacyId == id) }?.id ?: id; artistLibrary = false; route = ""; presentation = presentation.dismiss() }
+    fun openAlbum(id: String) { tab = 3; albumId = id; route = ""; presentation = presentation.dismiss() }
     fun openPlaylist(id: String) { tab = 4; playlistId = id; route = "" }
     fun goBack() {
         when {
@@ -118,7 +117,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
             }, bottomBar = {
                 Column(Modifier.navigationBarsPadding().background(LocalUniverse.current.background)) {
                     val current = playable.firstOrNull { it.id == playback.currentId }
-                    if (current != null && !playerOpen) MiniPlayer(current, playback, vm) { playerOpen = true }
+                    if (current != null && !playerOpen) MiniPlayer(current, playback, vm) { presentation = presentation.openManually() }
                     HorizontalDivider(color = LocalUniverse.current.primary.copy(alpha = .2f))
                     LazyRow(Modifier.fillMaxWidth().testTag("navigation"), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         itemsIndexed(mainTabs) { index, item ->
@@ -203,7 +202,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
             // Same activity window and real measured viewport as the application. A second
             // edge-to-edge Dialog can report a different height/inset set on some devices.
             if (playerOpen && current != null) FullPlayer(current, playback, data, playable, vm, lyricsFor(current.id), automatic,
-                onDismiss = { playerOpen = false }, onMenu = { menuTrack = current }, onAdd = { addTracks = listOf(current) },
+                onDismiss = { presentation = presentation.dismiss() }, onMenu = { menuTrack = current }, onAdd = { addTracks = listOf(current) },
                 onEditLyrics = { editingLyrics = current }, onLyricsInfo = { lyricsInfo = current },
                 blocked = menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || lyricsInfo != null || deleteTracks != null || enrichment != null)
         }
@@ -220,7 +219,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
         lyricsInfo?.let { LyricsDetailsDialog(it, lyricsFor(it.id), automatic) { lyricsInfo = null } }
         addTracks?.let { AddToPlaylistDialog(it, data.playlists, vm) { addTracks = null } }
         editingLyrics?.let { track -> LyricsEditor(track, lyricsFor(track.id), vm, onDismiss = { editingLyrics = null }, onSearch = { editingLyrics = null; enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onTranslate = { editingLyrics = null; enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, track) }) }
-        enrichment?.let { request -> EnrichmentDialog(request, vm, onDismiss = { enrichment = null }, onKeys = { enrichment = null; playerOpen = false; routeParent = "settings"; route = "api" }) }
+        enrichment?.let { request -> EnrichmentDialog(request, vm, onDismiss = { enrichment = null }, onKeys = { enrichment = null; presentation = presentation.dismiss(); routeParent = "settings"; route = "api" }) }
         if (createPlaylist) CreatePlaylistDialog(vm, { createPlaylist = false }) { playlist, pick -> openPlaylist(playlist.id); if (pick) pickPlaylist = playlist.id }
         data.playlists.find { it.id == pickPlaylist }?.let { playlist -> TrackPickerDialog(playable, playlist, vm) { pickPlaylist = null } }
         removeTrack?.let { (listId, trackId) -> AlertDialog(onDismissRequest = { removeTrack = null }, title = { Text("Retirer de cette playlist ?") }, text = { Text("Le fichier reste sur le téléphone, dans vos autres playlists et dans la file déjà lancée.") }, confirmButton = { TextButton({ data.playlists.find { it.id == listId }?.let { vm.savePlaylist(it.copy(trackIds = it.trackIds.filterNot { id -> id == trackId })) }; removeTrack = null }) { Text("Retirer") } }, dismissButton = { TextButton({ removeTrack = null }) { Text("Annuler") } }) }

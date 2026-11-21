@@ -22,9 +22,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-data class PlayerOpenRequest(val token: String = "", val trackId: String = "")
-const val INITIAL_TAB = 1
-
 private const val SOURCE_PLAYLIST = "source_playlist"
 
 data class PlaybackUi(
@@ -103,9 +100,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val list = eligible(tracks).let { if (shuffled) it.shuffled() else it }
         if (list.isEmpty()) return message("Aucun morceau disponible dans cette sélection.")
         c.shuffleModeEnabled = false
-        c.setMediaItems(list.map { item(it, sourcePlaylist) }, list.indexOfFirst { it.id == selected?.id }.coerceAtLeast(0), 0)
+        val index = list.indexOfFirst { it.id == selected?.id }.coerceAtLeast(0)
+        c.setMediaItems(list.map { item(it, sourcePlaylist) }, index, 0)
         c.prepare(); c.play(); updatePlayer()
-        _playerOpenRequests.value = PlayerOpenRequest(java.util.UUID.randomUUID().toString(), c.currentMediaItem?.mediaId.orEmpty())
+        _playerOpenRequests.value = PlayerOpenRequest(java.util.UUID.randomUUID().toString(), list[index].id)
     }
     fun next(tracks: List<Track>) {
         val c = controller ?: return
@@ -128,7 +126,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun seek(ms: Long) { controller?.seekTo(ms.coerceAtLeast(0)); updatePlayer() }
     fun jumpTo(index: Int) { controller?.let { if (index in 0 until it.mediaItemCount) { it.seekTo(index, 0); it.play() } }; updatePlayer() }
     fun cycleRepeat() { controller?.let { it.repeatMode = when (it.repeatMode) { Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL; Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF } }; updatePlayer() }
-    fun stop() { controller?.let { it.stop(); it.clearMediaItems() }; updatePlayer() }
+    fun stop() { controller?.let { it.stop(); it.clearMediaItems() }; _playerOpenRequests.value = PlayerOpenRequest(); updatePlayer() }
     fun favorite(track: Track) { viewModelScope.launch { repository.mutate { setFlag(track.id, "favorite", track.id !in repository.data.value.favorites) } } }
     fun hide(tracks: List<Track>) { viewModelScope.launch { repository.mutate { tracks.forEach { setFlag(it.id, "hidden", true) } }; message("Masqué dans toute l’application · fichier conservé") } }
     fun unhide(track: Track) { viewModelScope.launch { repository.mutate { setFlag(track.id, "hidden", false) } } }

@@ -199,4 +199,15 @@ class CatalogTest {
         assertEquals(two.editionKey, after.representativeId)
     }
 
+    @Test fun contradictoryNativeAlbumArtistsCannotBeCollapsedInsideTheSameAndroidAlbumId() {
+        val one = track("1").copy(albumCredits = listOf(ArtistCredit("Artiste synthétique", mb1)))
+        val two = one.copy(id = "2", albumCredits = listOf(ArtistCredit("Artiste synthétique", mb2)))
+        assertEquals(2, albumGroups(listOf(one, two)).size)
+    }
+    @Test fun matchingRecordingsCanReuseStructuredCreditsAcrossDifferentTextualSeparators() {
+        val one = track("1", artist = "One/Two").copy(recordingId = mb1)
+        val two = one.copy(id = "2", artist = "One feat. Two", credits = listOf(ArtistCredit("One"), ArtistCredit("Two")))
+        assertTrue(sameRecording(one, two, CatalogChoices()))
+    }
+
 }

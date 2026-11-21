@@ -48,6 +48,10 @@ jobs:
       - name: Confirmer l’absence de binaire installable
         if: always()
         run: |
+          if [ -f "$HOME/.android/debug.keystore" ]; then
+            echo '::error::Une clé debug implicite a été créée pendant les vérifications.'
+            exit 1
+          fi
           if find app/build artifacts -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.keystore' -o -name '*.jks' \) -print -quit 2>/dev/null | grep -q .; then
             echo '::error::Un binaire ou une clé inattendus ont été générés en mode sources seules.'
             exit 1

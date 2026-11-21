@@ -98,6 +98,30 @@ class SigningPolicyTest(unittest.TestCase):
                 signing.prepare_key(self.encoded, self.root, self.policy, self.root / 'missing' / 'env')
         self.assertEqual([], list(self.root.iterdir()))
 
+    def test_local_validation_of_an_absent_store_cannot_generate_or_export_a_key(self):
+        with patch.object(signing, 'run_tool') as tool:
+            with self.assertRaises(signing.SigningError):
+                signing.validate_keystore(self.root / 'absent.keystore', self.policy)
+        tool.assert_not_called()
+        self.assertEqual([], list(self.root.iterdir()))
+
+    def test_local_packaging_validation_checks_the_certificate_and_possession_of_the_private_key(self):
+        path = self.root / 'synthetic.keystore'
+        path.write_bytes(self.fake_data)
+        with patch.object(signing, 'run_tool', side_effect=[self.certificate, b'synthetic-csr']) as tool:
+            self.assertEqual(path, signing.validate_keystore(path, self.policy))
+        self.assertEqual(2, tool.call_count)
+        with patch.object(signing, 'run_tool', side_effect=[self.certificate, signing.SigningError('No private key')]):
+            with self.assertRaises(signing.SigningError):
+                signing.validate_keystore(path, self.policy)
+        self.assertEqual(self.fake_data, path.read_bytes())
+
+    def test_local_validation_never_accepts_a_key_path_inside_the_checkout(self):
+        with patch.object(signing, 'run_tool') as tool:
+            with self.assertRaises(signing.SigningError):
+                signing.validate_keystore(signing.ROOT / 'do-not-create.keystore', self.policy)
+        tool.assert_not_called()
+
     def apk_fixture(self):
         apk = self.root / 'fixture.apk'
         apk.write_bytes(b'not-a-real-apk-tool-response-is-mocked')

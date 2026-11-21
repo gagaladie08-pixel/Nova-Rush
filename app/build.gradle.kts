@@ -6,6 +6,7 @@ plugins {
 
 // Source verification is a separate, non-delivery mode: no signing, packaging or installation.
 val verifySourcesOnly = System.getenv("NOVALISTEN_VERIFY_SOURCES") == "true"
+val deliveryKeystore = System.getenv("NOVALISTEN_KEYSTORE_PATH")
 
 android {
     namespace = "com.novalisten.app"
@@ -20,7 +21,6 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
     // CI must restore the existing, fingerprint-verified key before Gradle can sign anything.
-    val deliveryKeystore = System.getenv("NOVALISTEN_KEYSTORE_PATH")
     if (System.getenv("GITHUB_ACTIONS") == "true" && !verifySourcesOnly) {
         check(!deliveryKeystore.isNullOrBlank()) { "Clé de signature existante requise : aucune génération automatique en CI." }
     }
@@ -81,8 +81,18 @@ dependencies {
 
 // Never turn the missing original key into a new debug key or even an unsigned APK delivery.
 gradle.taskGraph.whenReady {
+    val packaging = Regex("^(assemble.*|install.*|validateSigning.*|package(Debug|Release)(AndroidTest)?|bundle(Debug|Release))$")
+    val producesBinary = allTasks.any { packaging.matches(it.name) }
     if (verifySourcesOnly) {
-        val forbidden = Regex("^(assemble.*|install.*|validateSigning.*|package(Debug|Release)(AndroidTest)?|bundle(Debug|Release))$")
-        check(allTasks.none { forbidden.matches(it.name) }) { "Vérification des sources uniquement : génération d’APK/AAB et signature interdites." }
+        check(!producesBinary) { "Vérification des sources uniquement : génération d’APK/AAB et signature interdites." }
+    } else if (producesBinary) {
+        // Also fail closed outside GitHub Actions: never let AGP silently generate a debug key.
+        check(!deliveryKeystore.isNullOrBlank()) { "Clé privée originale 0.2.3 obligatoire : aucun APK ni nouvelle clé de remplacement." }
+        val checkKey = ProcessBuilder("python3", rootProject.file("scripts/signing_policy.py").absolutePath,
+            "verify-keystore", rootProject.file(deliveryKeystore).absolutePath)
+            .directory(rootProject.projectDir).redirectErrorStream(true).start()
+        checkKey.outputStream.close()
+        val report = checkKey.inputStream.bufferedReader().use { it.readText() }
+        check(checkKey.waitFor() == 0) { "Clé privée originale 0.2.3 non vérifiée : livraison interdite.\n${report.take(1500)}" }
     }
 }

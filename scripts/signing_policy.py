@@ -40,6 +40,27 @@ def run_tool(command, binary=False):
     return result.stdout if binary else result.stdout.decode('utf-8', errors='replace')
 
 
+def validate_keystore(keystore, policy):
+    """Verify an existing private key, including for local Gradle packaging; never create one."""
+    keystore = Path(keystore).expanduser().resolve()
+    if keystore == ROOT or ROOT in keystore.parents:
+        raise SigningError('La clé privée originale doit rester hors du dépôt.')
+    try:
+        valid = keystore.is_file() and 0 < keystore.stat().st_size <= MAX_KEYSTORE_BYTES
+    except OSError:
+        valid = False
+    if not valid:
+        raise SigningError('Keystore original absent, illisible ou invalide ; aucune clé de remplacement.')
+    certificate = run_tool(['keytool', '-exportcert', '-keystore', str(keystore),
+                            '-alias', policy['key_alias'], '-storepass', 'android'], binary=True)
+    if hashlib.sha256(certificate).hexdigest() != policy['certificate_sha256']:
+        raise SigningError('Certificat différent de la référence. Build bloqué ; aucun changement de signature autorisé.')
+    # A public certificate alone cannot pass this existing-private-key operation.
+    run_tool(['keytool', '-certreq', '-keystore', str(keystore), '-alias', policy['key_alias'],
+              '-storepass', 'android', '-keypass', 'android'], binary=True)
+    return keystore
+
+
 def prepare_key(encoded, runner_temp, policy, github_env):
     """Restore ONLY an existing original debug keystore, privately and outside the repository."""
     if not encoded or not encoded.strip():
@@ -62,16 +83,8 @@ def prepare_key(encoded, runner_temp, policy, github_env):
         with keystore.open('xb') as output:
             os.chmod(keystore, 0o600)
             output.write(data)
-        # 0.2.3 used Android's default debug alias/store password. These public defaults are
-        # NOT the private key; a newly generated store with the same defaults is rejected.
-        certificate = run_tool(['keytool', '-exportcert', '-keystore', str(keystore),
-                                '-alias', policy['key_alias'], '-storepass', 'android'], binary=True)
-        if hashlib.sha256(certificate).hexdigest() != policy['certificate_sha256']:
-            raise SigningError('Certificat différent de la référence. Build bloqué ; aucun changement de signature autorisé.')
-        # A certificate-only store is not a recovered signing key. Require an operation using
-        # the existing private key. The public CSR stays in memory and is never published.
-        run_tool(['keytool', '-certreq', '-keystore', str(keystore), '-alias', policy['key_alias'],
-                  '-storepass', 'android', '-keypass', 'android'], binary=True)
+        # These public debug defaults are not the private key: verify both certificate and key.
+        validate_keystore(keystore, policy)
         path = str(keystore)
         if '\n' in path or '\r' in path:
             raise SigningError('Chemin de keystore invalide.')
@@ -100,6 +113,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('prepare')
+    key = commands.add_parser('verify-keystore')
+    key.add_argument('keystore')
     verify = commands.add_parser('verify-apk')
     verify.add_argument('apk')
     args = parser.parse_args()
@@ -110,6 +125,8 @@ def main():
                 raise SigningError('Préparation réservée au runner privé ; aucune clé n’est créée localement.')
             prepare_key(os.environ.get('NOVALISTEN_DEBUG_KEYSTORE_BASE64', ''),
                         os.environ['RUNNER_TEMP'], policy, os.environ['GITHUB_ENV'])
+        elif args.command == 'verify-keystore':
+            validate_keystore(args.keystore, policy)
         else:
             sdk = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT')
             signer = Path(sdk) / 'build-tools/35.0.0/apksigner' if sdk else shutil.which('apksigner')

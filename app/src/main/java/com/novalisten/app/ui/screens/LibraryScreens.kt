@@ -38,6 +38,7 @@ fun TrackListScreen(
     onBack: (() -> Unit)? = null,
     sourcePlaylist: String? = null,
     fixedOrder: Boolean = false,
+    fullQueueWhenSearching: Boolean = false,
     header: LazyListScope.() -> Unit = {},
     extraActions: @Composable RowScope.() -> Unit = {},
 ) {
@@ -55,6 +56,7 @@ fun TrackListScreen(
         if (fixedOrder) found else sortTracks(found, sort, descending)
     }
     val playable = filtered.filter { it.playable }
+    val playQueue = if (fullQueueWhenSearching) tracks.filter { it.playable } else playable
     val chosen = tracks.filter { it.id in selected && it.playable }
     fun select(track: Track) { if (track.playable) selected = if (track.id in selected) selected - track.id else selected + track.id }
     LazyColumn(Modifier.fillMaxSize().testTag("track_list")) {
@@ -93,13 +95,13 @@ fun TrackListScreen(
             }
         }
         header()
-        item { PlaybackButtons(playable.isNotEmpty(), { vm.play(playable, sourcePlaylist = sourcePlaylist) }, { vm.play(playable, shuffled = true, sourcePlaylist = sourcePlaylist) }) }
+        item { PlaybackButtons(playQueue.isNotEmpty(), { vm.play(playQueue, sourcePlaylist = sourcePlaylist) }, { vm.play(playQueue, shuffled = true, sourcePlaylist = sourcePlaylist) }) }
         if (filtered.isEmpty()) item {
             EmptyState(if (query.isNotBlank()) "Aucun résultat" else "Votre collection commence ici", if (query.isNotBlank()) "Essayez un autre titre, artiste ou album." else "Ajoutez des fichiers musicaux sur le téléphone. Ils apparaîtront ici dès leur indexation par Android. Les fichiers de moins d’une minute restent intacts, mais ne sont pas affichés.")
         }
         items(filtered, key = { it.id }) { track ->
             TrackRow(track, track.id in data.favorites, playback.currentId == track.id,
-                onPlay = { vm.play(playable, track, sourcePlaylist = sourcePlaylist) }, onFavorite = { vm.favorite(track) },
+                onPlay = { vm.play(playQueue, track, sourcePlaylist = sourcePlaylist) }, onFavorite = { vm.favorite(track) },
                 onMenu = { actions.menu(track) }, onNext = { vm.next(listOf(track)) }, onInfo = { actions.info(track) },
                 selected = track.id in selected, selecting = selected.isNotEmpty(), onSelect = { select(track) })
         }

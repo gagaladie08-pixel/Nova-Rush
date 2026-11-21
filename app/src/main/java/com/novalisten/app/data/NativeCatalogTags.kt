@@ -20,7 +20,7 @@ object NativeCatalogTagReader {
             val version = head[3].toInt() and 255
             if (version !in 3..4 || tail[1].toInt() and 0xc0 != 0) return@runCatching NativeCatalogTags()
             val size = syncSafe(tail.copyOfRange(2, 6))
-            if (size !in 1..LIMIT) return@runCatching NativeCatalogTags()
+            if (size !in 1..(LIMIT - 10)) return@runCatching NativeCatalogTags()
             val bytes = ByteArray(size); stream.readFully(bytes)
             var offset = 0
             while (offset + 10 <= bytes.size) {
@@ -44,12 +44,13 @@ object NativeCatalogTagReader {
                 offset += 10 + length
             }
         } else if (head.toString(Charsets.ISO_8859_1) == "fLaC") {
-            var consumed = 0
-            while (consumed < LIMIT) {
+            var consumed = 4
+            while (consumed + 4 <= LIMIT) {
                 val flags = stream.readUnsignedByte()
                 val length = (stream.readUnsignedByte() shl 16) or (stream.readUnsignedByte() shl 8) or stream.readUnsignedByte()
+                consumed += 4
                 if (length > LIMIT - consumed) break
-                val bytes = ByteArray(length); stream.readFully(bytes); consumed += length + 4
+                val bytes = ByteArray(length); stream.readFully(bytes); consumed += length
                 if (flags and 0x7f == 4) {
                     val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
                     fun string(): String { val count = b.int; require(count in 0..b.remaining()); val raw = ByteArray(count); b.get(raw); return raw.toString(Charsets.UTF_8) }

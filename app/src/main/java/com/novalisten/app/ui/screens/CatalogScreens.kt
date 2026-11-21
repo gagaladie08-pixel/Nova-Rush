@@ -195,7 +195,7 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
 fun AlbumDetail(group: AlbumGroup, data: LocalData, playback: PlaybackUi, vm: MainViewModel, actions: TrackActions, onBack: () -> Unit, onArtist: (String) -> Unit, onCovers: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf("") }
-    TrackListScreen("Album", group.tracks, data, playback, vm, actions, onBack = onBack, fixedOrder = true, header = {
+    TrackListScreen("Album", group.tracks, data, playback, vm, actions, onBack = onBack, fixedOrder = true, fullQueueWhenSearching = true, header = {
         item {
             Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Artwork(group.artwork, group.name, Modifier.fillMaxWidth(.72f).aspectRatio(1f))
