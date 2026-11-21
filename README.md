@@ -1,11 +1,23 @@
 # NovaListen
 
-Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.3, commandes dans la fenêtre réelle et paroles automatiques persistantes — validation en cours**.
-La capture du téléphone après 0.2.2 montre que ses tests n'avaient pas suffi à valider les commandes sur cet appareil. Première compilation 0.2.3 réussie (145 tests unitaires et 30 Android 10), mais les nouveaux tests Android 15 ont détecté une marge insuffisante après recréation : garde-fou des insets racine ajouté, **validation finale et APK encore en attente**. [Périmètre, conservation locale, preuves et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Les preuves et binaires des versions précédentes ci-dessous restent historiques.
+Lecteur musical Android local, utilisable hors ligne. **Sources et APK : 0.2.3, commandes dans la fenêtre réelle et paroles automatiques persistantes**.
+**145 tests unitaires + 30 tests Android répétés sur trois configurations réussis** (Android 10, Android 15 gestuel, Android 15 trois boutons), lint sans erreur / 34 avertissements. [Validation 44930520156](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44930520156) · [périmètre, conservation locale, preuves et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Le rendu sur le téléphone de l'utilisateur reste à vérifier ; les preuves et binaires précédents ci-dessous restent historiques.
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
 
-## Swipes et commandes plein écran — 0.2.2
+## Deux corrections — 0.2.3
+
+**[Télécharger NovaListen 0.2.3 — APK de test (89,6 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.3/NovaListen-0.2.3-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.3/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-v0.2.3). Binaire testé publié sans recompilation ni nouvelle signature.
+
+- **Commandes** dans la fenêtre mesurée de l'activité, protégées aussi par les insets Android racine ; marge basse de 20 dp en plus de la zone protégée, sur pochette et paroles, y compris après rotation/recréation sur les émulateurs testés.
+- **Paroles automatiques, source et vrais temps natifs sauvegardés ensemble dans SQLite v4**, retrouvés à la réouverture hors ligne sans nouvelle recherche. Choix/modifications VO/VF prioritaires ; recherche de remplacement toujours dans les trois points. Aucun temps de mot inventé.
+- Gestes confirmés conservés : lecteur gauche → paroles / droite → pochette ; bibliothèque gauche → Lire ensuite / droite → Informations. Pas d'extension aux autres choix visuels.
+- Binaire vérifié : **89 559 354 octets**, sources `386642a01593a6bea0bb5ecb0e9d891ac0873049`, SHA-256 `4992b71f5634b90338504211e25541e8cbde5aa6c577a0c79e229996d0f87612`. [Preuves, limites et essai téléphone](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md).
+- **Certificat différent de 0.2.0/0.2.1/0.2.2 : mise à jour directe refusée. Ne pas désinstaller aveuglément**, car cela efface les données privées, sans export intégré. Les anciens APK ne sont pas remplacés.
+
+## Historique 0.2.2 — swipes et commandes plein écran
+
+La capture ultérieure du téléphone montrait des commandes encore coupées malgré les tests 0.2.2. Le correctif de fenêtre et les tests physiques renforcés sont dans 0.2.3, pas dans cet ancien binaire.
 
 **[Télécharger NovaListen 0.2.2 — APK de test (89,5 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.2/NovaListen-0.2.2-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.2/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-v0.2.2).
 
@@ -64,13 +76,13 @@ Ces preuves concernent exclusivement **0.1.0**, sans API. Les sources 0.2 ajoute
 
 La compilation est exécutée par **GitHub Actions**, workflow [NovaListen — APK et tests](.github/workflows/novalisten-apk.yml), sur la branche de travail `arena/216bd0ac-nova-rush`.
 
-1. Ouvrir l’exécution correspondant au dernier commit dans l’onglet **Actions** du dépôt.
-2. Télécharger l’artefact **NovaListen-0.2.2-debug** seulement après le succès de la compilation **et des tests**.
-3. Extraire `NovaListen-0.2.2-debug.apk` du ZIP et le transférer sur le téléphone.
+1. Ouvrir une exécution **réussie du workflow de compilation** dans Actions (0.2.3 : [44930520156](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44930520156), sources `386642a01593a6bea0bb5ecb0e9d891ac0873049`). Un commit documentaire ou de publication ne recompile pas cet APK.
+2. Télécharger l’artefact **NovaListen-0.2.3-debug** seulement après le succès de la compilation **et des tests**.
+3. Extraire `NovaListen-0.2.3-debug.apk` du ZIP et le transférer sur le téléphone, en tenant compte de l'avertissement de signature ci-dessus.
 4. Autoriser l’installation depuis le navigateur/gestionnaire de fichiers utilisé, puis installer.
 5. Dans NovaListen, toucher **Autoriser ma musique** et accorder l’accès aux fichiers audio.
 
-**Android 8.0 minimum (API 26), cible Android 15 (API 35).** APK universel, sans ABI native imposée. Il s’agit d’un APK signé avec une clé **debug générée sur le runner**, pas d’une signature de publication. Une compilation ultérieure peut avoir un autre certificat et nécessiter une désinstallation : celle-ci efface les données locales de NovaListen, pas les fichiers musicaux. Ne pas présenter cette signature comme stable pour les mises à jour.
+**Android 8.0 minimum (API 26), cible Android 15 (API 35).** APK universel, sans ABI native imposée. Il s’agit d’un APK signé avec une clé **debug générée sur le runner**, pas d’une signature de publication. Une compilation ultérieure peut avoir un autre certificat et bloquer la mise à jour directe. Ne pas contourner aveuglément ce refus par une désinstallation : celle-ci efface les données locales de NovaListen, sans export intégré, mais pas les fichiers musicaux partagés. Ne pas présenter cette signature comme stable pour les mises à jour.
 
 Le dépôt étant public, les sources et artefacts Actions sont publics. **Aucune musique de l’utilisateur, clé API ou donnée du téléphone n’est incluse.** Les sons de test sont synthétisés uniquement sur l’émulateur et supprimés après les tests.
 

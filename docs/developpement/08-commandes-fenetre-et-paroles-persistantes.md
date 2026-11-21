@@ -30,18 +30,31 @@ SQLite passe de **v3 à v4** par ajout d'une table séparée `automatic_lyrics` 
 
 Le cache mémoire borné reste un complément de session pour les succès non sauvegardés et les absences/erreurs ; il n'est plus le seul stockage des succès automatiques. Les migrations v1/v2 restent additives. Playlists, favoris, historique, clés, images, fichiers audio et accords API ne sont pas réinitialisés. Aucun pack ou traduction automatique n'est ajouté, et seules les métadonnées du morceau réellement écouté sont concernées lorsqu'aucune version n'existe.
 
-## Vérifications prévues et état réel
+## Vérification finale
 
-**Validation finale en cours, aucun APK livré pour l'instant.** Deux exécutions préliminaires ne sont pas livrables :
+**[Validation réussie 44930520156](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44930520156)**, job/check `136925900026`, sources **`386642a01593a6bea0bb5ecb0e9d891ac0873049`** de la branche de session. Les rapports XML ont été récupérés et relus :
+
+| Configuration | Tests réussis | Échecs / erreurs / ignorés |
+| --- | ---: | --- |
+| Unitaires JVM | 145 | 0 / 0 / 0 |
+| Android 10, fenêtre 320×640 à 160 dpi | 30 | 0 / 0 / 0 |
+| Android 15, Pixel 2 1080×1920 à 420 dpi, gestes | 30 | 0 / 0 / 0 |
+| Android 15, même émulateur, trois boutons | 30 | 0 / 0 / 0 |
+
+Ce sont **30 tests Android distincts répétés sur trois configurations**, soit 90 exécutions Android, et non 90 scénarios différents. Lint : **0 erreur / 0 fatal / 34 avertissements**, sans baseline ajoutée. Chaque passage conserve ses journaux, XML, captures et mesures avant le suivant. Dix snapshots de bornes physiques par configuration couvrent les deux pages, la rotation et la recréation. En portrait Android 15, le bouton de lecture le plus bas est mesuré **53 px (~20,2 dp) au-dessus de la zone protégée** dans chacun des deux modes de navigation. Les captures finales 07 (paroles), 08 (pochette), 09 (texte natif conservé) et 10 (paysage/navigation latérale) ont été ouvertes et contrôlées.
+
+### Exécutions préliminaires non livrées
+
+Deux exécutions préliminaires ne sont pas livrables :
 
 - [44927888844](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44927888844), sources `daf8773349f6b68e2c3b120bf4279b244a147a8d` : compilation, **145 tests unitaires et 30 tests Android 10 réussis**, mais **2 échecs sur 30 sur Android 15 gestuel**, sur la marge physique après recréation. Les nouveaux tests ont réellement détecté un cas que la matrice synthétique ne couvrait pas ; la protection par les insets racine a été ajoutée ensuite. Le mode trois boutons n'a pas été exécuté dans ce run.
 - [44928987697](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44928987697), sources `d1e69329187c33f83338042801600ecee7438ec9` : compilation, **145 unitaires et 30 Android 10 réussis**, puis **29/30 dans chacun des deux modes Android 15**. Les vérifications de marge, y compris rotation et recréation, réussissent. Le seul échec de chaque passage attend l'inactivité Espresso pendant que le vrai karaoké joue une animation continue après recréation. Le test de conservation met désormais la lecture en pause **avant** d'ouvrir les paroles natives ; il vérifie toujours la restitution exacte du texte, de la source et des temps sans requête, sans supprimer l'animation de l'application ni assouplir les assertions de bornes. Les tests de pixels natifs et ceux de lecteur en lecture sont conservés.
 
-Les tests de stockage/minutage/migration ont réussi dans ces passages. Aucun binaire issu d'une exécution en échec n'est remis. Lint : 34 avertissements, sans erreur/fatal ni baseline. Une nouvelle validation complète est nécessaire.
+Les tests de stockage/minutage/migration ont aussi réussi dans ces passages. Aucun binaire issu d'une exécution en échec n'est remis ; seul le binaire de la validation finale réussie ci-dessus est livré.
 
 Les résultats historiques de 0.2.2 ne constituent pas la validation de 0.2.3. Les contrôles de structure `scripts/verify-project.py`, de syntaxe des scripts et `git diff --check` ont réussi localement ; le poste ne dispose pas de JDK/SDK Android.
 
-Nouveaux tests :
+### Couverture ajoutée
 
 - Unitaires : attente de la sauvegarde atomique, amélioration ligne → mots malgré l'émission du snapshot disque, nouvelle instance sans découverte/réseau, option désactivée/pause, priorité manuelle et VF, identité, réponses tardives, erreur disque et absence de résultat.
 - SQLite sur Android : fermeture du helper puis nouvelle instance et nouveau moteur, restitution exacte des temps et du crédit sans requête, écriture interrompue, refus de dégradation/écrasement, conservation de VF et migration v3 → v4 sans perte des autres tables. Les migrations v1/v2 restent testées.
@@ -53,9 +66,15 @@ Les fixtures sont synthétiques : pas de clé réelle, de musique de l'utilisate
 
 ## APK et installation
 
-Version prévue **0.2.3 / code 5**. Aucun nouvel APK validé n'est encore remis à ce stade ; le lien 0.2.2 reste historique.
+**`NovaListen-0.2.3-debug.apk` remis**, version **0.2.3 / code 5**, **89 559 354 octets** ; SHA-256 **`4992b71f5634b90338504211e25541e8cbde5aa6c577a0c79e229996d0f87612`**. Les cinq fragments et l'APK assemblé ont été vérifiés à l'identique du manifeste du run réussi, **sans recompilation ni nouvelle signature après les tests**.
 
-La signature n'est pas corrigée par ces deux changements. Le workflow utilise toujours une clé debug créée par le runner : **ne pas supposer la compatibilité de mise à jour avec les APK précédents**. Le certificat du nouveau binaire devra être contrôlé. Ne pas désinstaller aveuglément : les données privées seraient effacées (favoris, playlists, historique, paroles, images, clés, réglages), sans export intégré. La musique du stockage partagé est distincte.
+Manifeste binaire et certificat inspectés : `com.novalisten.app`, Android 8+ / cible 35, signature APK v2, RSA 2048, quatre ABI, 26 fichiers de polices, aucun audio de démonstration ; pixels du badge officiel Google identiques. HTTPS uniquement, backup désactivé, ni microphone/localisation ni provider d'initialisation automatique ML Kit. Cette inspection Python lit la signature ; l'installation de ce même binaire par les tests Android est distincte et n'est pas présentée comme une exécution locale d'`apksigner`.
+
+Preuves locales hors Git : `artifacts/APK-INFO-0.2.3.json`, `artifacts/NovaListen-0.2.3-SHA256SUMS.txt`, `artifacts/ci-44930520156/verification-summary.json`, `apk-transfer.json`, run/jobs/annotations, journaux et `NovaListen-verifications.zip` contenant les rapports et captures des trois configurations. Le fichier a été présenté dans le viewer ; sa publication distincte a réussi sans rebuild ni resign.
+
+**[Télécharger l'APK 0.2.3 (89,6 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.3/NovaListen-0.2.3-debug.apk)** · [SHA256SUMS](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-v0.2.3/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-v0.2.3). Publication réussie par [44931604453](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44931604453), job `136929224607`, commit de publication `dfac6e4d561e781a7062e1bb6fe7ca749c41ac6d`. Workflow distinct épinglé au binaire validé, sans compilation ni nouvelle signature. Release `453867019`, publique/prerelease ; asset APK `776363924`. Taille et digest SHA-256 GitHub vérifiés identiques au fichier remis, ainsi que le digest du fichier de sommes. Identifiants/tailles/digests des assets 0.2.0/0.2.1/0.2.2 contrôlés inchangés. Preuves : `publication.json`, `publication-run.json`, `publication-jobs.json` et `publication-summary.json` dans le répertoire du run final.
+
+**Signature réellement différente de 0.2.0, 0.2.1 et 0.2.2** : certificat SHA-256 **`9c6531e77ff9c802dc5622d2d041b07812e5790a56b159c27502214d4ff77d95`**. Android refusera la mise à jour directe depuis ces APK. Le workflow utilise toujours une clé debug créée par le runner ; aucune clé originale retrouvée ni nouvelle clé présentée comme équivalente. **Ne pas désinstaller aveuglément** : les données privées seraient effacées (favoris, playlists, historique, paroles, images, clés, réglages), sans export intégré. La musique du stockage partagé est distincte. Les APK déjà publiés restent inchangés.
 
 ## Essai ciblé sur téléphone
 
