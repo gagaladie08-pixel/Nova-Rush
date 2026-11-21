@@ -1,0 +1,46 @@
+{
+  "application_id": "com.novalisten.app.next",
+  "file": "NovaListen-Next-0.3.0-debug.apk",
+  "bytes": 89793676,
+  "sha256": "3a15fc41a8beffcb02c262b6759867df6c4113262f3812a99811fce6f01c52ec",
+  "certificate_sha256": "64dd5e7487e743a4af30a8a7c7f045251e54730d01009295783d98ace87fde17",
+  "source_commit": "b65348dc73075eb2a21b74cdcfe319b769175e8b",
+  "build_run": 44949752140,
+  "parts": [
+    {
+      "file": "NovaListen-Next-0.3.0-debug.apk.part-001",
+      "blob": "33d448efe8d69d4508106286be7f5d2665524516",
+      "bytes": 20000000,
+      "sha256": "dd11ccec0745c5d9fa97653fa8cdc33f75042eb1d8ad08d5822fd0f548ae89be",
+      "commit": "b65348dc73075eb2a21b74cdcfe319b769175e8b"
+    },
+    {
+      "file": "NovaListen-Next-0.3.0-debug.apk.part-002",
+      "blob": "79f6cfd052736cf368b4c2918fc3075f54f30a73",
+      "bytes": 20000000,
+      "sha256": "74182d84a9dd7751c27da5e5e8dc89b1cc5855e91c4cb39257e8a7b30518d8a8",
+      "commit": "b65348dc73075eb2a21b74cdcfe319b769175e8b"
+    },
+    {
+      "file": "NovaListen-Next-0.3.0-debug.apk.part-003",
+      "blob": "17db2f079a7c10f415da3d6195ea76c39a238e45",
+      "bytes": 20000000,
+      "sha256": "4cc78eb72e315bfada6eff8a4a7e4ed6ce89224526719d5ed0516defb9ea09aa",
+      "commit": "b65348dc73075eb2a21b74cdcfe319b769175e8b"
+    },
+    {
+      "file": "NovaListen-Next-0.3.0-debug.apk.part-004",
+      "blob": "62465c8334b9cd87f1d4d374828aab8046d669ee",
+      "bytes": 20000000,
+      "sha256": "2700f06fa24554a4d6bc238161426cb8a4489c2afc1e7bec924e297d2328b697",
+      "commit": "b65348dc73075eb2a21b74cdcfe319b769175e8b"
+    },
+    {
+      "file": "NovaListen-Next-0.3.0-debug.apk.part-005",
+      "blob": "0f19b1b0254420755b9b4f2693ff88e78151c265",
+      "bytes": 9793676,
+      "sha256": "e682ccf03fc9fd8cb96743821ce39c8efc4f7c37075407c235ae04c87f6fcd69",
+      "commit": "b65348dc73075eb2a21b74cdcfe319b769175e8b"
+    }
+  ]
+}

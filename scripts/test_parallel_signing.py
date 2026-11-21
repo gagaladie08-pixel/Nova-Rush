@@ -155,6 +155,7 @@ class ParallelSigningTest(unittest.TestCase):
         self.assertEqual(signing.digest(b'synthetic-signed-apk'), result['sha256'])
         command = next(call.args[0] for call in self.run.call_args_list if call.args[0][:2] == ['java', '-jar'] and 'sign' in call.args[0])
         self.assertIn('file:' + str(signing.PASSWORD), command)
+        self.assertNotIn('--key-pass', command)  # do not consume the same one-line file twice
         self.assertNotIn(signing.PASSWORD.read_text().strip(), ' '.join(command))
         with self.assertRaises(signing.SigningError): signing.sign_apk(*args)
 

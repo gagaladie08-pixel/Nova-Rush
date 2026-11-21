@@ -220,8 +220,10 @@ def sign_apk(source, output, signer, metadata, test_apk=False):
         raise SigningError('Sortie déjà présente ; aucun écrasement implicite.')
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
+        # PKCS12 uses the store password for its private key too. Do not pass the
+        # same file twice: apksigner consumes password-file lines sequentially.
         run([tool('java'), '-jar', str(signer), 'sign', '--ks', str(KEY), '--ks-type', 'PKCS12',
-             '--ks-key-alias', ALIAS, '--ks-pass', 'file:' + str(PASSWORD), '--key-pass', 'file:' + str(PASSWORD),
+             '--ks-key-alias', ALIAS, '--ks-pass', 'file:' + str(PASSWORD),
              '--v1-signing-enabled', 'false', '--v2-signing-enabled', 'true', '--v3-signing-enabled', 'true',
              '--v4-signing-enabled', 'false', '--out', str(output), str(source)])
         return verify_apk(output, signer)
