@@ -15,8 +15,8 @@ concurrency:
 
 jobs:
   android:
-    # Publishing an already verified binary must not rebuild it with a new debug key.
-    if: ${{ !contains(github.event.head_commit.message, '[publish-apk]') }}
+    # Source-only checks and publication of an existing binary never start the APK chain.
+    if: ${{ !contains(github.event.head_commit.message, '[publish-apk]') && !contains(github.event.head_commit.message, '[sources-only]') }}
     name: Compiler, vérifier et tester Android
     runs-on: ubuntu-24.04
     timeout-minutes: 45

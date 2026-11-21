@@ -18,11 +18,15 @@ import java.util.UUID
 class CatalogStorageTest {
     private val context get() = RuntimeEnvironment.getApplication()
     private fun database(block: (String) -> Unit) { val name = "catalog-${UUID.randomUUID()}.db"; try { block(name) } finally { context.deleteDatabase(name) } }
+    // SQLiteOpenHelper only implements AutoCloseable in newer Android SDKs. Calling the
+    // Kotlin AutoCloseable.use extension compiled against SDK 35 casts on Android 28.
+    private inline fun <T : SQLiteOpenHelper, R> T.withHelper(block: (T) -> R): R =
+        try { block(this) } finally { close() }
 
     @Test fun catalogChoicesSurviveCloseAndReopenWithoutChangingExistingMusicData() = database { name ->
         val family = AlbumFamily("family:fixture", setOf("edition-one", "edition-two"), "edition-one", "edition-two")
         val lyrics = SavedLyrics("[00:01.000]Test", "Version française", "Source VO", "Source VF")
-        NovaDatabase(context, name).use { db ->
+        NovaDatabase(context, name).withHelper { db ->
             db.setFlag("track", "favorite", true); db.saveLyrics("track", lyrics)
             db.createPlaylist("Existing list", listOf("track")); db.addEvent(eventAt("track"))
             db.saveArtistCredits("track", listOf(ArtistCredit("One"), ArtistCredit("Two")))
@@ -30,7 +34,7 @@ class CatalogStorageTest {
             db.saveRecordingAssociation(setOf("track", "copy"), "confirmed-recording")
             db.separateEdition("other-edition")
         }
-        NovaDatabase(context, name).use { db ->
+        NovaDatabase(context, name).withHelper { db ->
             val state = db.snapshot()
             assertEquals(family, state.catalog.families.getValue(family.id))
             assertEquals(ReleaseKind.MIXTAPE, state.catalog.kinds[family.id])
@@ -42,7 +46,7 @@ class CatalogStorageTest {
         }
     }
     @Test fun manualPhotoOrBiographyAlwaysWinsOverAnInFlightAutomaticResultIncludingIntentionalClearing() = database { name ->
-        NovaDatabase(context, name).use { db ->
+        NovaDatabase(context, name).withHelper { db ->
             val manual = ArtistNote("", "User cleared it", "file:///chosen.jpg", "Manual credit", biographyLocked = true, portraitLocked = true)
             db.saveArtist("artist", manual)
             assertFalse(db.saveAutomaticArtist("artist", ArtistNote("Remote bio", "Remote credit", "file:///automatic.jpg", "Auto credit")))
@@ -50,7 +54,7 @@ class CatalogStorageTest {
         }
     }
     @Test fun automaticFieldsFillOnlyTheirMissingUnlockedCounterpartAndRetainCredits() = database { name ->
-        NovaDatabase(context, name).use { db ->
+        NovaDatabase(context, name).withHelper { db ->
             db.saveArtist("artist", ArtistNote("User bio", "User credit", biographyLocked = true))
             assertTrue(db.saveAutomaticArtist("artist", ArtistNote("Ignored text", "Ignored credit", "file:///portrait.jpg", "Portrait credit")))
             val saved = db.snapshot().artists.getValue("artist")
@@ -60,7 +64,7 @@ class CatalogStorageTest {
         }
     }
     @Test fun separatingEditionPresentationDoesNotDeleteLyricsFlagsPlaylistsOrRecordingDecisions() = database { name ->
-        NovaDatabase(context, name).use { db ->
+        NovaDatabase(context, name).withHelper { db ->
             val family = AlbumFamily("family:test", setOf("one", "two"), "one")
             db.setFlag("track", "favorite", true); db.saveLyrics("track", SavedLyrics("Text")); db.createPlaylist("Keep", listOf("track"))
             db.saveAlbumFamily(family); db.saveRecordingAssociation(setOf("track", "copy"), "same")
@@ -85,14 +89,14 @@ class CatalogStorageTest {
             }
             override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = error("Unused")
         }
-        legacy.use { helper -> helper.writableDatabase.apply {
+        legacy.withHelper { helper -> helper.writableDatabase.apply {
             execSQL("INSERT INTO flags VALUES ('track',1,0)")
             execSQL("INSERT INTO lyrics VALUES ('track','Original','Français','VO','VF','')")
             execSQL("INSERT INTO automatic_lyrics VALUES ('auto','identity','Automatic','Credit','native')")
             execSQL("INSERT INTO artists VALUES ('one/two','Collective profile','Source','file:///old.jpg','Photo credit')")
             execSQL("INSERT INTO album_covers VALUES ('edition','file:///cover.jpg','Cover credit')")
         } }
-        NovaDatabase(context, name).use { db ->
+        NovaDatabase(context, name).withHelper { db ->
             val state = db.snapshot()
             assertEquals(5, db.readableDatabase.version); assertTrue("track" in state.favorites)
             assertEquals("Français", state.lyrics.getValue("track").french)

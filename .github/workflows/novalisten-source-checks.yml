@@ -36,8 +36,6 @@ jobs:
         run: |
           python3 scripts/verify-project.py
           python3 -m unittest discover -s scripts -p 'test_signing_policy.py' -v
-      - name: Compiler les sources et les tests Android, tester le domaine, analyser lint
-        run: scripts/gradle-ci.sh testDebugUnitTest compileDebugAndroidTestKotlin lintDebug
       - name: Vérifier que le mode sources refuse réellement de produire un APK
         run: |
           if ./gradlew --no-daemon --console=plain assembleDebug > "$RUNNER_TEMP/novalisten-packaging-refused.log" 2>&1; then
@@ -45,6 +43,8 @@ jobs:
             exit 1
           fi
           grep -F 'génération d’APK/AAB et signature interdites' "$RUNNER_TEMP/novalisten-packaging-refused.log"
+      - name: Compiler les sources et les tests Android, tester le domaine, analyser lint
+        run: scripts/gradle-ci.sh testDebugUnitTest compileDebugAndroidTestKotlin lintDebug
       - name: Confirmer l’absence de binaire installable
         if: always()
         run: |
