@@ -15,6 +15,10 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 - Binaire vérifié : **89 559 354 octets**, sources `386642a01593a6bea0bb5ecb0e9d891ac0873049`, SHA-256 `4992b71f5634b90338504211e25541e8cbde5aa6c577a0c79e229996d0f87612`. [Preuves, limites et essai téléphone](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md).
 - **Certificat différent de 0.2.0/0.2.1/0.2.2 : mise à jour directe refusée. Ne pas désinstaller aveuglément**, car cela efface les données privées, sans export intégré. Les anciens APK ne sont pas remplacés.
 
+## Signature des prochains APK
+
+Le certificat de **0.2.3 est désormais la référence obligatoire** : la CI bloque avant compilation si sa clé privée originale n’est pas fournie et vérifie le certificat de l’APK avant toute livraison. **Cette clé n’a pas été retrouvée lors de l’audit : une prochaine mise à jour compatible n’est pas encore garantie.** Aucun nouveau build ni nouvelle clé n’ont été lancés pour ce changement. [Audit, contrôles et condition de déblocage](docs/developpement/09-continuite-signature.md).
+
 ## Historique 0.2.2 — swipes et commandes plein écran
 
 La capture ultérieure du téléphone montrait des commandes encore coupées malgré les tests 0.2.2. Le correctif de fenêtre et les tests physiques renforcés sont dans 0.2.3, pas dans cet ancien binaire.
@@ -82,7 +86,7 @@ La compilation est exécutée par **GitHub Actions**, workflow [NovaListen — A
 4. Autoriser l’installation depuis le navigateur/gestionnaire de fichiers utilisé, puis installer.
 5. Dans NovaListen, toucher **Autoriser ma musique** et accorder l’accès aux fichiers audio.
 
-**Android 8.0 minimum (API 26), cible Android 15 (API 35).** APK universel, sans ABI native imposée. Il s’agit d’un APK signé avec une clé **debug générée sur le runner**, pas d’une signature de publication. Une compilation ultérieure peut avoir un autre certificat et bloquer la mise à jour directe. Ne pas contourner aveuglément ce refus par une désinstallation : celle-ci efface les données locales de NovaListen, sans export intégré, mais pas les fichiers musicaux partagés. Ne pas présenter cette signature comme stable pour les mises à jour.
+**Android 8.0 minimum (API 26), cible Android 15 (API 35).** APK universel, sans ABI native imposée. L’APK publié 0.2.3 a été signé avec une clé **debug générée sur le runner**. Pour les prochains APK, la CI exige désormais cette clé originale et ce même certificat ; elle restera bloquée tant que le keystore n’aura pas été retrouvé et configuré de façon sécurisée. [État réel et garde-fous](docs/developpement/09-continuite-signature.md). Ne pas contourner un refus de mise à jour par une désinstallation aveugle : celle-ci efface les données privées de NovaListen, sans export intégré, mais pas les fichiers musicaux partagés.
 
 Le dépôt étant public, les sources et artefacts Actions sont publics. **Aucune musique de l’utilisateur, clé API ou donnée du téléphone n’est incluse.** Les sons de test sont synthétisés uniquement sur l’émulateur et supprimés après les tests.
 
@@ -97,7 +101,7 @@ python3 scripts/verify-project.py
 ./gradlew connectedDebugAndroidTest
 ```
 
-Le résultat local est `app/build/outputs/apk/debug/app-debug.apk`. Les téléchargements de dépendances ont lieu sur la machine de compilation, **pas au lancement de l’application**.
+Le résultat local est `app/build/outputs/apk/debug/app-debug.apk`. **Sans la clé originale et le contrôle de signature, ce build local est réservé au développement et ne doit pas être livré comme mise à jour compatible de 0.2.3.** Les téléchargements de dépendances ont lieu sur la machine de compilation, **pas au lancement de l’application**.
 
 ## Socle local conservé de 0.1
 

@@ -8,6 +8,8 @@ local.properties
 *.aab
 *.jks
 *.keystore
+*.p12
+*.pfx
 captures/
 artifacts/
 .DS_Store

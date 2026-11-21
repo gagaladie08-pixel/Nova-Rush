@@ -16,6 +16,16 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
+    // CI must restore the existing, fingerprint-verified key before Gradle can sign anything.
+    val deliveryKeystore = System.getenv("NOVALISTEN_KEYSTORE_PATH")
+    if (System.getenv("GITHUB_ACTIONS") == "true") {
+        check(!deliveryKeystore.isNullOrBlank()) { "Clé de signature existante requise : aucune génération automatique en CI." }
+    }
+    deliveryKeystore?.takeIf { it.isNotBlank() }?.let {
+        val existingKeystore = rootProject.file(it)
+        check(existingKeystore.isFile) { "Keystore original absent : aucune clé de remplacement autorisée." }
+        signingConfigs.getByName("debug").storeFile = existingKeystore
+    }
     buildTypes {
         release {
             isMinifyEnabled = true

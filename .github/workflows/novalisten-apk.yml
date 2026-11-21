@@ -26,6 +26,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Tester le verrou de signature (sans clé réelle)
+        run: python3 -m unittest discover -s scripts -p 'test_signing_policy.py' -v
+      - name: Restaurer la clé originale obligatoire (signature 0.2.3)
+        env:
+          NOVALISTEN_DEBUG_KEYSTORE_BASE64: ${{ secrets.NOVALISTEN_DEBUG_KEYSTORE_BASE64 }}
+        run: python3 scripts/signing_policy.py prepare
       - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools platforms;android-35 build-tools;35.0.0
@@ -37,6 +43,8 @@ jobs:
         run: python3 scripts/verify-project.py
       - name: Tests unitaires, lint et APK de test signé
         run: scripts/gradle-ci.sh testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: Vérifier la signature réelle avant toute livraison
+        run: python3 scripts/signing_policy.py verify-apk app/build/outputs/apk/debug/app-debug.apk
       - name: Préparer les livrables
         id: apk
         run: |
@@ -78,6 +86,12 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 2048
           script: scripts/test-android-device.sh navigation
+      - name: Retirer la copie éphémère de la clé privée
+        if: always()
+        run: |
+          if [ -n "${NOVALISTEN_KEYSTORE_PATH:-}" ]; then
+            rm -f -- "$NOVALISTEN_KEYSTORE_PATH"
+          fi
       - name: Publier les rapports de vérification
         if: always()
         uses: actions/upload-artifact@v7
