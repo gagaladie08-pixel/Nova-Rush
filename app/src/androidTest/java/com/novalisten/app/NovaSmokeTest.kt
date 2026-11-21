@@ -2,6 +2,8 @@ package com.novalisten.app
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
@@ -13,6 +15,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import androidx.test.uiautomator.UiDevice
+import com.novalisten.app.data.*
+import com.novalisten.app.enrichment.*
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -34,7 +38,19 @@ class NovaSmokeTest {
         compose.runOnIdle { app.lyricPreferences.automatic(false); app.themes.effects(false); app.themes.select("cyber"); app.repository.refresh() }
         compose.waitUntil(20_000) { app.repository.library.value.permission && !app.repository.library.value.loading }
     }
-    @After fun cleanup() { fixtures.forEach { context.contentResolver.delete(it, null, null) } }
+    @After fun cleanup() {
+        runCatching { compose.runOnIdle {
+            app.lyricPreferences.automatic(false)
+            androidx.lifecycle.ViewModelProvider(compose.activity)[MainViewModel::class.java].stop()
+        } }
+        kotlinx.coroutines.runBlocking { app.repository.mutate {
+            fixtures.forEach { uri ->
+                writableDatabase.delete("lyrics", "track=?", arrayOf(uri.toString()))
+                writableDatabase.delete("automatic_lyrics", "track=?", arrayOf(uri.toString()))
+            }
+        } }
+        fixtures.forEach { context.contentResolver.delete(it, null, null) }
+    }
 
     @Test fun navigateAllSevenTabsAndThemeSurvivesRecreation() {
         for (index in 0..6) {
@@ -147,6 +163,77 @@ class NovaSmokeTest {
         compose.onNodeWithContentDescription("Réduire le player").performClick()
         compose.onNodeWithContentDescription("Pause").performClick()
     }
+    @Test fun fullPlayerUsesTheRealActivityBoundsAfterRotationAndRecreation() {
+        val uri = makeAudio("NovaListen viewport fixture", 65)
+        val vm = androidx.lifecycle.ViewModelProvider(compose.activity)[MainViewModel::class.java]
+        app.repository.refresh()
+        compose.waitUntil(20_000) { app.repository.library.value.tracks.any { it.id == uri.toString() } && vm.playback.value.connected }
+        val track = app.repository.library.value.tracks.first { it.id == uri.toString() }
+        compose.runOnIdle { vm.play(listOf(track), track) }
+        compose.waitUntil(20_000) { vm.playback.value.currentId == track.id }
+        compose.onNodeWithTag("mini_player").performClick()
+        assertPlayerControlsVisible()
+        compose.onNodeWithTag("player_content").performTouchInput { swipeLeft() }
+        assertPlayerControlsVisible()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        try {
+            device.setOrientationLeft()
+            compose.waitUntil(20_000) {
+                context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+                    compose.onAllNodesWithTag("full_player").fetchSemanticsNodes().size == 1
+            }
+            assertPlayerControlsVisible()
+            screenshot("10-commandes-paysage-fenetre-reelle.png")
+            compose.activityRule.scenario.recreate()
+            compose.waitForIdle()
+            assertPlayerControlsVisible()
+            compose.onNodeWithTag("player_content").performTouchInput { swipeRight() }
+            compose.onNodeWithTag("player_cover_page").assertIsDisplayed()
+            assertPlayerControlsVisible()
+        } finally {
+            device.setOrientationNatural()
+            device.unfreezeRotation()
+            compose.activityRule.scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+        }
+    }
+
+    @Test fun persistedNativeLyricsStayVisibleAfterClearingTheSessionAndRecreatingTheActivity() {
+        val uri = makeAudio("NovaListen persisted lyrics fixture", 65)
+        val vm = androidx.lifecycle.ViewModelProvider(compose.activity)[MainViewModel::class.java]
+        app.repository.refresh()
+        compose.waitUntil(20_000) { app.repository.library.value.tracks.any { it.id == uri.toString() } && vm.playback.value.connected }
+        val track = app.repository.library.value.tracks.first { it.id == uri.toString() }
+        val text = "[00:01.000]Clarté nouvelle"
+        val line = LyricTiming.line(1000, "Clarté nouvelle", listOf(TimedToken("Clarté", 1000, 1500), TimedToken("nouvelle", 1800, 2800)))
+        val saved = SavedLyrics(text, originalSource = "Fixture persistante locale", originalTiming = LyricTiming.encode(text, listOf(line)))
+        val record = AutomaticLyricRecord(track.lyricIdentity(), saved)
+        val before = (app.remote.transport as RemoteHttp).requestCount
+        kotlinx.coroutines.runBlocking { assertTrue(app.repository.saveAutomaticLyrics(track.id, record)) }
+        compose.runOnIdle { app.lyricPreferences.automatic(true); vm.play(listOf(track), track) }
+        compose.waitUntil(20_000) { vm.playback.value.currentId == track.id && app.automaticLyrics.state.value.status == AutoLyricStatus.SAVED }
+        compose.onNodeWithTag("mini_player").performClick()
+        compose.onNodeWithTag("player_content").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("lyric_line_0").assertIsDisplayed()
+        assertPlayerControlsVisible()
+        compose.runOnIdle {
+            assertEquals(saved, vm.lyricsFor(track.id))
+            app.automaticLyrics.stop() // deliberately throw away the session, not the durable SQLite record
+            assertEquals(saved, vm.lyricsFor(track.id))
+        }
+        compose.activityRule.scenario.recreate()
+        compose.waitForIdle()
+        compose.onNodeWithTag("player_lyrics_page").assertIsDisplayed()
+        compose.onNodeWithTag("lyric_line_0").assertIsDisplayed()
+        assertPlayerControlsVisible()
+        compose.runOnIdle {
+            val restored = androidx.lifecycle.ViewModelProvider(compose.activity)[MainViewModel::class.java].lyricsFor(track.id)
+            assertEquals(saved, restored)
+            assertEquals(line.words, LyricTiming.decode(restored.original, restored.originalTiming).single().words)
+            assertEquals(before, (app.remote.transport as RemoteHttp).requestCount)
+        }
+        screenshot("09-paroles-et-synchronisation-conservees.png")
+    }
+
     @Test fun customEditorExposesAllSixCategories() {
         compose.onNodeWithContentDescription("Choisir le thème").performClick()
         compose.onNodeWithTag("custom_theme").performClick()
@@ -175,6 +262,7 @@ class NovaSmokeTest {
         return uri
     }
     private fun assertPlayerControlsVisible() {
+        assertPlayerInsidePhysicalWindow(compose, compose.activity)
         val safe = compose.onNodeWithTag("player_safe_area").getUnclippedBoundsInRoot()
         val full = compose.onNodeWithTag("full_player").getUnclippedBoundsInRoot()
         for (tag in listOf("player_repeat", "player_previous", "player_toggle", "player_next", "player_queue")) {

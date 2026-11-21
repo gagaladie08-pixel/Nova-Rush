@@ -97,7 +97,8 @@ class PlaybackService : MediaSessionService() {
         handler.post(ticker)
         scope.launch {
             combine(lyricPlayback, repository.data, repository.localDataReady, app.lyricPreferences.automatic) { playback, local, ready, enabled ->
-                app.automaticLyrics.onPlayback(playback?.takeUnless { it.trackId in local.hidden }, enabled, playback?.let { local.lyrics[it.trackId] }, ready)
+                app.automaticLyrics.onPlayback(playback?.takeUnless { it.trackId in local.hidden }, enabled, playback?.let { local.lyrics[it.trackId] }, ready,
+                    stored = playback?.let { local.automaticLyrics[it.trackId] })
             }.collect { }
         }
         scope.launch {

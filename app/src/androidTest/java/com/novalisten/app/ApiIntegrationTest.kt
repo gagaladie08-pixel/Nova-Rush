@@ -131,7 +131,7 @@ class ApiIntegrationTest {
             db.saveLyrics("fixture", native)
             assertEquals(native, db.snapshot().lyrics.getValue("fixture"))
             assertEquals(line.words, com.novalisten.app.data.LyricTiming.decode(native.original, native.originalTiming).single().words)
-            assertEquals(3, db.readableDatabase.version)
+            assertEquals(4, db.readableDatabase.version)
         } } finally { context.deleteDatabase(name) }
     }
     @Test fun automaticLyricsPreferenceIsPersistentAndDoesNotEnableTranslationOrCallAService() {

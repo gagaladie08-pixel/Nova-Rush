@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,7 +40,8 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     val data by vm.repository.data.collectAsStateWithLifecycle()
     val playback by vm.playback.collectAsStateWithLifecycle()
     val automatic by vm.automaticLyrics.state.collectAsStateWithLifecycle()
-    fun lyricsFor(id: String) = resolveLyrics(id, data.lyrics[id], automatic)
+    fun lyricsFor(id: String) = resolveLyrics(id, data.lyrics[id], automatic,
+        data.automaticLyrics[id]?.forTrack(library.tracks.firstOrNull { it.id == id }))
     val settings by vm.themes.state.collectAsStateWithLifecycle()
     val visible = remember(library.tracks, data.hidden) { visibleTracks(library.tracks, data.hidden) }
     val playable = remember(library.tracks, data.hidden) { playableTracks(library.tracks, data.hidden) }
@@ -83,10 +85,12 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     }
     BackHandler(route.isNotEmpty() || tab != 0) { goBack() }
     val actions = TrackActions(menu = { menuTrack = it }, info = { infoTrack = it }, add = { addTracks = it }, delete = { deleteTracks = it })
+    val current = playable.firstOrNull { it.id == playback.currentId }
     NovaTheme(settings.universe, settings.effects) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().testTag("app_window")) {
             UniverseBackdrop()
-            Scaffold(containerColor = Color.Transparent, snackbarHost = { SnackbarHost(snackbar) }, topBar = {
+            Scaffold(modifier = if (playerOpen && current != null) Modifier.clearAndSetSemantics {} else Modifier,
+                containerColor = Color.Transparent, snackbarHost = { SnackbarHost(snackbar) }, topBar = {
                 Column(Modifier.statusBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         NovaIcon(Icons.Outlined.GraphicEq, modifier = Modifier.size(33.dp), tint = LocalUniverse.current.accent)
@@ -185,12 +189,13 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                     }
                 }
             }
+            // Same activity window and real measured viewport as the application. A second
+            // edge-to-edge Dialog can report a different height/inset set on some devices.
+            if (playerOpen && current != null) FullPlayer(current, playback, data, playable, vm, lyricsFor(current.id), automatic,
+                onDismiss = { playerOpen = false }, onMenu = { menuTrack = current }, onAdd = { addTracks = listOf(current) },
+                onEditLyrics = { editingLyrics = current }, onLyricsInfo = { lyricsInfo = current },
+                blocked = menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || lyricsInfo != null || deleteTracks != null || enrichment != null)
         }
-        val current = playable.firstOrNull { it.id == playback.currentId }
-        if (playerOpen && current != null) FullPlayer(current, playback, data, playable, vm, lyricsFor(current.id), automatic,
-            onDismiss = { playerOpen = false }, onMenu = { menuTrack = current }, onAdd = { addTracks = listOf(current) },
-            onEditLyrics = { editingLyrics = current }, onLyricsInfo = { lyricsInfo = current },
-            blocked = menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || lyricsInfo != null || deleteTracks != null || enrichment != null)
         menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { openArtist(track.artistKey) }, { openAlbum(track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }, onOnlineLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onCatalog = { enrichment = EnrichmentRequest(EnrichmentMode.CATALOG, track) }, onCover = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, track) },
             hasLyrics = lyricsFor(track.id).original.isNotBlank(), onTranslateLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, track) },
             onEditLyrics = { editingLyrics = track }, onLyricsInfo = { lyricsInfo = track }) }

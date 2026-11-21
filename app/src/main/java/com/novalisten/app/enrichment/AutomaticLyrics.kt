@@ -8,7 +8,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlin.math.abs
 
@@ -21,7 +23,9 @@ interface LyricLookup {
 data class LyricPlayback(val trackId: String, val query: MusicQuery, val playing: Boolean)
 enum class AutoLyricStatus { IDLE, LOADING, READY, SAVED, DISABLED, NO_MATCH, UNAVAILABLE }
 data class AutoLyricState(val trackId: String = "", val status: AutoLyricStatus = AutoLyricStatus.IDLE, val lyrics: SavedLyrics? = null,
-                          val note: String = "", val diagnostics: List<String> = emptyList(), val quality: Int = 0)
+                          val note: String = "", val diagnostics: List<String> = emptyList(), val quality: Int = 0, val durable: Boolean = false)
+
+fun MusicQuery.lyricIdentity(): String = lyricIdentity(title, artist, album, durationMs)
 
 /** Conservative metadata check, not audio fingerprinting. A rejected match remains selectable manually. */
 object LyricMatch {
@@ -33,15 +37,13 @@ object LyricMatch {
     }.getOrDefault(false)
     fun accepts(q: MusicQuery, result: LyricCandidate): Boolean = queryAllowed(q) && result.hasMatchMetadata && result.durationMs > 0 &&
         abs(result.durationMs - q.durationMs) <= 3000 && key(q.title) == key(result.title) && key(q.artist) == key(result.artist)
-    fun quality(candidate: LyricCandidate): Int {
-        val saved = candidate.asSavedLyrics()
-        val lines = LyricTiming.decode(saved.original, saved.originalTiming)
-        return when { lines.any { it.words.isNotEmpty() } -> 3; lines.isNotEmpty() -> 2; else -> 1 }
-    }
+    fun quality(candidate: LyricCandidate): Int = candidate.asSavedLyrics().timingQuality()
 }
 
-/** Current-track only. Memory cache, cancellation, no polling/retry, no write over a user's saved VO/VF. */
-class AutomaticLyrics(private val scope: CoroutineScope, private val lookup: LyricLookup, private val now: () -> Long = System::currentTimeMillis) {
+/** Current-track only. Durable automatic VO/timing, no polling, no write over a user's chosen VO/VF. */
+class AutomaticLyrics(private val scope: CoroutineScope, private val lookup: LyricLookup,
+                      private val persist: suspend (String, AutomaticLyricRecord) -> Boolean = { _, _ -> false },
+                      private val now: () -> Long = System::currentTimeMillis) {
     private data class Key(val id: String, val query: MusicQuery)
     private data class Cached(val state: AutoLyricState, val until: Long)
     private val cache = java.util.LinkedHashMap<Key, Cached>(12, .75f, true)
@@ -52,24 +54,37 @@ class AutomaticLyrics(private val scope: CoroutineScope, private val lookup: Lyr
     private var generation = 0
     private var bestQuality = 0
 
-    fun onPlayback(request: LyricPlayback?, enabled: Boolean, saved: SavedLyrics?, localDataReady: Boolean = true) {
+    fun onPlayback(request: LyricPlayback?, enabled: Boolean, saved: SavedLyrics?, localDataReady: Boolean = true,
+                   stored: AutomaticLyricRecord? = null) {
         val key = request?.let { Key(it.trackId, it.query) }
         if (key != current) { cancel(); current = key; _state.value = AutoLyricState(trackId = request?.trackId.orEmpty()); bestQuality = 0 }
         if (request == null) return
         if (!localDataReady) return // never race the initial SQLite snapshot and mistake a saved choice for absence
         if (!saved?.original.isNullOrBlank()) {
-            cancel(); _state.value = AutoLyricState(request.trackId, AutoLyricStatus.SAVED); return
+            cancel(); cache.remove(key); _state.value = AutoLyricState(request.trackId, AutoLyricStatus.SAVED, durable = true); return
+        }
+        val offline = stored?.forIdentity(request.query.lyricIdentity())?.let { lyrics ->
+            AutoLyricState(request.trackId, AutoLyricStatus.SAVED, lyrics,
+                "Paroles et synchronisation conservées sur cet appareil. Les trois points permettent de choisir une autre version.",
+                quality = lyrics.timingQuality(), durable = true)
+        }
+        if (offline == null && cache[key]?.state?.durable == true) cache.remove(key)
+        if (offline == null && _state.value.durable && _state.value.lyrics != null && job?.isActive != true) {
+            _state.value = AutoLyricState(trackId = request.trackId) // an explicit clear must not resurrect a stale memory copy
         }
         val cached = cache[key]?.takeIf { it.until > now() }
         if (!enabled) {
             cancel()
             val displayed = _state.value.takeIf { it.trackId == request.trackId && it.lyrics != null }
-            _state.value = cached?.state ?: displayed ?: AutoLyricState(request.trackId, AutoLyricStatus.DISABLED, note = "Chargement automatique désactivé.")
+            _state.value = offline ?: cached?.state ?: displayed ?: AutoLyricState(request.trackId, AutoLyricStatus.DISABLED, note = "Chargement automatique désactivé.")
             return
         }
+        // A newly committed automatic result must NOT cancel the other sources: a native-word
+        // result can still improve a first line-only version during this same search.
         if (job?.isActive == true) return
+        if (offline != null) { _state.value = offline; bestQuality = offline.quality; return }
         if (cached != null) { _state.value = cached.state; return }
-        if (!request.playing) return // a prepared queue or an opened lyrics page is not an instruction to send metadata
+        if (!request.playing) return // a prepared queue or an opened lyrics page never sends metadata
         if (!LyricMatch.queryAllowed(request.query)) {
             _state.value = AutoLyricState(request.trackId, AutoLyricStatus.NO_MATCH, note = "Métadonnées insuffisantes pour un choix automatique. Utilisez les trois points pour chercher une version.")
             return
@@ -79,6 +94,7 @@ class AutomaticLyrics(private val scope: CoroutineScope, private val lookup: Lyr
         _state.value = AutoLyricState(request.trackId, AutoLyricStatus.LOADING, note = "Chargement des paroles…")
         job = scope.launch {
             val diagnostics = mutableListOf<String>()
+            val improvements = Mutex()
             var failed = 0
             try {
                 kotlinx.coroutines.delay(500) // fast skips cancel before any metadata leaves the phone
@@ -92,10 +108,21 @@ class AutomaticLyrics(private val scope: CoroutineScope, private val lookup: Lyr
                                 val candidate = results.maxWithOrNull(compareBy<LyricCandidate> { LyricMatch.quality(it) }.thenBy { if (it.album.normalized() == request.query.album.normalized()) 1 else 0 })
                                 if (candidate != null) {
                                     val loaded = lookup.loadLyrics(candidate)
-                                    val quality = LyricMatch.quality(loaded)
-                                    if (token == generation && quality > bestQuality && loaded.text.isNotBlank()) {
-                                        bestQuality = quality
-                                        _state.value = AutoLyricState(request.trackId, AutoLyricStatus.READY, loaded.asSavedLyrics(), "Version chargée automatiquement ; une autre version reste disponible dans les trois points.", diagnostics.toList(), quality)
+                                    val lyrics = loaded.asSavedLyrics()
+                                    val quality = lyrics.timingQuality()
+                                    improvements.withLock {
+                                        if (token == generation && quality > bestQuality && loaded.text.isNotBlank() && LyricMatch.accepts(request.query, loaded)) {
+                                            val durable = try { persist(request.trackId, AutomaticLyricRecord(request.query.lyricIdentity(), lyrics)) }
+                                            catch (cancelled: CancellationException) { throw cancelled }
+                                            catch (_: Exception) { diagnostics += "Sauvegarde locale indisponible ; le texte reste affiché pour cette session."; false }
+                                            if (token == generation) {
+                                                bestQuality = quality
+                                                _state.value = AutoLyricState(request.trackId, AutoLyricStatus.READY, lyrics,
+                                                    if (durable) "Paroles et synchronisation conservées sur cet appareil ; une autre version reste disponible dans les trois points."
+                                                    else "Version chargée pour cette session ; sauvegarde locale indisponible. Les trois points permettent de choisir une autre version.",
+                                                    diagnostics.toList(), quality, durable)
+                                            }
+                                        }
                                     }
                                 }
                                 diagnostics += "${provider.label} : ${results.size} correspondance(s) prudente(s)."
@@ -128,5 +155,15 @@ class AutomaticLyrics(private val scope: CoroutineScope, private val lookup: Lyr
     fun stop() { cancel(); current = null; _state.value = AutoLyricState() }
 }
 
-fun resolveLyrics(id: String, local: SavedLyrics?, automatic: AutoLyricState): SavedLyrics =
-    local?.takeIf { it.original.isNotBlank() } ?: automatic.lyrics?.takeIf { automatic.trackId == id } ?: local ?: SavedLyrics()
+fun resolveLyrics(id: String, local: SavedLyrics?, automatic: AutoLyricState, stored: SavedLyrics? = null): SavedLyrics {
+    local?.takeIf { it.original.isNotBlank() }?.let { return it }
+    val live = automatic.lyrics?.takeIf { automatic.trackId == id }
+    // Playback position updates must not repeatedly parse the same native-word JSON.
+    val chosen = when {
+        live == null -> stored
+        stored == null || live == stored -> live
+        live.timingQuality() >= stored.timingQuality() -> live
+        else -> stored
+    } ?: return local ?: SavedLyrics()
+    return if (local != null) chosen.copy(french = local.french, frenchSource = local.frenchSource) else chosen
+}

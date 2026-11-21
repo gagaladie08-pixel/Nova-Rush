@@ -1,5 +1,7 @@
 # NovaListen 0.2.1 — paroles centrées, chargement et karaoké
 
+> **Historique 0.2.1 :** le cache automatique seulement en mémoire décrit ici explique la perte à la fermeture. La [correction 0.2.3](08-commandes-fenetre-et-paroles-persistantes.md) ajoute un stockage SQLite durable du texte, de la source et des temps natifs, distinct des choix manuels. Les résultats de tests ci-dessous concernent uniquement l'ancien binaire.
+
 ## Demande traitée
 
 L’écran paroles de 0.2 cumulait plusieurs rangées de commandes. Sa liste plaçait la ligne active en haut, le chargement était seulement manuel et le modèle de données ne retenait aucun temps de mot. Les spans TTML et les mots normalisés de LiriQo étaient aplatis en simples lignes LRC : colorer la ligne entière n’était donc pas un rendu karaoké.

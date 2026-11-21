@@ -1,7 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.novalisten.app.ui.screens
 
-import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,11 +26,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -84,15 +82,15 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
     var touched by remember { mutableStateOf(false) }
     var queue by remember { mutableStateOf(false) }
     var french by rememberSaveable { mutableStateOf(false) }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    Box(Modifier.fillMaxSize()) {
         val view = LocalView.current
-        val window = (view.parent as? DialogWindowProvider)?.window
         val lifecycle = LocalLifecycleOwner.current.lifecycle
-        DisposableEffect(window, lifecycle) {
-            fun applyKeepScreen() { if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+        DisposableEffect(view, lifecycle) {
+            val previous = view.keepScreenOn
+            fun applyKeepScreen() { view.keepScreenOn = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) }
             val observer = LifecycleEventObserver { _, _ -> applyKeepScreen() }
             lifecycle.addObserver(observer); applyKeepScreen()
-            onDispose { lifecycle.removeObserver(observer); window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+            onDispose { lifecycle.removeObserver(observer); view.keepScreenOn = previous }
         }
         BackHandler { if (lyricsPage) { lyricsPage = false; controls = true } else onDismiss() }
         LaunchedEffect(lastTouch, controls, lyricsPage, blocked, touched, queue) {
@@ -108,7 +106,7 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
         val text = if (showFrench) saved.french else saved.original
         val timed = remember(text, showFrench, saved.originalTiming) { if (showFrench) LrcParser.parse(text) else LyricTiming.decode(text, saved.originalTiming) }
         val active = LrcParser.activeIndex(timed, playback.position)
-        Box(Modifier.fillMaxSize().background(t.background).testTag("full_player")
+        Box(Modifier.fillMaxSize().background(t.background).testTag("full_player").semantics { paneTitle = "Lecteur plein écran" }
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {

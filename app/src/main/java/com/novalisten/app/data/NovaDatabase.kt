@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 import java.util.UUID
 
-class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpenHelper(context, name, null, 3) {
+class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpenHelper(context, name, null, 4) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE flags (track TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, tracks TEXT NOT NULL, created INTEGER NOT NULL, pinned INTEGER, cover TEXT)")
@@ -16,6 +16,10 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         db.execSQL("CREATE TABLE lyrics (track TEXT PRIMARY KEY, original TEXT NOT NULL, french TEXT NOT NULL, original_source TEXT NOT NULL DEFAULT '', french_source TEXT NOT NULL DEFAULT '', original_timing TEXT NOT NULL DEFAULT '')")
         db.execSQL("CREATE TABLE artists (id TEXT PRIMARY KEY, bio TEXT NOT NULL, source TEXT NOT NULL, portrait TEXT, portrait_source TEXT NOT NULL DEFAULT '')")
         createEnrichmentTables(db)
+        createAutomaticLyricsTable(db)
+    }
+    private fun createAutomaticLyricsTable(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE automatic_lyrics (track TEXT PRIMARY KEY, identity TEXT NOT NULL, original TEXT NOT NULL, original_source TEXT NOT NULL, original_timing TEXT NOT NULL DEFAULT '')")
     }
     private fun createEnrichmentTables(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE album_covers (id TEXT PRIMARY KEY, uri TEXT NOT NULL, source TEXT NOT NULL)")
@@ -29,6 +33,7 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
             createEnrichmentTables(db)
         }
         if (oldVersion < 3) db.execSQL("ALTER TABLE lyrics ADD COLUMN original_timing TEXT NOT NULL DEFAULT ''")
+        if (oldVersion < 4) createAutomaticLyricsTable(db)
     }
 
     fun snapshot(): LocalData {
@@ -67,7 +72,12 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         readableDatabase.rawQuery("SELECT id,mbid FROM identities", null).use { c ->
             while (c.moveToNext()) identities[c.getString(0)] = c.getString(1)
         }
-        return LocalData(favorites, hidden, lists, events, lyrics, artists, covers, identities)
+        val automaticLyrics = mutableMapOf<String, AutomaticLyricRecord>()
+        readableDatabase.rawQuery("SELECT track,identity,original,original_source,original_timing FROM automatic_lyrics", null).use { c ->
+            while (c.moveToNext()) automaticLyrics[c.getString(0)] = AutomaticLyricRecord(c.getString(1),
+                SavedLyrics(original = c.getString(2), originalSource = c.getString(3), originalTiming = c.getString(4)))
+        }
+        return LocalData(favorites, hidden, lists, events, lyrics, artists, covers, identities, automaticLyrics)
     }
 
     fun setFlag(id: String, column: String, value: Boolean) {
@@ -90,9 +100,42 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         })
     }
     fun saveLyrics(id: String, lyrics: SavedLyrics) {
-        check(writableDatabase.insertWithOnConflict("lyrics", null, ContentValues().apply {
-            put("track", id); put("original", lyrics.original); put("french", lyrics.french); put("original_source", lyrics.originalSource); put("french_source", lyrics.frenchSource); put("original_timing", lyrics.originalTiming)
-        }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde lyrics." }
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            check(db.insertWithOnConflict("lyrics", null, ContentValues().apply {
+                put("track", id); put("original", lyrics.original); put("french", lyrics.french); put("original_source", lyrics.originalSource); put("french_source", lyrics.frenchSource); put("original_timing", lyrics.originalTiming)
+            }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde lyrics." }
+            // An explicit choice/edit is authoritative, including an intentional clearing of text.
+            db.delete("automatic_lyrics", "track=?", arrayOf(id))
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    /** Commit text, credit and native timing together; never replace a chosen VO or downgrade native timing. */
+    fun saveAutomaticLyrics(id: String, record: AutomaticLyricRecord): Boolean {
+        require(record.identity.matches(Regex("[a-f0-9]{64}")))
+        require(record.lyrics.original.isNotBlank() && record.lyrics.original.length <= 200_000 && record.lyrics.originalTiming.length <= 2_000_000)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val hidden = db.rawQuery("SELECT hidden FROM flags WHERE track=?", arrayOf(id)).use { it.moveToFirst() && it.getInt(0) != 0 }
+            val chosen = db.rawQuery("SELECT original FROM lyrics WHERE track=?", arrayOf(id)).use { it.moveToFirst() && it.getString(0).isNotBlank() }
+            if (hidden || chosen) return false
+            val previous = db.rawQuery("SELECT identity,original,original_source,original_timing FROM automatic_lyrics WHERE track=?", arrayOf(id)).use { c ->
+                if (!c.moveToFirst()) null else AutomaticLyricRecord(c.getString(0), SavedLyrics(original = c.getString(1), originalSource = c.getString(2), originalTiming = c.getString(3)))
+            }
+            if (previous?.identity == record.identity && previous.lyrics.timingQuality() >= record.lyrics.timingQuality()) {
+                db.setTransactionSuccessful()
+                return true
+            }
+            check(db.insertWithOnConflict("automatic_lyrics", null, ContentValues().apply {
+                put("track", id); put("identity", record.identity); put("original", record.lyrics.original)
+                put("original_source", record.lyrics.originalSource); put("original_timing", record.lyrics.originalTiming)
+            }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde automatique des paroles." }
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
     }
     fun saveCover(id: String, cover: SavedCover?) {
         if (cover == null) writableDatabase.delete("album_covers", "id=?", arrayOf(id))

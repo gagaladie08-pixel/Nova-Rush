@@ -1,5 +1,7 @@
 # NovaListen 0.2.2 — swipes et commandes du lecteur
 
+> **Historique 0.2.2 :** une capture ultérieure sur le téléphone montre des commandes encore coupées, malgré les tests ci-dessous. Ces preuves ne certifient donc pas ce téléphone. Le correctif suivant utilise la fenêtre d'activité et ajoute des comparaisons avec l'écran physique Android : [0.2.3 — fenêtre réelle et paroles persistantes](08-commandes-fenetre-et-paroles-persistantes.md).
+
 ## Corrections demandées
 
 | Zone | Nouveau comportement |

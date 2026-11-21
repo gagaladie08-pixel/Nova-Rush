@@ -61,6 +61,7 @@ data class LocalData(
     val artists: Map<String, ArtistNote> = emptyMap(),
     val covers: Map<String, SavedCover> = emptyMap(),
     val identities: Map<String, String> = emptyMap(),
+    val automaticLyrics: Map<String, AutomaticLyricRecord> = emptyMap(),
 )
 
 data class LibraryState(

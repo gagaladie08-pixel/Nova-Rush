@@ -45,7 +45,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val remote = app.remote
     val lyricPreferences = app.lyricPreferences
     val automaticLyrics = app.automaticLyrics
-    fun lyricsFor(id: String): SavedLyrics = resolveLyrics(id, repository.data.value.lyrics[id], automaticLyrics.state.value)
+    fun lyricsFor(id: String): SavedLyrics {
+        val local = repository.data.value
+        val track = repository.library.value.tracks.firstOrNull { it.id == id }
+        return resolveLyrics(id, local.lyrics[id], automaticLyrics.state.value, local.automaticLyrics[id]?.forTrack(track))
+    }
     val remoteImages = app.remoteImages
     val translation = app.translation
     private val _playback = MutableStateFlow(PlaybackUi())

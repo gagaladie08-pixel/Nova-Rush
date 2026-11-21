@@ -95,6 +95,13 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     suspend fun mutate(block: NovaDatabase.() -> Unit) = withContext(Dispatchers.IO) {
         dataMutex.withLock { database.block(); updateLocalData() }
     }
+    suspend fun saveAutomaticLyrics(id: String, record: AutomaticLyricRecord): Boolean = withContext(Dispatchers.IO) {
+        dataMutex.withLock {
+            val track = _library.value.tracks.firstOrNull { it.id == id }
+            if (track == null || track.lyricIdentity() != record.identity) return@withLock false
+            database.saveAutomaticLyrics(id, record).also { updateLocalData() }
+        }
+    }
     suspend fun createPlaylist(name: String, ids: List<String>): LocalPlaylist = withContext(Dispatchers.IO) {
         dataMutex.withLock {
             database.createPlaylist(name, ids).also { updateLocalData() }
