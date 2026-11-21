@@ -7,6 +7,8 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 
 ## APK 0.3.0 — NovaListen Next, installation parallèle
 
+**[Télécharger NovaListen Next 0.3.0 — APK signé (89,8 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.3.0/NovaListen-Next-0.3.0-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.3.0/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-next-v0.3.0). Exactement le binaire signé et testé, publié sans recompilation ni nouvelle signature.
+
 - Fichier remis : **`NovaListen-Next-0.3.0-debug.apk`**, **89 793 676 octets** (89,8 Mo), Android 8+.
 - Nom de lanceur **NovaListen Next**, identifiant stable `com.novalisten.app.next` ; l’ancienne application reste installée, sans transfert automatique de ses choix/réglages.
 - Nouvelle clé privée conservée hors de Git/GitHub, **restauration de sa sauvegarde vérifiée et copie indépendante confirmée par l’utilisateur**. Empreinte publique épinglée ; aucune nouvelle clé automatique pour les mises à jour Next.

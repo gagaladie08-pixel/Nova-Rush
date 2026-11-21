@@ -88,7 +88,17 @@ locale décrite ici.
   activité réelle, version, niveaux SDK et permissions contrôlés ; aucune clé
   privée, mot de passe de signature ou musique de démonstration embarqués.
 
-L’APK signé est remis comme fichier dans la session. Pour récupérer exactement
+**[Télécharger directement NovaListen Next 0.3.0 — APK signé](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.3.0/NovaListen-Next-0.3.0-debug.apk)** · [somme SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.3.0/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-next-v0.3.0).
+
+La [publication 44951379555](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44951379555)
+a réussi sans recompilation ni nouvelle signature : reconstitution du binaire signé,
+contrôle des deux essais d’émulateur, du certificat, du manifeste et de l’alignement,
+puis transfert de l’APK et de sa somme **seulement**, sans écrasement d’asset existant.
+L’API publique, interrogée sans authentification, confirme la release `453994235`,
+l’asset APK `776917316`, sa taille exacte et son digest SHA-256 identique à celui
+ci-dessus. Aucune archive privée de clé n’est publiée.
+
+L’APK signé est aussi remis comme fichier dans la session. Pour récupérer exactement
 ce binaire public par l’API GitHub, avec GitHub CLI configuré :
 
 ```sh
