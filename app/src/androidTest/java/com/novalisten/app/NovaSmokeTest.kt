@@ -210,7 +210,12 @@ class NovaSmokeTest {
         val before = (app.remote.transport as RemoteHttp).requestCount
         kotlinx.coroutines.runBlocking { assertTrue(app.repository.saveAutomaticLyrics(track.id, record)) }
         compose.runOnIdle { app.lyricPreferences.automatic(true); vm.play(listOf(track), track) }
-        compose.waitUntil(20_000) { vm.playback.value.currentId == track.id && app.automaticLyrics.state.value.status == AutoLyricStatus.SAVED }
+        compose.waitUntil(20_000) { vm.playback.value.currentId == track.id && vm.playback.value.playing && app.automaticLyrics.state.value.status == AutoLyricStatus.SAVED }
+        // This test checks storage/recreation, not an intentionally continuous draw animation.
+        // Pause before opening native karaoke so Espresso can synchronize deterministically;
+        // the separate pixel tests exercise its native start/middle/end and seek rendering.
+        compose.runOnIdle { vm.toggle() }
+        compose.waitUntil(20_000) { !vm.playback.value.playing }
         compose.onNodeWithTag("mini_player").performClick()
         compose.onNodeWithTag("player_content").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("lyric_line_0").assertIsDisplayed()
