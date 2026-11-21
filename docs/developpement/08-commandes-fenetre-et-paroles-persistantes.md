@@ -10,7 +10,7 @@ Le second problème est distinct : les paroles chargées automatiquement n'étai
 
 - Le lecteur plein écran devient un panneau superposé à l'application **dans la même fenêtre d'activité et avec la même hauteur réellement mesurée**. Ce n'est plus un second `Dialog` edge-to-edge.
 - Cela évite de dépendre d'une seconde fenêtre pouvant annoncer une hauteur ou des insets différents. **La cause exacte sur le téléphone n'a pas été démontrée** ; il ne s'agit pas d'une prétendue absence initiale d'insets.
-- `PlayerFrame` conserve sa mesure prioritaire des commandes, l'union des protections de dessin/gestes, les marges latérales et les **20 dp supplémentaires en bas**. Pas d'ajout arbitraire de pixels selon le modèle du téléphone.
+- `PlayerFrame` conserve sa mesure prioritaire des commandes, les marges latérales et les **20 dp supplémentaires en bas**. Ses protections Compose sont réunies avec les insets de la **fenêtre Android racine**, rapportés à la position réelle de la vue. Sur l'émulateur Android 15, les premières mesures après recréation ont révélé une protection de geste insuffisante malgré les insets Compose ; cette seconde mesure sert de garde-fou. Elle est observée avant dessin, sans remplacer ni consommer les listeners d'AndroidX, et sans marge arbitraire propre à un téléphone.
 - L'arrière-plan est masqué aux sémantiques d'accessibilité pendant l'ouverture ; le panneau est annoncé comme lecteur plein écran. Retour Android et maintien de l'écran au premier plan sont conservés.
 - Lecteur : gauche → paroles, droite → pochette, sans boucle. Bibliothèque : gauche → Lire ensuite, droite → Informations. Mini-player, gestes verticaux immersifs et réordonnancement ne sont pas inversés.
 
@@ -32,13 +32,15 @@ Le cache mémoire borné reste un complément de session pour les succès non sa
 
 ## Vérifications prévues et état réel
 
-**Code écrit ; compilation et tests applicatifs pas encore exécutés pour cette version.** Les résultats historiques de 0.2.2 ne constituent pas sa validation. Les contrôles de structure `scripts/verify-project.py`, de syntaxe des scripts et `git diff --check` ont réussi localement ; le poste ne dispose pas de JDK/SDK Android.
+**Validation finale en cours, aucun APK livré pour l'instant.** La [première exécution 44927888844](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44927888844), sources `daf8773349f6b68e2c3b120bf4279b244a147a8d`, a compilé, réussi **145 tests unitaires et 30 tests Android 10**, mais a détecté **2 échecs sur 30 sur Android 15 gestuel**, tous deux sur la marge physique après recréation de l'activité. Les nouveaux tests ont donc réellement détecté un cas que la matrice synthétique seule ne couvrait pas. La protection par les insets de la fenêtre racine a été ajoutée ensuite ; elle n'est pas encore validée. Le binaire de cette exécution en échec n'est pas remis. Les tests de persistance/minutage/migration ont réussi ; le second mode Android 15 n'a pas été exécuté dans ce premier run. Lint : 34 avertissements, sans erreur/fatal ni baseline.
+
+Les résultats historiques de 0.2.2 ne constituent pas la validation de 0.2.3. Les contrôles de structure `scripts/verify-project.py`, de syntaxe des scripts et `git diff --check` ont réussi localement ; le poste ne dispose pas de JDK/SDK Android.
 
 Nouveaux tests :
 
 - Unitaires : attente de la sauvegarde atomique, amélioration ligne → mots malgré l'émission du snapshot disque, nouvelle instance sans découverte/réseau, option désactivée/pause, priorité manuelle et VF, identité, réponses tardives, erreur disque et absence de résultat.
 - SQLite sur Android : fermeture du helper puis nouvelle instance et nouveau moteur, restitution exacte des temps et du crédit sans requête, écriture interrompue, refus de dégradation/écrasement, conservation de VF et migration v3 → v4 sans perte des autres tables. Les migrations v1/v2 restent testées.
-- Lecteur complet : bornes **non découpées** de chaque commande et du curseur, converties en coordonnées de fenêtre physique, comparées à la taille Android réelle et à ses insets de navigation/statut/encoche/gestes ; pas seulement à un parent Compose. Les deux pages et une vraie rotation/recréation d'activité sur émulateur sont exercées.
+- Lecteur complet : bornes **non découpées** de chaque commande et du curseur, converties en coordonnées de fenêtre physique, comparées à la taille Android réelle et à ses insets de navigation/statut/encoche/gestes ; pas seulement à un parent Compose. Coordonnées et insets sont lus dans un même snapshot du thread UI. Les mesures sont archivées ; un échec prend aussi une capture. Les deux pages et une vraie rotation/recréation d'activité sur émulateur sont exercées.
 - Interface de paroles : sauvegarde native préalable, vidage de l'état du moteur, recréation de l'activité, texte/minutage toujours disponibles et compteur HTTP inchangé.
 - Workflow : Android 10 puis Android 15 en navigation gestuelle et à trois boutons. Les journaux, XML et captures de chaque passage sont archivés séparément avant le passage suivant. Les tests existants des swipes, du centrage et des pixels du karaoké sont conservés.
 

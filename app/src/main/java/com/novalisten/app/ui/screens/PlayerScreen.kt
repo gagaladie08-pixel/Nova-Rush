@@ -135,6 +135,7 @@ fun FullPlayer(track: Track, playback: PlaybackUi, data: LocalData, tracks: List
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.background.copy(alpha = .5f), Color.Transparent, t.background.copy(alpha = .92f)))))
             }
             PlayerFrame(
+                insets = WindowInsets.safeDrawing.union(WindowInsets.safeGestures).union(rememberPlayerWindowInsets()),
                 header = { compact -> PlayerHeader(track, lyricsPage, compact, onDismiss, onMenu) },
                 footer = { compact ->
                     if (controls || lyricsPage) PlayerTransport(playback, compact, vm::seek, vm::toggle, vm::previous, vm::forward, vm::cycleRepeat) { queue = true }

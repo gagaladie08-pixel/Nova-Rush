@@ -1,7 +1,7 @@
 # NovaListen
 
 Lecteur musical Android local, utilisable hors ligne. **Sources : 0.2.3, commandes dans la fenêtre réelle et paroles automatiques persistantes — validation en cours**.
-La capture du téléphone après 0.2.2 montre que ses tests n'avaient pas suffi à valider les commandes sur cet appareil. Les deux nouveaux correctifs et leurs tests sont écrits ; **pas encore de compilation ni d'APK 0.2.3 validés**. [Périmètre, conservation locale, tests prévus et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Les preuves et binaires des versions précédentes ci-dessous restent historiques.
+La capture du téléphone après 0.2.2 montre que ses tests n'avaient pas suffi à valider les commandes sur cet appareil. Première compilation 0.2.3 réussie (145 tests unitaires et 30 Android 10), mais les nouveaux tests Android 15 ont détecté une marge insuffisante après recréation : garde-fou des insets racine ajouté, **validation finale et APK encore en attente**. [Périmètre, conservation locale, preuves et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Les preuves et binaires des versions précédentes ci-dessous restent historiques.
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
 

@@ -26,12 +26,15 @@ run_device() {
 }
 
 if [ "${1:-}" = "navigation" ]; then
+  result=0
   for mode in gestural threebutton; do
     overlay="com.android.internal.systemui.navbar.$mode"
     adb shell cmd overlay enable-exclusive --category --user 0 "$overlay"
     adb shell cmd overlay list --user 0 | tr -d '\r' | grep -F "[x] $overlay"
-    run_device "android-35-$mode"
+    # Collect both modes even when one detects a regression; never turn that failure into success.
+    run_device "android-35-$mode" || result=$?
   done
+  exit "$result"
 else
   run_device "android-29-default"
 fi
