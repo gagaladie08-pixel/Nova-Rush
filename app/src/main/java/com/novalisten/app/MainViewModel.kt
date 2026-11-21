@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+data class PlayerOpenRequest(val token: String = "", val trackId: String = "")
+const val INITIAL_TAB = 1
+
 private const val SOURCE_PLAYLIST = "source_playlist"
 
 data class PlaybackUi(
@@ -45,6 +48,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val remote = app.remote
     val lyricPreferences = app.lyricPreferences
     val automaticLyrics = app.automaticLyrics
+    val automaticArtists = app.automaticArtists
+    val artistPreferences = app.artistPreferences
+    private val _playerOpenRequests = MutableStateFlow(PlayerOpenRequest())
+    val playerOpenRequests = _playerOpenRequests.asStateFlow()
     fun lyricsFor(id: String): SavedLyrics {
         val local = repository.data.value
         val track = repository.library.value.tracks.firstOrNull { it.id == id }
@@ -97,6 +104,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         c.shuffleModeEnabled = false
         c.setMediaItems(list.map { item(it, sourcePlaylist) }, list.indexOfFirst { it.id == selected?.id }.coerceAtLeast(0), 0)
         c.prepare(); c.play(); updatePlayer()
+        _playerOpenRequests.value = PlayerOpenRequest(java.util.UUID.randomUUID().toString(), c.currentMediaItem?.mediaId.orEmpty())
     }
     fun next(tracks: List<Track>) {
         val c = controller ?: return
@@ -134,7 +142,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveCover(id: String, cover: SavedCover?) { persist(if (cover == null) "Pochette du fichier rétablie dans l’affichage" else "Pochette d’affichage sauvegardée dans NovaListen, pas dans le fichier audio") { repository.mutate { saveCover(id, cover) } } }
     fun saveIdentity(id: String, mbid: String?) { persist("") { repository.mutate { saveIdentity(id, mbid) } } }
     fun clearRemotePreviews() { viewModelScope.launch { remoteImages.clearPreviews() } }
-    fun saveArtist(id: String, note: ArtistNote) { persist("") { repository.mutate { saveArtist(id, note) } } }
+    fun artistNoteFor(id: String): ArtistNote {
+        val local = repository.data.value
+        val group = artistGroups(playableTracks(repository.library.value.tracks, local.hidden), local.catalog).find { it.id == id }
+        return group?.let { artistNote(it, local) } ?: local.artists[id] ?: ArtistNote()
+    }
+    fun saveArtistBiography(id: String, biography: String, source: String) { persist("Biographie choisie sauvegardée hors ligne") {
+        val seed = artistNoteFor(id)
+        repository.mutate { val current = snapshot().artists[id] ?: seed; saveArtist(id, current.copy(biography = biography, source = source, biographyLocked = true)) }
+    } }
+    fun saveArtistPortrait(id: String, portrait: String?, source: String) { persist("Portrait choisi sauvegardé hors ligne") {
+        val seed = artistNoteFor(id)
+        repository.mutate { val current = snapshot().artists[id] ?: seed; saveArtist(id, current.copy(portrait = portrait, portraitSource = source, portraitLocked = true)) }
+    } }
+    fun correctArtists(track: String, names: List<String>?) { persist("Crédits corrigés dans NovaListen · fichiers inchangés") {
+        repository.mutate { saveArtistCredits(track, names?.filter(String::isNotBlank)?.map { ArtistCredit(it.substringBefore('|').trim(), it.substringAfter('|', "").trim()) }) }
+    } }
+    fun groupEditions(editions: Set<String>, original: String, done: (String) -> Unit) {
+        val id = "family:${java.util.UUID.randomUUID()}"
+        persist("Éditions regroupées · fichiers et versions conservés") {
+            repository.mutate {
+                val db = writableDatabase; db.beginTransaction()
+                try {
+                    snapshot().catalog.families.values.filter { family -> family.editions.any(editions::contains) }.forEach { family ->
+                        require(editions.containsAll(family.editions)); removeAlbumFamily(family.id)
+                    }
+                    saveAlbumFamily(AlbumFamily(id, editions, original)); db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
+            }
+            done(id)
+        }
+    }
+    fun chooseEdition(group: AlbumGroup, edition: String, original: Boolean = false) { persist("Édition représentative enregistrée dans NovaListen") {
+        repository.mutate { saveAlbumFamily(AlbumFamily(group.id, group.editions.map { it.id }.toSet(), if (original) edition else group.originalId, edition)) }
+    } }
+    fun separateEditions(group: AlbumGroup) { persist("Regroupement annulé · toutes les éditions sont conservées") {
+        repository.mutate {
+            val db = writableDatabase; db.beginTransaction()
+            try { group.familyId?.let(::removeAlbumFamily); group.editions.forEach { separateEdition(it.id) }; db.setTransactionSuccessful() } finally { db.endTransaction() }
+        }
+    } }
+    fun classifyRelease(id: String, kind: ReleaseKind?) { persist("Type de sortie enregistré localement") { repository.mutate { saveReleaseKind(id, kind) } } }
+    fun keepRecordingsDistinct(ids: Set<String>) { persist("Variantes conservées séparément") {
+        repository.mutate { ids.forEach { id -> saveRecordingAssociation(setOf(id), "distinct:${java.util.UUID.randomUUID()}") } }
+    } }
+    fun associateRecordings(ids: Set<String>, together: Boolean = true) { persist("Association d’enregistrement sauvegardée · aucun fichier supprimé") {
+        repository.mutate { saveRecordingAssociation(ids, if (together) java.util.UUID.randomUUID().toString() else null) }
+    } }
     fun createPlaylist(name: String, tracks: List<Track> = emptyList(), done: (LocalPlaylist) -> Unit = {}) {
         if (name.isBlank()) return
         viewModelScope.launch { done(repository.createPlaylist(name.take(100), eligible(tracks).map { it.id })) }

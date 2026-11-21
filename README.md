@@ -1,9 +1,19 @@
 # NovaListen
 
-Lecteur musical Android local, utilisable hors ligne. **Sources et APK : 0.2.3, commandes dans la fenêtre réelle et paroles automatiques persistantes**.
+Lecteur musical Android local, utilisable hors ligne. **APK disponible : 0.2.3**, commandes dans la fenêtre réelle et paroles automatiques persistantes. **Nouvelles sources : 0.3.0, catalogue et artistes automatiques, en vérification sans nouvel APK**.
 **145 tests unitaires + 30 tests Android répétés sur trois configurations réussis** (Android 10, Android 15 gestuel, Android 15 trois boutons), lint sans erreur / 34 avertissements. [Validation 44930520156](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44930520156) · [périmètre, conservation locale, preuves et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Le rendu sur le téléphone de l'utilisateur reste à vérifier ; les preuves et binaires précédents ci-dessous restent historiques.
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
+
+## Sources 0.3.0 — nouveau lot
+
+- Artistes et collaborations séparés, corrections locales et préservation des anciens profils.
+- Biographies FR et portraits pendant l’écoute, identité croisée et droits vérifiés avant attribution automatique, priorité aux choix manuels ; réglages indépendants.
+- Tri Artistes / Albums par nombre de titres dans les deux sens, éditions d’albums et liste commune, édition représentative, classification locale Albums / EP / Mixtapes et type à préciser.
+- Bibliothèque au démarrage et lecteur plein écran sur lancement volontaire, pas sur un passage naturel de piste.
+- Migration SQLite v5 additive ; aucun tag ou fichier audio modifié.
+
+**[Fonctionnement, limites des tags/identités et vérifications](docs/developpement/10-catalogue-et-artistes-automatiques.md).** Aucun APK 0.3.0 n’est livré : la clé privée de 0.2.3 reste à retrouver. Les résultats Android ci-dessous concernent exclusivement l’ancien APK 0.2.3.
 
 ## Deux corrections — 0.2.3
 
@@ -17,7 +27,7 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 
 ## Signature des prochains APK
 
-Le certificat de **0.2.3 est désormais la référence obligatoire** : la CI bloque avant compilation si sa clé privée originale n’est pas fournie et vérifie le certificat de l’APK avant toute livraison. **Cette clé n’a pas été retrouvée lors de l’audit : une prochaine mise à jour compatible n’est pas encore garantie.** Aucun nouveau build ni nouvelle clé n’ont été lancés pour ce changement. [Audit, contrôles et condition de déblocage](docs/developpement/09-continuite-signature.md).
+Le certificat de **0.2.3 est désormais la référence obligatoire** : la chaîne de livraison d’APK bloque avant compilation si sa clé privée originale n’est pas fournie et vérifie le certificat de l’APK avant toute livraison. **Cette clé n’a pas été retrouvée lors de l’audit : une prochaine mise à jour compatible n’est pas encore garantie.** Aucun nouveau build ni nouvelle clé n’ont été lancés pour ce changement. [Audit, contrôles et condition de déblocage](docs/developpement/09-continuite-signature.md).
 
 ## Historique 0.2.2 — swipes et commandes plein écran
 
@@ -123,7 +133,7 @@ Ce n’est pas l’ensemble des 21 fiches de conception en une version. Voir [le
 
 - Admission gratuite TheAudioDB/Deezer, collecte de portraits Genius/TheAudioDB/Discogs, cascade entièrement adaptative et moteurs directs privés non activés ; les limites des connecteurs actuels sont détaillées dans le guide API.
 - Fil Rouge, modèles locaux intelligents et les 17 playlists intelligentes.
-- Fusion des éditions d’un album, reconnaissance de l’identité des enregistrements, classification fiable Album/EP/Mixtape/Single/Participation.
+- Reconnaissance audio universelle des enregistrements et identification automatique de toutes les éditions/types sans métadonnées fiables : non réalisées. Les sources 0.3.0 utilisent les identifiants locaux admissibles et les confirmations/corrections explicites, sans déduction arbitraire.
 - Écriture de métadonnées dans les fichiers audio ; définition de sonnerie ; gain 200 %, égaliseur, minuterie et analyse audio.
 - Tous les modules et options de personnalisation de l’Accueil ; paramètres historiques restés ouverts dans la conception.
 - Rendu final de tous les effets, iconographie dessinée intégralement sur mesure, licences des bibliothèques présentées dans une page exhaustive, import/export ou plusieurs profils personnalisés.
@@ -131,7 +141,7 @@ Ce n’est pas l’ensemble des 21 fiches de conception en une version. Voir [le
 
 ## Confidentialité
 
-Les sources actuelles demandent **Internet** et utilisent HTTPS uniquement. Le scan et la lecture restent locaux ; aucune collection, musique ou historique n’est envoyé automatiquement. Les paroles automatiques transmettent seulement titre/artiste/album/durée du morceau réellement écouté si aucune VO n’est sauvegardée et que l’option est active. Les autres recherches transmettent les champs affichés seulement sur commande ; Azure envoie la VO seulement après un consentement dédié. **ML Kit est facultatif mais ses diagnostics Google ne sont pas une promesse de zéro réseau** ; son initialisation automatique au lancement est retirée. Pas de compte obligatoire, publicité, microphone ou localisation.
+Les sources actuelles demandent **Internet** et utilisent HTTPS uniquement. Le scan et la lecture restent locaux ; aucune collection, musique ou historique n’est envoyé automatiquement. Les paroles automatiques transmettent seulement titre/artiste/album/durée du morceau réellement écouté si aucune VO n’est sauvegardée et que l’option est active. Les automatismes artistes 0.3.0 transmettent uniquement les noms/identifiants des artistes du morceau écouté lorsque des informations manquent, selon leurs réglages ; les autres recherches transmettent les champs affichés seulement sur commande. Azure envoie la VO seulement après un consentement dédié. **ML Kit est facultatif mais ses diagnostics Google ne sont pas une promesse de zéro réseau** ; son initialisation automatique au lancement est retirée. Pas de compte obligatoire, publicité, microphone ou localisation.
 
 Les fichiers audio ne sont pas modifiés par les recherches, traductions, favoris, thèmes, playlists, pochettes d’affichage ou masquages. Seule l’action explicite **Effacer** peut supprimer de l’audio. Les images choisies, textes et crédits sont conservés dans le stockage privé. Sauvegarde/transfert automatique Android désactivés. Les secrets sont chiffrés sur le téléphone, jamais intégrés au dépôt, à l’APK ou aux workflows.
 

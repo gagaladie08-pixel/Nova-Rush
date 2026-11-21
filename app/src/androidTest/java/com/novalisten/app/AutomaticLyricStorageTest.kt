@@ -155,7 +155,7 @@ class AutomaticLyricStorageTest {
             } }
             NovaDatabase(context, name).use { migrated ->
                 val data = migrated.snapshot()
-                assertEquals(4, migrated.readableDatabase.version)
+                assertEquals(5, migrated.readableDatabase.version)
                 assertEquals(saved, data.lyrics.getValue("fixture"))
                 assertEquals(line.words, LyricTiming.decode(saved.original, saved.originalTiming).single().words)
                 assertTrue("fixture" in data.favorites); assertTrue(data.automaticLyrics.isEmpty())

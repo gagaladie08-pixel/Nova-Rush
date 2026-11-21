@@ -35,12 +35,12 @@ class NovaSmokeTest {
     private val app get() = context.applicationContext as NovaApplication
     private val fixtures = mutableListOf<Uri>()
     @Before fun prepare() {
-        compose.runOnIdle { app.lyricPreferences.automatic(false); app.themes.effects(false); app.themes.select("cyber"); app.repository.refresh() }
+        compose.runOnIdle { app.lyricPreferences.automatic(false); app.artistPreferences.biography(false); app.artistPreferences.portrait(false); app.themes.effects(false); app.themes.select("cyber"); app.repository.refresh() }
         compose.waitUntil(20_000) { app.repository.library.value.permission && !app.repository.library.value.loading }
     }
     @After fun cleanup() {
         runCatching { compose.runOnIdle {
-            app.lyricPreferences.automatic(false)
+            app.lyricPreferences.automatic(false); app.artistPreferences.biography(false); app.artistPreferences.portrait(false)
             androidx.lifecycle.ViewModelProvider(compose.activity)[MainViewModel::class.java].stop()
         } }
         kotlinx.coroutines.runBlocking { app.repository.mutate {
@@ -50,6 +50,43 @@ class NovaSmokeTest {
             }
         } }
         fixtures.forEach { context.contentResolver.delete(it, null, null) }
+    }
+
+    @Test fun freshStartupSelectsLibraryInsteadOfHome() {
+        compose.onNodeWithTag("tab_1").assertIsSelected()
+        compose.onNodeWithTag("track_list").assertExists()
+    }
+
+    @Test fun explicitPlayOpensFullscreenButNaturalAdvanceDoesNotReopenItAfterDismissal() {
+        val first = makeAudio("Départ synthétique", 65)
+        val second = makeAudio("Suite synthétique", 65)
+        app.repository.refresh()
+        val vm = androidx.lifecycle.ViewModelProvider(compose.activity)[MainViewModel::class.java]
+        compose.waitUntil(20_000) { vm.playback.value.connected && app.repository.library.value.tracks.any { it.id == second.toString() } }
+        val tracks = listOf(first, second).map { uri -> app.repository.library.value.tracks.first { it.id == uri.toString() } }
+        compose.runOnIdle { vm.play(tracks, tracks.first()) }
+        compose.onNodeWithTag("full_player").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Réduire le player").performClick()
+        compose.onNodeWithTag("mini_player").assertIsDisplayed()
+        compose.runOnIdle { vm.seek(tracks.first().durationMs - 250) }
+        compose.waitUntil(20_000) { vm.playback.value.currentId == second.toString() }
+        compose.onNodeWithTag("full_player").assertDoesNotExist()
+        compose.onNodeWithTag("mini_player").assertIsDisplayed()
+        compose.runOnIdle { vm.play(listOf(tracks.last()), tracks.last()) }
+        compose.onNodeWithTag("full_player").assertIsDisplayed()
+    }
+
+    @Test fun bothCatalogsExposeAndRememberBothTrackCountSortDirections() {
+        for ((tab, key) in listOf(2 to "artists_sort", 3 to "albums_sort")) {
+            compose.onNodeWithTag("tab_$tab").performClick()
+            for (value in listOf(CatalogSort.MOST_TRACKS, CatalogSort.FEWEST_TRACKS)) {
+                compose.onNodeWithTag("catalog_sort").performClick()
+                compose.onNodeWithTag("catalog_sort_${value.name}").performClick()
+                assertEquals(value.name, context.getSharedPreferences("nova_catalog", 0).getString(key, ""))
+            }
+        }
+        compose.activityRule.scenario.recreate()
+        assertEquals(CatalogSort.FEWEST_TRACKS.name, context.getSharedPreferences("nova_catalog", 0).getString("albums_sort", ""))
     }
 
     @Test fun navigateAllSevenTabsAndThemeSurvivesRecreation() {
@@ -95,6 +132,8 @@ class NovaSmokeTest {
         compose.onNodeWithTag("track_list").performScrollToNode(hasTestTag(tag))
         compose.onNodeWithTag(tag).performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Pause").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("full_player").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Réduire le player").performClick()
         compose.onNodeWithTag("mini_player").assertIsDisplayed()
         screenshot("03-bibliotheque-lecture.png")
         compose.onNodeWithTag("mini_player").performClick()
@@ -171,7 +210,7 @@ class NovaSmokeTest {
         val track = app.repository.library.value.tracks.first { it.id == uri.toString() }
         compose.runOnIdle { vm.play(listOf(track), track) }
         compose.waitUntil(20_000) { vm.playback.value.currentId == track.id }
-        compose.onNodeWithTag("mini_player").performClick()
+        compose.onNodeWithTag("full_player").assertIsDisplayed()
         assertPlayerControlsVisible()
         compose.onNodeWithTag("player_content").performTouchInput { swipeLeft() }
         assertPlayerControlsVisible()
@@ -216,7 +255,7 @@ class NovaSmokeTest {
         // the separate pixel tests exercise its native start/middle/end and seek rendering.
         compose.runOnIdle { vm.toggle() }
         compose.waitUntil(20_000) { !vm.playback.value.playing }
-        compose.onNodeWithTag("mini_player").performClick()
+        compose.onNodeWithTag("full_player").assertIsDisplayed()
         compose.onNodeWithTag("player_content").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("lyric_line_0").assertIsDisplayed()
         assertPlayerControlsVisible()

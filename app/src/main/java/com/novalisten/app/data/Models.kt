@@ -22,6 +22,14 @@ data class Track(
     val size: Long,
     val mimeType: String,
     val displayCover: String? = null,
+    val credits: List<ArtistCredit> = emptyList(),
+    val releaseGroupId: String = "",
+    val releaseId: String = "",
+    val releaseKind: ReleaseKind = ReleaseKind.UNKNOWN,
+    val recordingId: String = "",
+    val isrc: String = "",
+    val discNumber: Int = 0,
+    val originalYear: Int = 0,
 ) {
     val playable: Boolean get() = durationMs >= MIN_TRACK_DURATION_MS
     val pending: Boolean get() = durationMs <= 0
@@ -49,7 +57,8 @@ data class ListenEvent(
 )
 
 data class SavedLyrics(val original: String = "", val french: String = "", val originalSource: String = "", val frenchSource: String = "", val originalTiming: String = "")
-data class ArtistNote(val biography: String = "", val source: String = "", val portrait: String? = null, val portraitSource: String = "")
+data class ArtistNote(val biography: String = "", val source: String = "", val portrait: String? = null, val portraitSource: String = "",
+                      val biographyLocked: Boolean = false, val portraitLocked: Boolean = false)
 data class SavedCover(val uri: String, val source: String)
 
 data class LocalData(
@@ -62,6 +71,7 @@ data class LocalData(
     val covers: Map<String, SavedCover> = emptyMap(),
     val identities: Map<String, String> = emptyMap(),
     val automaticLyrics: Map<String, AutomaticLyricRecord> = emptyMap(),
+    val catalog: CatalogChoices = CatalogChoices(),
 )
 
 data class LibraryState(

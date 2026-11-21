@@ -44,6 +44,8 @@ def main():
                 archive.write(file)
         publish('NovaListen-verifications.zip', buffer.getvalue())
     apks = sorted(Path('artifacts').glob('NovaListen-*-debug.apk'))
+    if apks and os.environ.get('NOVALISTEN_VERIFY_SOURCES') == 'true':
+        raise RuntimeError('Source-only verification must NEVER transfer an APK')
     if len(apks) > 1:
         raise RuntimeError('Ambiguous APK delivery: more than one build result')
     if apks:

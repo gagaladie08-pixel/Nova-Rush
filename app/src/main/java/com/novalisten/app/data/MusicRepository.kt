@@ -29,6 +29,7 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     val data = _data.asStateFlow()
     private val _localDataReady = MutableStateFlow(false)
     val localDataReady = _localDataReady.asStateFlow()
+    private val tagCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, NativeCatalogTags>>()
     private var refreshJob: Job? = null
     private var observerRegistered = false
     private val dataMutex = Mutex()
@@ -74,7 +75,7 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     }
     private fun scan(): List<Track> {
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        val columns = arrayOf("_id", "title", "artist", "album", "album_id", if (Build.VERSION.SDK_INT >= 30) "album_artist" else "artist", "duration", "date_added", "year", "track", "_display_name", "_size", "mime_type")
+        val columns = arrayOf("_id", "title", "artist", "album", "album_id", if (Build.VERSION.SDK_INT >= 30) "album_artist" else "artist", "duration", "date_added", "year", "track", "_display_name", "_size", "mime_type", "date_modified")
         val result = ArrayList<Track>()
         context.contentResolver.query(collection, columns, "is_music != 0", null, "date_added DESC, _id DESC")?.use { c ->
             while (c.moveToNext()) {
@@ -82,11 +83,22 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
                 fun known(value: String, fallback: String) = if (value.isBlank() || value == "<unknown>") fallback else value
                 val duration = c.getLong(6)
                 if (duration in 1 until MIN_TRACK_DURATION_MS) continue
+                val uri = ContentUris.withAppendedId(collection, c.getLong(0))
+                val id = uri.toString()
+                val revision = "${c.getLong(11)}:${c.getLong(13)}"
+                val tags = tagCache[id]?.takeIf { it.first == revision }?.second ?: runCatching {
+                    context.contentResolver.openInputStream(uri)?.use(NativeCatalogTagReader::read) ?: NativeCatalogTags()
+                }.getOrDefault(NativeCatalogTags()).also {
+                    if (tagCache.size >= 5000) tagCache.clear()
+                    tagCache[id] = revision to it
+                }
                 result += Track(
-                    ContentUris.withAppendedId(collection, c.getLong(0)).toString(),
+                    id,
                     known(text(1), text(10).substringBeforeLast('.')), known(text(2), "Artiste inconnu"),
                     known(text(3), "Album inconnu"), c.getLong(4), known(text(5), ""), duration,
-                    c.getLong(7) * 1000, c.getInt(8), c.getInt(9), text(10), c.getLong(11), text(12),
+                    c.getLong(7) * 1000, c.getInt(8), c.getInt(9) % 1000, text(10), c.getLong(11), text(12),
+                    credits = tags.credits, releaseGroupId = tags.releaseGroupId, releaseId = tags.releaseId, releaseKind = tags.kind,
+                    recordingId = tags.recordingId, isrc = tags.isrc, discNumber = tags.disc.takeIf { it > 0 } ?: (c.getInt(9) / 1000), originalYear = tags.originalYear,
                 )
             }
         }
@@ -100,6 +112,16 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
             val track = _library.value.tracks.firstOrNull { it.id == id }
             if (track == null || track.lyricIdentity() != record.identity) return@withLock false
             database.saveAutomaticLyrics(id, record).also { updateLocalData() }
+        }
+    }
+    suspend fun saveAutomaticArtist(trackId: String, artistId: String, note: ArtistNote): Boolean = withContext(Dispatchers.IO) {
+        dataMutex.withLock {
+            val local = _data.value
+            val track = _library.value.tracks.firstOrNull { it.id == trackId && it.id !in local.hidden } ?: return@withLock false
+            val group = artistGroups(_library.value.tracks.filter { it.id !in local.hidden }, local.catalog).firstOrNull { it.id == artistId && it.tracks.any { song -> song.id == track.id } }
+                ?: return@withLock false
+            if (group.inheritLegacy && artistId !in local.artists) local.artists[group.legacyId]?.let { database.saveArtist(artistId, it) }
+            database.saveAutomaticArtist(artistId, note).also { updateLocalData() }
         }
     }
     suspend fun createPlaylist(name: String, ids: List<String>): LocalPlaylist = withContext(Dispatchers.IO) {

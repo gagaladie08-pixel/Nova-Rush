@@ -18,5 +18,10 @@ class NovaApplication : Application() {
     val lyricPreferences by lazy { LyricPreferences(this) }
     val automaticLyrics by lazy { AutomaticLyrics(applicationScope, remote, persist = repository::saveAutomaticLyrics) }
     val remoteImages by lazy { RemoteImages(this, http) }
+    val artistPreferences by lazy { ArtistPreferences(this) }
+    val automaticArtists by lazy { AutomaticArtists(applicationScope, AutomaticArtistLookup(remote),
+        prepare = { images -> PhotoDiscovery(remoteImages::preparePhoto).discover(images).photos },
+        saveImage = remoteImages::save, discardImage = { uri -> kotlinx.coroutines.withContext(Dispatchers.IO) { runCatching { java.io.File(java.net.URI(uri)).delete() }; Unit } },
+        persist = repository::saveAutomaticArtist) }
     val translation by lazy { LocalTranslation(this) }
 }

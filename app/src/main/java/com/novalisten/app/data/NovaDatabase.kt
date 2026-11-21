@@ -4,19 +4,24 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import org.json.JSONObject
 import org.json.JSONArray
 import java.util.UUID
 
-class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpenHelper(context, name, null, 4) {
+class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpenHelper(context, name, null, 5) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE flags (track TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, tracks TEXT NOT NULL, created INTEGER NOT NULL, pinned INTEGER, cover TEXT)")
         db.execSQL("CREATE TABLE listens (id INTEGER PRIMARY KEY AUTOINCREMENT, track TEXT NOT NULL, at INTEGER NOT NULL, zone TEXT NOT NULL, local_date TEXT NOT NULL, local_hour INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX listens_track_at ON listens(track, at)")
         db.execSQL("CREATE TABLE lyrics (track TEXT PRIMARY KEY, original TEXT NOT NULL, french TEXT NOT NULL, original_source TEXT NOT NULL DEFAULT '', french_source TEXT NOT NULL DEFAULT '', original_timing TEXT NOT NULL DEFAULT '')")
-        db.execSQL("CREATE TABLE artists (id TEXT PRIMARY KEY, bio TEXT NOT NULL, source TEXT NOT NULL, portrait TEXT, portrait_source TEXT NOT NULL DEFAULT '')")
+        db.execSQL("CREATE TABLE artists (id TEXT PRIMARY KEY, bio TEXT NOT NULL, source TEXT NOT NULL, portrait TEXT, portrait_source TEXT NOT NULL DEFAULT '', bio_locked INTEGER NOT NULL DEFAULT 0, portrait_locked INTEGER NOT NULL DEFAULT 0)")
         createEnrichmentTables(db)
         createAutomaticLyricsTable(db)
+        createCatalogTable(db)
+    }
+    private fun createCatalogTable(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE catalog_choices (kind TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(kind,id))")
     }
     private fun createAutomaticLyricsTable(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE automatic_lyrics (track TEXT PRIMARY KEY, identity TEXT NOT NULL, original TEXT NOT NULL, original_source TEXT NOT NULL, original_timing TEXT NOT NULL DEFAULT '')")
@@ -34,6 +39,12 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         }
         if (oldVersion < 3) db.execSQL("ALTER TABLE lyrics ADD COLUMN original_timing TEXT NOT NULL DEFAULT ''")
         if (oldVersion < 4) createAutomaticLyricsTable(db)
+        if (oldVersion < 5) {
+            createCatalogTable(db)
+            db.execSQL("ALTER TABLE artists ADD COLUMN bio_locked INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE artists ADD COLUMN portrait_locked INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("UPDATE artists SET bio_locked = CASE WHEN bio <> '' THEN 1 ELSE 0 END, portrait_locked = CASE WHEN portrait IS NOT NULL THEN 1 ELSE 0 END")
+        }
     }
 
     fun snapshot(): LocalData {
@@ -61,8 +72,8 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
             while (c.moveToNext()) lyrics[c.getString(0)] = SavedLyrics(c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5))
         }
         val artists = mutableMapOf<String, ArtistNote>()
-        readableDatabase.rawQuery("SELECT id,bio,source,portrait,portrait_source FROM artists", null).use { c ->
-            while (c.moveToNext()) artists[c.getString(0)] = ArtistNote(c.getString(1), c.getString(2), c.getString(3), c.getString(4))
+        readableDatabase.rawQuery("SELECT id,bio,source,portrait,portrait_source,bio_locked,portrait_locked FROM artists", null).use { c ->
+            while (c.moveToNext()) artists[c.getString(0)] = ArtistNote(c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getInt(5) != 0, c.getInt(6) != 0)
         }
         val covers = mutableMapOf<String, SavedCover>()
         readableDatabase.rawQuery("SELECT id,uri,source FROM album_covers", null).use { c ->
@@ -77,7 +88,25 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
             while (c.moveToNext()) automaticLyrics[c.getString(0)] = AutomaticLyricRecord(c.getString(1),
                 SavedLyrics(original = c.getString(2), originalSource = c.getString(3), originalTiming = c.getString(4)))
         }
-        return LocalData(favorites, hidden, lists, events, lyrics, artists, covers, identities, automaticLyrics)
+        val artistChoices = mutableMapOf<String, List<ArtistCredit>>()
+        val families = mutableMapOf<String, AlbumFamily>()
+        val kinds = mutableMapOf<String, ReleaseKind>()
+        val recordings = mutableMapOf<String, String>()
+        val separated = mutableSetOf<String>()
+        readableDatabase.rawQuery("SELECT kind,id,value FROM catalog_choices", null).use { c ->
+            while (c.moveToNext()) {
+                val id = c.getString(1); val raw = c.getString(2)
+                when (c.getString(0)) {
+                    "artists" -> { val list = JSONArray(raw); artistChoices[id] = (0 until list.length()).map { index -> list.getJSONObject(index).let { ArtistCredit(it.getString("name"), it.optString("mbid")) } } }
+                    "family" -> { val item = JSONObject(raw); val list = item.getJSONArray("editions"); families[id] = AlbumFamily(id, (0 until list.length()).map { list.getString(it) }.toSet(), item.getString("original"), item.getString("representative")) }
+                    "kind" -> kinds[id] = runCatching { ReleaseKind.valueOf(raw) }.getOrDefault(ReleaseKind.UNKNOWN)
+                    "recording" -> recordings[id] = raw
+                    "separate" -> separated += id
+                }
+            }
+        }
+        return LocalData(favorites, hidden, lists, events, lyrics, artists, covers, identities, automaticLyrics,
+            CatalogChoices(artistChoices, families, kinds, recordings, separated))
     }
 
     fun setFlag(id: String, column: String, value: Boolean) {
@@ -148,9 +177,45 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
             check(writableDatabase.insertWithOnConflict("identities", null, ContentValues().apply { put("id", id); put("mbid", mbid) }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde de l’identité." }
         }
     }
+    private fun catalogChoice(kind: String, id: String, value: String?) {
+        require(id.isNotBlank() && id.length <= 2000)
+        if (value == null) writableDatabase.delete("catalog_choices", "kind=? AND id=?", arrayOf(kind, id))
+        else check(writableDatabase.insertWithOnConflict("catalog_choices", null, ContentValues().apply {
+            put("kind", kind); put("id", id); put("value", value)
+        }, SQLiteDatabase.CONFLICT_REPLACE) != -1L)
+    }
+    fun saveArtistCredits(track: String, credits: List<ArtistCredit>?) {
+        require(credits == null || (credits.size in 1..16 && credits.all { it.name.isNotBlank() && it.name.length <= 300 && (it.mbid.isBlank() || validMusicId(it.mbid)) }))
+        catalogChoice("artists", track, credits?.let { list -> JSONArray().apply { list.distinctBy { it.id }.forEach { put(JSONObject().put("name", it.name.trim()).put("mbid", it.mbid)) } }.toString() })
+    }
+    fun saveAlbumFamily(family: AlbumFamily) {
+        validateFamily(family, snapshot().catalog)
+        catalogChoice("family", family.id, JSONObject().put("editions", JSONArray(family.editions.sorted())).put("original", family.original).put("representative", family.representative).toString())
+    }
+    fun separateEdition(id: String) = catalogChoice("separate", id, "1")
+    fun removeAlbumFamily(id: String) = catalogChoice("family", id, null)
+    fun saveReleaseKind(edition: String, kind: ReleaseKind?) = catalogChoice("kind", edition, kind?.name)
+    fun saveRecordingAssociation(tracks: Set<String>, recording: String?) {
+        require(tracks.size in 1..100)
+        val db = writableDatabase
+        db.beginTransaction()
+        try { tracks.forEach { catalogChoice("recording", it, recording) }; db.setTransactionSuccessful() } finally { db.endTransaction() }
+    }
+    /** Read again under the repository mutex; a manual edit made during a download always wins. */
+    fun saveAutomaticArtist(id: String, incoming: ArtistNote): Boolean {
+        val current = snapshot().artists[id] ?: ArtistNote()
+        val updated = current.copy(
+            biography = if (!current.biographyLocked && current.biography.isBlank()) incoming.biography else current.biography,
+            source = if (!current.biographyLocked && current.biography.isBlank()) incoming.source else current.source,
+            portrait = if (!current.portraitLocked && current.portrait == null) incoming.portrait else current.portrait,
+            portraitSource = if (!current.portraitLocked && current.portrait == null) incoming.portraitSource else current.portraitSource,
+        )
+        saveArtist(id, updated)
+        return incoming.portrait != null && updated.portrait == incoming.portrait
+    }
     fun saveArtist(id: String, note: ArtistNote) {
         check(writableDatabase.insertWithOnConflict("artists", null, ContentValues().apply {
-            put("id", id); put("bio", note.biography); put("source", note.source); put("portrait", note.portrait); put("portrait_source", note.portraitSource)
+            put("id", id); put("bio", note.biography); put("source", note.source); put("portrait", note.portrait); put("portrait_source", note.portraitSource); put("bio_locked", if (note.biographyLocked) 1 else 0); put("portrait_locked", if (note.portraitLocked) 1 else 0)
         }, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Échec de sauvegarde artists." }
     }
 }

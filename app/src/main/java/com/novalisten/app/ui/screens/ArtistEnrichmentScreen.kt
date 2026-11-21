@@ -31,7 +31,7 @@ internal fun BiographySearch(request: EnrichmentRequest, vm: MainViewModel, onDi
     val work = rememberRemoteWork()
     val saveWork = rememberRemoteWork()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Notice("Le nom saisi est envoyé à Wikipédia seulement après votre demande. Français prioritaire ; l’anglais est une recherche distincte. Pas de traduction automatique des biographies, ni d’envoi des fichiers musicaux.") }
+        item { Notice("Cette recherche manuelle envoie le nom saisi à Wikipédia sur votre demande, indépendamment de l’automatisme du morceau écouté. Français prioritaire ; l’anglais est une recherche distincte. Pas de traduction automatique des biographies, ni d’envoi des fichiers musicaux.") }
         item { OutlinedTextField(name, { name = it.take(300) }, Modifier.fillMaxWidth().padding(20.dp), label = { Text("Artiste à rechercher") }, singleLine = true, enabled = !work.busy) }
         item { Button({ work.run { results = vm.remote.biographies(name, "fr"); if (results.isEmpty()) work.message = "Aucune introduction française. Vous pouvez proposer l’anglais ou corriger le nom." } }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), enabled = !work.busy && name.isNotBlank()) { Text("Rechercher en français") } }
         item { TextButton({ work.run { results = vm.remote.biographies(name, "en"); if (results.isEmpty()) work.message = "Aucune introduction anglaise pour ces termes." } }, Modifier.padding(horizontal = 20.dp), enabled = !work.busy && name.isNotBlank()) { Text("Proposer aussi une version anglaise") } }
@@ -60,8 +60,8 @@ internal fun BiographySearch(request: EnrichmentRequest, vm: MainViewModel, onDi
             WorkStatus(saveWork)
         }
     }, confirmButton = { TextButton({ saveWork.run {
-        val old = vm.repository.data.value.artists[request.artistId] ?: ArtistNote()
-        vm.repository.mutate { saveArtist(request.artistId, old.copy(biography = bio.text, source = bio.credit.text())) }
+        val seed = vm.artistNoteFor(request.artistId)
+        vm.repository.mutate { val old = snapshot().artists[request.artistId] ?: seed; saveArtist(request.artistId, old.copy(biography = bio.text, source = bio.credit.text(), biographyLocked = true)) }
         vm.message("Biographie choisie sauvegardée hors ligne avec ses crédits")
         onDismiss()
     } }, enabled = confirm && !saveWork.busy) { Text("Choisir cette biographie") } }, dismissButton = { TextButton({ selected = null }, enabled = !saveWork.busy) { Text("Annuler") } }) }
@@ -72,7 +72,8 @@ internal fun ArtistPhotoSearch(request: EnrichmentRequest, vm: MainViewModel, on
     var name by remember { mutableStateOf(request.name) }
     var identities by remember { mutableStateOf(emptyList<ArtistCandidate>()) }
     var identity by remember { mutableStateOf<ArtistCandidate?>(null) }
-    var ready by remember { mutableStateOf(emptyList<PreparedPhoto>()) }
+    val automaticPhotos by vm.automaticArtists.state.collectAsStateWithLifecycle()
+    var ready by remember(request.artistId) { mutableStateOf(automaticPhotos[request.artistId]?.proposals.orEmpty()) }
     var candidates by remember { mutableStateOf(emptyList<ImageCandidate>()) }
     var notices by remember { mutableStateOf(emptyList<String>()) }
     var wikidata by remember { mutableStateOf(emptyList<ArtistCandidate>()) }
@@ -172,8 +173,8 @@ internal fun ArtistPhotoSearch(request: EnrichmentRequest, vm: MainViewModel, on
         item { Notice("Last.fm sert aux informations musicales, pas à collecter des portraits. Aucun scraping. Genius/TheAudioDB/Discogs restent sautés pour les photos faute d’admission établie. Les dates de publication/récupération ne sont jamais appelées dates de prise de vue. Budget de cette première interface : cinq pages manuelles par source, pas de découverte illimitée.") }
     }
     chosen?.let { image -> ImageSaveDialog(image, vm, { chosen = null }) { uri ->
-        val old = vm.repository.data.value.artists[request.artistId] ?: ArtistNote()
-        vm.repository.mutate { saveArtist(request.artistId, old.copy(portrait = uri, portraitSource = image.credit.text() + "\n" + image.date + "\nCopie d’affichage JPEG redimensionnée par NovaListen.")) }
+        val seed = vm.artistNoteFor(request.artistId)
+        vm.repository.mutate { val old = snapshot().artists[request.artistId] ?: seed; saveArtist(request.artistId, old.copy(portrait = uri, portraitSource = image.credit.text() + "\n" + image.date + "\nCopie d’affichage JPEG redimensionnée par NovaListen.", portraitLocked = true)) }
         vm.message("Portrait choisi sauvegardé hors ligne avec ses crédits")
         onDismiss()
     } }

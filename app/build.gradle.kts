@@ -4,6 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Source verification is a separate, non-delivery mode: no signing, packaging or installation.
+val verifySourcesOnly = System.getenv("NOVALISTEN_VERIFY_SOURCES") == "true"
+
 android {
     namespace = "com.novalisten.app"
     compileSdk = 35
@@ -11,14 +14,14 @@ android {
         applicationId = "com.novalisten.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.2.3"
+        versionCode = 6
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
     // CI must restore the existing, fingerprint-verified key before Gradle can sign anything.
     val deliveryKeystore = System.getenv("NOVALISTEN_KEYSTORE_PATH")
-    if (System.getenv("GITHUB_ACTIONS") == "true") {
+    if (System.getenv("GITHUB_ACTIONS") == "true" && !verifySourcesOnly) {
         check(!deliveryKeystore.isNullOrBlank()) { "Clé de signature existante requise : aucune génération automatique en CI." }
     }
     deliveryKeystore?.takeIf { it.isNotBlank() }?.let {
@@ -27,6 +30,7 @@ android {
         signingConfigs.getByName("debug").storeFile = existingKeystore
     }
     buildTypes {
+        getByName("debug") { if (verifySourcesOnly) signingConfig = null }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -63,6 +67,7 @@ dependencies {
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("org.json:json:20240303")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
@@ -72,4 +77,12 @@ dependencies {
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// Never turn the missing original key into a new debug key or even an unsigned APK delivery.
+gradle.taskGraph.whenReady {
+    if (verifySourcesOnly) {
+        val forbidden = Regex("^(assemble.*|install.*|validateSigning.*|package(Debug|Release)(AndroidTest)?|bundle(Debug|Release))$")
+        check(allTasks.none { forbidden.matches(it.name) }) { "Vérification des sources uniquement : génération d’APK/AAB et signature interdites." }
+    }
 }

@@ -23,7 +23,7 @@ class ApiIntegrationTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val app get() = context.applicationContext as NovaApplication
-    @Before fun keepFixturesOffline() { compose.runOnIdle { app.lyricPreferences.automatic(false) } }
+    @Before fun keepFixturesOffline() { compose.runOnIdle { app.lyricPreferences.automatic(false); app.artistPreferences.biography(false); app.artistPreferences.portrait(false) } }
     @Test fun settingsKeysAreEncryptedPersistentDeletableAndDoNotTriggerNetwork() {
         val onlyTestValue = "novalisten-fixture-not-a-real-key-927" // generated test data, never a provider credential
         val http = app.remote.transport as RemoteHttp

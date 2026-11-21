@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: () -> Unit, onInfo: () -> Unit, onAdd: () -> Unit, onArtist: () -> Unit, onAlbum: () -> Unit, onDelete: () -> Unit, onRemove: () -> Unit, onOnlineLyrics: () -> Unit, onCatalog: () -> Unit, onCover: () -> Unit, hasLyrics: Boolean, onTranslateLyrics: () -> Unit, onEditLyrics: () -> Unit, onLyricsInfo: () -> Unit) {
+fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: () -> Unit, onInfo: () -> Unit, onAdd: () -> Unit, onArtist: () -> Unit, onAlbum: () -> Unit, onDelete: () -> Unit, onRemove: () -> Unit, onOnlineLyrics: () -> Unit, onCatalog: () -> Unit, onCover: () -> Unit, hasLyrics: Boolean, onTranslateLyrics: () -> Unit, onEditLyrics: () -> Unit, onLyricsInfo: () -> Unit, onCorrectArtists: () -> Unit = {}) {
     val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(Modifier.fillMaxHeight(.78f).testTag("track_menu"), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -47,6 +47,7 @@ fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: (
                 item { MenuItem("Ajouter à une playlist", Icons.Outlined.PlaylistAdd) { onDismiss(); onAdd() } }
                 item { MenuItem("Aller dans l’album", Icons.Outlined.Album) { onDismiss(); onAlbum() } }
                 item { MenuItem("Aller dans l’artiste", Icons.Outlined.PersonOutline) { onDismiss(); onArtist() } }
+                item { MenuItem("Corriger les artistes de ce morceau", Icons.Outlined.PeopleOutline, tag = "menu_artist_credits") { onDismiss(); onCorrectArtists() } }
                 item { MenuItem("Cacher dans toute l’application", Icons.Outlined.VisibilityOff) { vm.hide(listOf(track)); onDismiss() } }
                 if (inPlaylist) item { MenuItem("Retirer de cette playlist", Icons.Outlined.PlaylistRemove) { onDismiss(); onRemove() } }
                 item { MenuItem("Partager le fichier audio", Icons.Outlined.Share) {
@@ -87,7 +88,7 @@ fun LyricsDetailsDialog(track: Track, lyrics: SavedLyrics, automatic: AutoLyricS
                 else if (automatic.note.isNotBlank()) Text(automatic.note, style = MaterialTheme.typography.bodySmall)
                 automatic.diagnostics.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
-            Text("Le chargement automatique ne concerne que le morceau écouté. Il vérifie titre, artiste et durée, pas l’identité audio. Les propositions automatiques restent en mémoire temporaire ; recherchez ou sauvegardez volontairement une version pour la conserver hors ligne. Aucune traduction automatique.", style = MaterialTheme.typography.bodySmall)
+            Text("Le chargement automatique ne concerne que le morceau écouté. Il vérifie titre, artiste et durée, pas l’identité audio. Les paroles automatiques retenues, leur source et leurs vrais temps natifs sont conservés ensemble sur cet appareil pour la réouverture hors ligne. Aucune traduction automatique.", style = MaterialTheme.typography.bodySmall)
             if (lyrics.originalSource.isNotBlank()) { Spacer(Modifier.height(12.dp)); Text("Original", style = MaterialTheme.typography.labelLarge); SavedAttribution(lyrics.originalSource) }
             if (lyrics.frenchSource.isNotBlank()) { Spacer(Modifier.height(12.dp)); Text("Français", style = MaterialTheme.typography.labelLarge); SavedAttribution(lyrics.frenchSource) }
         }

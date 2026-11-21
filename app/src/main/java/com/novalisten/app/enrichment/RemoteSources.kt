@@ -110,6 +110,32 @@ class RemoteSources(val transport: RemoteTransport, private val credential: susp
         require(name.isNotBlank() && name.length <= 300)
         return RemoteParsers.wikidataSearch(transport.request(Provider.WIKIDATA, "/w/api.php", mapOf("action" to "wbsearchentities", "search" to name, "language" to "fr", "uselang" to "fr", "type" to "item", "limit" to "5", "format" to "json")))
     }
+    suspend fun artistWikidata(mbid: String): String? {
+        val root = jsonObject(transport.request(Provider.MUSICBRAINZ, "/ws/2/artist/${RemoteSafety.mbid(mbid)}", mapOf("inc" to "url-rels", "fmt" to "json")))
+        if (!root.str("id").equals(mbid, true) || root.str("type") !in setOf("Person", "Group", "Orchestra", "Choir", "Character", "Other")) return null
+        return root.objects("relations").filter { it.str("type") == "wikidata" }.mapNotNull { relation ->
+            val uri = runCatching { java.net.URI(relation.optJSONObject("url")?.str("resource").orEmpty()) }.getOrNull()
+            uri?.takeIf { it.scheme in setOf("http", "https") && it.host in setOf("www.wikidata.org", "wikidata.org") && it.rawUserInfo == null }
+                ?.path?.removePrefix("/wiki/")?.takeIf { it.matches(Regex("Q[1-9][0-9]*")) }
+        }.distinct().singleOrNull()
+    }
+    suspend fun verifiedArtistEntity(qid: String, mbid: String): VerifiedArtistEntity? {
+        val root = jsonObject(transport.request(Provider.WIKIDATA, "/w/api.php", mapOf("action" to "wbgetentities", "ids" to RemoteSafety.qid(qid), "props" to "claims|sitelinks", "format" to "json")))
+        val entity = root.optJSONObject("entities")?.optJSONObject(qid) ?: return null
+        val claims = entity.optJSONObject("claims") ?: return null
+        fun strings(property: String): List<String> = claims.objects(property).filter { it.str("rank") != "deprecated" }.mapNotNull {
+            it.optJSONObject("mainsnak")?.optJSONObject("datavalue")?.str("value")?.takeIf(String::isNotBlank)
+        }.distinct()
+        if (!strings("P434").any { it.equals(mbid, true) }) return null
+        return VerifiedArtistEntity(qid, entity.optJSONObject("sitelinks")?.optJSONObject("frwiki")?.str("title")?.takeIf(String::isNotBlank), strings("P18").singleOrNull())
+    }
+    suspend fun biographyForEntity(title: String, qid: String): Biography? {
+        require(title.length <= 300)
+        val body = transport.request(Provider.WIKIPEDIA_FR, "/w/api.php", mapOf("action" to "query", "titles" to title, "redirects" to "1", "prop" to "extracts|info|pageprops", "explaintext" to "1", "exintro" to "1", "inprop" to "url", "format" to "json", "formatversion" to "2"))
+        val pages = jsonObject(body).optJSONObject("query")?.objects("pages").orEmpty()
+        if (pages.size != 1 || pages.single().optJSONObject("pageprops")?.str("wikibase_item") != qid) return null
+        return RemoteParsers.biography(body, "fr").singleOrNull()
+    }
     suspend fun wikidataDetails(id: String): ArtistCandidate = RemoteParsers.wikidataEntity(transport.request(Provider.WIKIDATA, "/w/api.php", mapOf("action" to "wbgetentities", "ids" to RemoteSafety.qid(id), "props" to "claims|labels|descriptions", "languages" to "fr|en", "format" to "json")), id)
     suspend fun commons(name: String, page: Int = 1, fileTitle: String? = null): List<ImageCandidate> {
         require(name.isNotBlank() && name.length <= 300 && page in 1..100)

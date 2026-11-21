@@ -14,6 +14,9 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.novalisten.app.MainActivity
 import com.novalisten.app.NovaApplication
+import com.novalisten.app.data.*
+import com.novalisten.app.enrichment.ArtistPlayback
+import com.novalisten.app.enrichment.ArtistRequest
 import com.novalisten.app.enrichment.LyricPlayback
 import com.novalisten.app.enrichment.MusicQuery
 import kotlinx.coroutines.CoroutineScope
@@ -102,6 +105,14 @@ class PlaybackService : MediaSessionService() {
             }.collect { }
         }
         scope.launch {
+            combine(lyricPlayback, repository.library, repository.data, repository.localDataReady, app.artistPreferences.state) { playback, library, local, ready, settings ->
+                val active = playback?.takeIf { it.playing && it.trackId !in local.hidden }
+                val artists = if (active == null) emptyList() else artistGroups(playableTracks(library.tracks, local.hidden), local.catalog).filter { group -> group.tracks.any { it.id == active.trackId } }
+                val request = active?.let { ArtistPlayback(it.trackId, artists.map { group -> ArtistRequest(group.id, group.name, local.identities["artist:${group.id}"] ?: group.mbid) }, true) }
+                app.automaticArtists.onPlayback(request, settings, artists.associate { it.id to artistNote(it, local) }, ready)
+            }.collect { }
+        }
+        scope.launch {
             repository.data.collect { local ->
                 if (player.currentMediaItem?.mediaId in local.hidden) {
                     val next = (player.currentMediaItemIndex + 1 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId !in local.hidden }
@@ -122,6 +133,7 @@ class PlaybackService : MediaSessionService() {
         handler.removeCallbacksAndMessages(null)
         scope.cancel()
         app.automaticLyrics.stop()
+        app.automaticArtists.stop()
         session?.release()
         player.release()
         super.onDestroy()

@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.novalisten.app.INITIAL_TAB
 import com.novalisten.app.MainViewModel
 import com.novalisten.app.data.*
 import com.novalisten.app.enrichment.resolveLyrics
@@ -39,13 +40,15 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     val library by vm.repository.library.collectAsStateWithLifecycle()
     val data by vm.repository.data.collectAsStateWithLifecycle()
     val playback by vm.playback.collectAsStateWithLifecycle()
+    val playerRequest by vm.playerOpenRequests.collectAsStateWithLifecycle()
+    var consumedPlayRequest by rememberSaveable { mutableStateOf("") }
     val automatic by vm.automaticLyrics.state.collectAsStateWithLifecycle()
     fun lyricsFor(id: String) = resolveLyrics(id, data.lyrics[id], automatic,
         data.automaticLyrics[id]?.forTrack(library.tracks.firstOrNull { it.id == id }))
     val settings by vm.themes.state.collectAsStateWithLifecycle()
     val visible = remember(library.tracks, data.hidden) { visibleTracks(library.tracks, data.hidden) }
     val playable = remember(library.tracks, data.hidden) { playableTracks(library.tracks, data.hidden) }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable { mutableIntStateOf(INITIAL_TAB) }
     var route by rememberSaveable { mutableStateOf("") }
     var routeParent by rememberSaveable { mutableStateOf("") }
     var artistId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -54,6 +57,8 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     var playlistId by rememberSaveable { mutableStateOf<String?>(null) }
     var playerOpen by rememberSaveable { mutableStateOf(false) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
+    var artistChoiceTrack by remember { mutableStateOf<Track?>(null) }
+    var creditEditor by remember { mutableStateOf<Track?>(null) }
     var infoTrack by remember { mutableStateOf<Track?>(null) }
     var lyricsInfo by remember { mutableStateOf<Track?>(null) }
     var addTracks by remember { mutableStateOf<List<Track>?>(null) }
@@ -63,13 +68,19 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     var createPlaylist by remember { mutableStateOf(false) }
     var pickPlaylist by remember { mutableStateOf<String?>(null) }
     var removeTrack by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val artists = remember(playable) { artistGroups(playable) }
-    val albums = remember(playable) { albumGroups(playable) }
+    val artists = remember(playable, data.catalog) { artistGroups(playable, data.catalog) }
+    val albums = remember(playable, data.catalog) { albumGroups(playable, data.catalog) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(playback.currentId) { if (playback.currentId == null) playerOpen = false }
-    fun openArtist(id: String) { tab = 2; artistId = id; artistLibrary = false; route = ""; playerOpen = false }
+    LaunchedEffect(playerRequest.token) {
+        if (playerRequest.token.isNotBlank() && playerRequest.token != consumedPlayRequest) {
+            consumedPlayRequest = playerRequest.token
+            playerOpen = true
+        }
+    }
+    fun openArtist(id: String) { tab = 2; artistId = artists.firstOrNull { it.id == id || (it.inheritLegacy && it.legacyId == id) }?.id ?: id; artistLibrary = false; route = ""; playerOpen = false }
     fun openAlbum(id: String) { tab = 3; albumId = id; route = ""; playerOpen = false }
     fun openPlaylist(id: String) { tab = 4; playlistId = id; route = "" }
     fun goBack() {
@@ -80,10 +91,10 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
             artistId != null && tab == 2 -> artistId = null
             albumId != null && tab == 3 -> albumId = null
             playlistId != null && tab == 4 -> playlistId = null
-            tab != 0 -> tab = 0
+            tab != INITIAL_TAB -> tab = INITIAL_TAB
         }
     }
-    BackHandler(route.isNotEmpty() || tab != 0) { goBack() }
+    BackHandler(route.isNotEmpty() || tab != INITIAL_TAB || artistId != null || albumId != null || playlistId != null) { goBack() }
     val actions = TrackActions(menu = { menuTrack = it }, info = { infoTrack = it }, add = { addTracks = it }, delete = { deleteTracks = it })
     val current = playable.firstOrNull { it.id == playback.currentId }
     NovaTheme(settings.universe, settings.effects) {
@@ -164,12 +175,12 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                     2 -> {
                                         val artist = artists.find { it.id == artistId }
                                         if (artist != null && artistLibrary) TrackListScreen(artist.name, artist.tracks, data, playback, vm, actions, onBack = { artistLibrary = false })
-                                        else if (artist != null) ArtistDetail(artist, data, playback, vm, actions, onBack = { artistId = null }, onAlbum = ::openAlbum, onLibrary = { artistLibrary = true }, onPortrait = { onChooseImage("artist", artist.id) }, onBiography = { enrichment = EnrichmentRequest(EnrichmentMode.BIOGRAPHY, artistId = artist.id, name = artist.name) }, onPhotos = { enrichment = EnrichmentRequest(EnrichmentMode.PHOTOS, artistId = artist.id, name = artist.name) })
+                                        else if (artist != null) ArtistDetail(artist, data, playback, vm, actions, onBack = { artistId = null }, onAlbum = ::openAlbum, onLibrary = { artistLibrary = true }, onPortrait = { onChooseImage("artist", artist.id) }, onBiography = { enrichment = EnrichmentRequest(EnrichmentMode.BIOGRAPHY, artistId = artist.id, name = artist.name) }, onPhotos = { enrichment = EnrichmentRequest(EnrichmentMode.PHOTOS, artistId = artist.id, name = artist.name) }, allAlbums = albums)
                                         else CatalogScreen(true, playable, data, vm, ::openArtist, ::openAlbum, { addTracks = it })
                                     }
                                     3 -> {
                                         val album = albums.find { it.id == albumId }
-                                        if (album != null) AlbumDetail(album, data, playback, vm, actions, { albumId = null }, ::openArtist, onCovers = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, album.tracks.first(), name = album.name, albumKey = album.id) })
+                                        if (album != null) AlbumDetail(album, data, playback, vm, actions, { albumId = null }, ::openArtist, onCovers = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, album.representative.tracks.first(), name = album.name, albumKey = album.representativeId) })
                                         else CatalogScreen(false, playable, data, vm, ::openArtist, ::openAlbum, { addTracks = it })
                                     }
                                     4 -> {
@@ -196,9 +207,15 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                 onEditLyrics = { editingLyrics = current }, onLyricsInfo = { lyricsInfo = current },
                 blocked = menuTrack != null || addTracks != null || editingLyrics != null || infoTrack != null || lyricsInfo != null || deleteTracks != null || enrichment != null)
         }
-        menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { openArtist(track.artistKey) }, { openAlbum(track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }, onOnlineLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onCatalog = { enrichment = EnrichmentRequest(EnrichmentMode.CATALOG, track) }, onCover = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, track) },
+        menuTrack?.let { track -> TrackMenu(track, tab == 4 && playlistId != null, vm, { menuTrack = null }, { infoTrack = track }, { addTracks = listOf(track) }, { val matches = artists.filter { group -> group.tracks.any { it.id == track.id } }; if (matches.size == 1) openArtist(matches.single().id) else artistChoiceTrack = track }, { openAlbum(albums.firstOrNull { it.containsEdition(track.albumKey) }?.id ?: track.albumKey) }, { deleteTracks = listOf(track) }, { playlistId?.let { removeTrack = it to track.id } }, onOnlineLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.LYRICS, track) }, onCatalog = { enrichment = EnrichmentRequest(EnrichmentMode.CATALOG, track) }, onCover = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, track) },
             hasLyrics = lyricsFor(track.id).original.isNotBlank(), onTranslateLyrics = { enrichment = EnrichmentRequest(EnrichmentMode.TRANSLATE, track) },
-            onEditLyrics = { editingLyrics = track }, onLyricsInfo = { lyricsInfo = track }) }
+            onEditLyrics = { editingLyrics = track }, onLyricsInfo = { lyricsInfo = track }, onCorrectArtists = { creditEditor = track }) }
+        artistChoiceTrack?.let { track -> AlertDialog(onDismissRequest = { artistChoiceTrack = null }, title = { Text("Artistes du morceau") }, text = {
+            Column { artists.filter { group -> group.tracks.any { it.id == track.id } }.forEach { artist -> TextButton({ artistChoiceTrack = null; openArtist(artist.id) }) { Text(artist.name) } }
+                TextButton({ artistChoiceTrack = null; creditEditor = track }) { Text("Corriger les participants") }
+            }
+        }, confirmButton = { TextButton({ artistChoiceTrack = null }) { Text("Fermer") } }) }
+        creditEditor?.let { track -> ArtistCreditsDialog(track, data.catalog, vm) { creditEditor = null } }
         infoTrack?.let { TrackInfoDialog(it) { infoTrack = null } }
         lyricsInfo?.let { LyricsDetailsDialog(it, lyricsFor(it.id), automatic) { lyricsInfo = null } }
         addTracks?.let { AddToPlaylistDialog(it, data.playlists, vm) { addTracks = null } }

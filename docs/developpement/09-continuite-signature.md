@@ -35,7 +35,7 @@ Les détails non sensibles sont conservés localement dans `artifacts/signature-
 5. Après compilation, `apksigner verify --verbose --print-certs` doit valider la signature réelle de l’APK et retourner **un seul signataire, celui de 0.2.3**, avant sa copie parmi les livrables ou son transfert.
 6. La copie temporaire est supprimée après les opérations Gradle, même en cas d’échec. Ni son contenu ni son encodage ne sont journalisés ou publiés.
 
-**Tant que le vrai keystore n’est pas disponible, la CI s’arrêtera avant la compilation.** Il ne faut pas supprimer le contrôle ou remplacer l’empreinte pour obtenir artificiellement un build vert.
+**Tant que le vrai keystore n’est pas disponible, la chaîne CI de livraison d’APK s’arrêtera avant la compilation.** Il ne faut pas supprimer le contrôle ou remplacer l’empreinte pour obtenir artificiellement un build vert.
 
 La signature locale par défaut reste possible pour le développement hors CI, mais un tel APK n’est pas un livrable compatible : il ne doit pas être remis comme mise à jour de 0.2.3. Toute livraison doit passer par le contrôle du certificat de référence.
 
@@ -58,3 +58,7 @@ git diff --check
 Retrouver une sauvegarde du keystore original et la conserver dans un emplacement sécurisé. Une fois vérifiée, elle pourra alimenter le secret Actions prévu ; garder aussi une sauvegarde privée indépendante. Ne jamais demander sa valeur dans le chat.
 
 Si la clé originale ne peut pas être récupérée, signer un nouvel APK avec ce même certificat n’est pas possible. Une autre clé serait une rupture de compatibilité qui exige une décision explicite distincte ; **aucune désinstallation, remise à zéro des données ou substitution de clé n’est autorisée par cette demande**.
+
+## Vérification des sources 0.3.0, sans livraison
+
+Un workflow distinct peut compiler Kotlin, les tests Android et exécuter les tests JVM/lint sans clé avec `NOVALISTEN_VERIFY_SOURCES=true`. Ce mode retire toute signature et refuse dans le graphe Gradle les tâches d’assemblage, signature, installation et production d’APK/AAB ; le pont de transfert refuse également un APK. Une tentative contrôlée d’assemblage doit être rejetée avant exécution des tâches. **Ce n’est ni un nouveau keystore, ni un APK de remplacement, ni un contournement du contrôle de livraison.** Voir [le lot 0.3.0](10-catalogue-et-artistes-automatiques.md).
