@@ -50,7 +50,12 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
-    testOptions { animationsDisabled = true }
+    testOptions {
+        animationsDisabled = true
+        // Canonical Maven Central endpoint; repo1 intermittently returns HTTP 429
+        // for Robolectric's Android framework checksum downloads on fresh runners.
+        unitTests.all { systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2") }
+    }
     lint { abortOnError = true; checkReleaseBuilds = false }
 }
 

@@ -28,7 +28,10 @@ def digest(data):
 
 def badging(text):
     package = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'", text, re.MULTILINE)
-    label = re.search(r"^application-label:'([^']+)'", text, re.MULTILINE)
+    # aapt2 may emit only application: label= for a literal manifest label,
+    # rather than the application-label: entry used for a string resource.
+    label = (re.search(r"^application-label:'([^']+)'", text, re.MULTILINE)
+             or re.search(r"^application: label='([^']+)'", text, re.MULTILINE))
     minimum = re.search(r"^sdkVersion:'([0-9]+)'", text, re.MULTILINE)
     if not package or not label or not minimum:
         raise ValueError('Métadonnées APK absentes/incomplètes.')
@@ -46,7 +49,12 @@ def prepare():
         raise ValueError('Préparation CI sans aucun répertoire privé uniquement.')
     sdk = Path(os.environ.get('ANDROID_HOME') or os.environ['ANDROID_SDK_ROOT']) / 'build-tools/35.0.0'
     source = ROOT / 'app/build/outputs/apk/debug/app-debug-unsigned.apk'
-    info = badging(subprocess.check_output([str(sdk / 'aapt2'), 'dump', 'badging', str(source)], text=True))
+    binary_info = subprocess.check_output([str(sdk / 'aapt2'), 'dump', 'badging', str(source)], text=True, stderr=subprocess.STDOUT)
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        public_lines = '\n'.join(line for line in binary_info.splitlines() if line.startswith(('package:', 'sdkVersion:', 'application-label:', 'application:')))
+        notice = public_lines.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print('::notice title=Next binary manifest::' + notice, flush=True)
+    info = badging(binary_info)
     # An implicit runner debug certificate is a build error, not an acceptable fallback.
     check = subprocess.run([str(sdk / 'apksigner'), 'verify', str(source)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if check.returncode == 0 or (Path.home() / '.android/debug.keystore').exists():
@@ -140,5 +148,11 @@ if __name__ == '__main__':
     try:
         main()
     except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
-        print('Préparation Next interrompue : ' + (str(error) if isinstance(error, ValueError) else 'outil/fichier public absent ou invalide.'), file=sys.stderr)
+        detail = str(error)
+        if isinstance(error, subprocess.CalledProcessError) and error.output:
+            detail += '\n' + str(error.output)[-2000:]
+        message = 'Préparation Next interrompue : ' + detail
+        print(message, file=sys.stderr)
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            print('::error title=Next unsigned preparation::' + message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
         sys.exit(1)
