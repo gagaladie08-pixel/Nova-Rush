@@ -1,0 +1,65 @@
+name: NovaListen Next — installation parallèle vérifiée
+
+on:
+  push:
+    branches: [arena/216bd0ac-nova-rush]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+concurrency:
+  group: novalisten-next-device-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coexistence:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[parallel-smoke]') }}
+    name: Coexistence et démarrage Android ${{ matrix.api }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 29
+            target: default
+          - api: 35
+            target: google_apis
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
+      - name: Récupérer uniquement l’APK public signé et vérifier ses hachages
+        run: python3 scripts/parallel_install_smoke.py fetch
+      - name: Activer KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Installer côte à côte, préserver les données synthétiques et démarrer Next
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 2048
+          script: python3 scripts/parallel_install_smoke.py smoke
+      - name: Preuves des émulateurs seulement
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: NovaListen-Next-coexistence-android-${{ matrix.api }}
+          path: artifacts/device-verifications/
+          retention-days: 14
+      - name: Pont public des rapports sans clé
+        if: always()
+        run: python3 scripts/github-transfer.py

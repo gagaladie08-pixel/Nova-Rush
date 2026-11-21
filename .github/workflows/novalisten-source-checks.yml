@@ -37,19 +37,16 @@ jobs:
           python3 scripts/verify-project.py
           python3 -m unittest discover -s scripts -p 'test_*signing*.py' -v
       - name: Vérifier que le mode sources refuse réellement de produire un APK
-        run: |
-          if ./gradlew --no-daemon --console=plain assembleDebug > "$RUNNER_TEMP/novalisten-packaging-refused.log" 2>&1; then
-            echo '::error::Le mode sources aurait dû refuser assembleDebug.'
-            exit 1
-          fi
-          grep -F 'génération d’APK/AAB et signature interdites' "$RUNNER_TEMP/novalisten-packaging-refused.log"
+        run: >-
+          python3 scripts/expect-gradle-refusal.py --label source-only
+          --message 'génération d’APK/AAB et signature interdites'
+          -- ./gradlew --no-daemon --console=plain assembleDebug
       - name: Vérifier aussi le refus local sans clé originale
-        run: |
-          if env -u GITHUB_ACTIONS -u NOVALISTEN_KEYSTORE_PATH -u NOVALISTEN_VERIFY_SOURCES ./gradlew --no-daemon --console=plain assembleDebug > "$RUNNER_TEMP/novalisten-local-packaging-refused.log" 2>&1; then
-            echo '::error::Le mode local aurait dû refuser tout APK sans la clé originale.'
-            exit 1
-          fi
-          grep -F 'Clé privée originale 0.2.3 obligatoire' "$RUNNER_TEMP/novalisten-local-packaging-refused.log"
+        run: >-
+          python3 scripts/expect-gradle-refusal.py --label legacy-signing
+          --message 'Clé privée originale 0.2.3 obligatoire'
+          -- env -u GITHUB_ACTIONS -u NOVALISTEN_KEYSTORE_PATH -u NOVALISTEN_VERIFY_SOURCES
+          ./gradlew --no-daemon --console=plain assembleDebug
       - name: Compiler les sources et les tests Android, tester le domaine, analyser lint
         run: scripts/gradle-ci.sh testDebugUnitTest compileDebugAndroidTestKotlin lintDebug
       - name: Confirmer l’absence de binaire installable

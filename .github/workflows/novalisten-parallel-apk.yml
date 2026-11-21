@@ -36,11 +36,7 @@ jobs:
         run: |
           python3 scripts/verify-project.py
           python3 -m unittest discover -s scripts -p 'test_*signing*.py' -v
-          if ./gradlew --no-daemon --console=plain help > "$RUNNER_TEMP/legacy-id-refused.log" 2>&1; then
-            echo '::error::La préparation parallèle ne doit jamais accepter l’identifiant historique.'
-            exit 1
-          fi
-          grep -F 'Préparation parallèle interdite pour l’identifiant historique' "$RUNNER_TEMP/legacy-id-refused.log"
+          python3 scripts/expect-gradle-refusal.py --label parallel-identity --message 'Préparation parallèle interdite pour l’identifiant historique' -- ./gradlew --no-daemon --console=plain help
       - name: Compiler Next sans clé, tester et analyser
         run: scripts/gradle-ci.sh -PnovalistenParallel=true testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug
       - name: Confirmer qu’aucune clé privée implicite n’a été créée
