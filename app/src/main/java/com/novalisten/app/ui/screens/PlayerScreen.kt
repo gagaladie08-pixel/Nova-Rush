@@ -22,7 +22,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -80,8 +80,9 @@ private fun MiniProgress(playback: PlaybackUi, vm: MainViewModel) {
     val progress by vm.progress.collectAsStateWithLifecycle()
     val position = if (progress.trackId == playback.currentId) progress.position else playback.position
     val duration = if (progress.trackId == playback.currentId) progress.duration else playback.duration
-    LinearProgressIndicator(progress = { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f },
-        modifier = Modifier.fillMaxWidth().height(2.dp), color = LocalUniverse.current.accent, trackColor = LocalUniverse.current.primary.copy(alpha = .15f))
+    // Fine progression du mini-player : même langage visuel que la barre du player plein écran.
+    UniverseProgress(if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
+        Modifier.fillMaxWidth().height(3.dp))
 }
 
 /** Same cached artwork on cover and lyrics pages; static layer does not depend on playback position. */
@@ -92,8 +93,11 @@ internal fun PlayerBackdrop(artwork: String) {
     val context = LocalContext.current
     val blurred = remember(context, artwork) { coil.request.ImageRequest.Builder(context).data(artwork)
         .size(96, 96).allowHardware(false).transformations(ArtworkBlur).build() }
-    AsyncImage(blurred, null, Modifier.fillMaxSize().alpha(.50f).testTag("player_background_artwork"), contentScale = ContentScale.Crop)
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.background.copy(alpha = .55f), t.background.copy(alpha = .65f), t.background.copy(alpha = .93f)))))
+    AsyncImage(blurred, null, Modifier.fillMaxSize().alpha(if (t.light) .32f else .50f).testTag("player_background_artwork"), contentScale = ContentScale.Crop)
+    // Voile du thème : la pochette se fond dans l'univers, elle ne le remplace jamais.
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+        listOf(t.background.copy(alpha = if (t.light) .42f else .55f), t.background.copy(alpha = .68f),
+            t.primary.copy(alpha = .10f).compositeOver(t.background).copy(alpha = .93f)))))
 }
 
 @Composable

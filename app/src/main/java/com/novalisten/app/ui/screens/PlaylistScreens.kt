@@ -107,7 +107,7 @@ fun PlaylistDetail(playlist: LocalPlaylist, tracks: List<Track>, data: LocalData
                     Artwork(playlist.cover ?: available.firstOrNull()?.artwork, playlist.name, Modifier.fillMaxWidth(.7f).aspectRatio(1f))
                     Spacer(Modifier.height(16.dp)); Text(playlist.name, style = MaterialTheme.typography.headlineMedium)
                     if (playlist.pinnedAt != null) Text("Épinglée à l’Accueil", style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onAddTracks, Modifier.padding(top = 12.dp)) { Icon(Icons.Outlined.PlaylistAdd, null); Spacer(Modifier.width(8.dp)); Text("Ajouter des morceaux") }
+                    OutlinedButton(onAddTracks, Modifier.padding(top = 12.dp)) { NovaIcon(Icons.Outlined.PlaylistAdd, null); Spacer(Modifier.width(8.dp)); Text("Ajouter des morceaux") }
                 }
             }
             if (missing > 0) item { Notice("$missing référence(s) non disponible(s) ou hors filtre. Elles restent enregistrées sans être proposées à la lecture.") }
@@ -134,7 +134,7 @@ private fun ReorderSheet(playlist: LocalPlaylist, tracks: List<Track>, onDismiss
                     val latestMove by rememberUpdatedState<(Int) -> Unit> { delta -> move(id, delta) }
                     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         var drag by remember { mutableFloatStateOf(0f) }
-                        Icon(Icons.Outlined.DragHandle, "Déplacer ce morceau", Modifier.size(48.dp).padding(12.dp).pointerInput(id) {
+                        NovaIcon(Icons.Outlined.DragHandle, "Déplacer ce morceau", Modifier.size(48.dp).padding(12.dp).pointerInput(id) {
                             detectDragGestures(onDragEnd = { drag = 0f }, onDragCancel = { drag = 0f }) { change, amount ->
                                 change.consume(); drag += amount.y
                                 if (drag > 60.dp.toPx()) { latestMove(1); drag = 0f }

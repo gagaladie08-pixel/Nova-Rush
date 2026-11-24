@@ -65,7 +65,7 @@ fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: (
 @Composable
 private fun MenuItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean = true, tag: String = "", onClick: () -> Unit) {
     val color = LocalContentColor.current.copy(alpha = if (enabled) 1f else .38f)
-    ListItem(headlineContent = { Text(label, color = color) }, leadingContent = { Icon(icon, null, tint = color) },
+    ListItem(headlineContent = { Text(label, color = color) }, leadingContent = { NovaIcon(icon, null, tint = color) },
         modifier = Modifier.testTag(tag).clickable(enabled = enabled, onClick = onClick).heightIn(min = 52.dp))
 }
 
@@ -122,7 +122,7 @@ fun AddToPlaylistDialog(tracks: List<Track>, lists: List<LocalPlaylist>, vm: Mai
             }
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(newName, { newName = it.take(100) }, label = { Text("Créer une classique") }, singleLine = true)
-            TextButton({ vm.createPlaylist(newName, tracks); onDismiss() }, enabled = newName.isNotBlank()) { Icon(Icons.Outlined.Add, null); Text("Créer et y ajouter les morceaux") }
+            TextButton({ vm.createPlaylist(newName, tracks); onDismiss() }, enabled = newName.isNotBlank()) { NovaIcon(Icons.Outlined.Add, null); Text("Créer et y ajouter les morceaux") }
         }
     }, confirmButton = { TextButton({ vm.addToPlaylists(selected, tracks); onDismiss() }, enabled = selected.isNotEmpty()) { Text("Ajouter (${selected.size})") } }, dismissButton = { TextButton(onDismiss) { Text("Fermer") } })
 }
@@ -138,7 +138,7 @@ fun CreatePlaylistDialog(vm: MainViewModel, onDismiss: () -> Unit, onCreated: (L
             Text("Une liste locale, vide ou remplie par vos soins.", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(12.dp)); OutlinedTextField(name, { name = it.take(100) }, label = { Text("Nom de la playlist") }, singleLine = true)
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(pickTracks, { pickTracks = it }); Text("Choisir des morceaux après la création", style = MaterialTheme.typography.bodySmall) }
-            TextButton({ models = true }) { Icon(Icons.Outlined.AutoAwesome, null); Text("Intelligente · modèles à venir") }
+            TextButton({ models = true }) { NovaIcon(Icons.Outlined.AutoAwesome, null); Text("Intelligente · modèles à venir") }
         }
     }, confirmButton = { TextButton({ vm.createPlaylist(name) { playlist -> onDismiss(); onCreated(playlist, pickTracks) } }, enabled = name.isNotBlank()) { Text("Créer") } }, dismissButton = { TextButton(onDismiss) { Text("Annuler") } })
     if (models) AlertDialog(onDismissRequest = { models = false }, title = { Text("Modèles Nova · non intégrés") }, text = {
@@ -193,13 +193,13 @@ fun LyricsEditor(track: Track, saved: SavedLyrics, vm: MainViewModel, onDismiss:
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(track.title, style = MaterialTheme.typography.titleSmall)
             Row {
-                TextButton(onSearch) { Icon(Icons.Outlined.Search, null); Text("Rechercher en ligne") }
+                TextButton(onSearch) { NovaIcon(Icons.Outlined.Search, null); Text("Rechercher en ligne") }
                 TextButton(onTranslate, enabled = baseline.original.isNotBlank()) { Text("Traduire cette VO") }
             }
             if (editingFrench && baseline.frenchSource.startsWith("Google Translate")) GoogleTranslationAttribution()
             Row { FilterChip(!editingFrench, { editingFrench = false }, { Text("Original") }); Spacer(Modifier.width(10.dp)); FilterChip(editingFrench, { editingFrench = true }, { Text("Français") }) }
             OutlinedTextField(if (editingFrench) french else original, { if (editingFrench) french = it.take(200_000) else original = it.take(200_000) }, Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 220.dp), label = { Text(if (editingFrench) "Votre version française" else "Texte ou LRC horodaté") })
-            TextButton({ import.launch(arrayOf("text/*", "application/octet-stream")) }) { Icon(Icons.Outlined.FileOpen, null); Spacer(Modifier.width(6.dp)); Text("Importer TXT / LRC") }
+            TextButton({ import.launch(arrayOf("text/*", "application/octet-stream")) }) { NovaIcon(Icons.Outlined.FileOpen, null); Spacer(Modifier.width(6.dp)); Text("Importer TXT / LRC") }
             Text("Sauvegarde dans NovaListen uniquement, pas dans le fichier audio. Les recherches et traductions demandent une commande distincte. Une VO modifiée invalide l’ancienne VF non corrigée ; les sources sont conservées avec mention des adaptations. Les paroles automatiques et leur synchronisation sont conservées sur cet appareil. Sauvegarder ici donne priorité à votre version choisie ou modifiée ; vérifiez vos droits de conservation.", style = MaterialTheme.typography.bodySmall)
             val credit = if (editingFrench) baseline.frenchSource else baseline.originalSource
             if (credit.isNotBlank()) SavedAttribution(credit)

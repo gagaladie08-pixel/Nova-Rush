@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,6 +16,7 @@ import androidx.media3.common.Player
 import com.novalisten.app.PlaybackUi
 import com.novalisten.app.data.durationLabel
 import com.novalisten.app.ui.theme.LocalUniverse
+import com.novalisten.app.ui.components.NovaIcon
 
 /** Playback controls keep their touch targets; optional content yields space, never these buttons. */
 @Composable
@@ -31,9 +33,11 @@ internal fun PlayerTransport(playback: PlaybackUi, compactHeight: Boolean = fals
         val compactTimeline = compactHeight || LocalDensity.current.fontScale > 1.3f
         val value = seek ?: playback.position.toFloat().coerceIn(0f, playback.duration.toFloat().coerceAtLeast(1f))
         val slider: @Composable (Modifier) -> Unit = { modifier ->
-            Slider(value = value, onValueChange = { seek = it }, onValueChangeFinished = { seek?.let { onSeek(it.toLong()) }; seek = null },
-                valueRange = 0f..playback.duration.toFloat().coerceAtLeast(1f), enabled = playback.duration > 0,
-                modifier = modifier.testTag("player_seek"))
+            // Barre de progression de l'univers : trait, halo, remplissage et dévoilement.
+            UniverseSlider(value = value, range = 0f..playback.duration.toFloat().coerceAtLeast(1f),
+                enabled = playback.duration > 0, onValueChange = { seek = it },
+                onFinished = { it2 -> onSeek(it2.toLong()); seek = null },
+                modifier = modifier, tag = "player_seek")
         }
         Column(Modifier.fillMaxWidth()) {
             if (compactTimeline) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -55,8 +59,10 @@ internal fun PlayerTransport(playback: PlaybackUi, compactHeight: Boolean = fals
                 horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 if (!separateExtras) RepeatControl(playback, onRepeat)
                 IconButton(onPrevious, Modifier.size(skipSize).testTag("player_previous")) { Icon(Icons.Outlined.SkipPrevious, "Précédent", Modifier.size(32.dp)) }
-                FilledIconButton(onToggle, Modifier.size(playSize).testTag("player_toggle")) {
-                    Icon(if (playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playback.playing) "Pause" else "Lecture", Modifier.size(36.dp))
+                FilledIconButton(onToggle, Modifier.size(playSize).testTag("player_toggle"),
+                    shape = com.novalisten.app.ui.theme.buttonShape(LocalUniverse.current), colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = LocalUniverse.current.primary, contentColor = com.novalisten.app.ui.theme.onColor(LocalUniverse.current.primary))) {
+                    NovaIcon(if (playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playback.playing) "Pause" else "Lecture", Modifier.size(36.dp))
                 }
                 IconButton(onNext, Modifier.size(skipSize).testTag("player_next")) { Icon(Icons.Outlined.SkipNext, "Suivant", Modifier.size(32.dp)) }
                 if (!separateExtras) QueueControl(onQueue)
@@ -68,7 +74,7 @@ internal fun PlayerTransport(playback: PlaybackUi, compactHeight: Boolean = fals
 @Composable
 private fun RepeatControl(playback: PlaybackUi, onRepeat: () -> Unit) {
     IconButton(onRepeat, Modifier.size(48.dp).testTag("player_repeat")) {
-        Icon(if (playback.repeatMode == Player.REPEAT_MODE_ONE) Icons.Outlined.RepeatOne else Icons.Outlined.Repeat,
+        NovaIcon(if (playback.repeatMode == Player.REPEAT_MODE_ONE) Icons.Outlined.RepeatOne else Icons.Outlined.Repeat,
             "Répétition : ${when (playback.repeatMode) { Player.REPEAT_MODE_ONE -> "un titre"; Player.REPEAT_MODE_ALL -> "toute la file"; else -> "désactivée" }}",
             tint = if (playback.repeatMode != Player.REPEAT_MODE_OFF) LocalUniverse.current.accent else LocalUniverse.current.text)
     }

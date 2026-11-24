@@ -148,7 +148,7 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
                 if (note.biography.isNotBlank()) Text(note.biography, maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                 if (note.biography.isNotBlank()) TextButton({ expanded = !expanded }) { Text(if (expanded) "Voir moins" else "Voir plus") }
                 automatic[group.id]?.let { status ->
-                    if (status.loading) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("automatic_artist_loading"))
+                    if (status.loading) ThemedLinearProgress({ 0.45f }, Modifier.fillMaxWidth(), "automatic_artist_loading")
                     if (expanded && status.note.isNotBlank()) Text(status.note, style = MaterialTheme.typography.bodySmall)
                 }
 
@@ -189,7 +189,7 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
         }
         if (top.isNotEmpty()) item { SectionHeader("Les plus écoutés") }
         items(top, key = { it.id }) { track -> TrackRow(track, track.id in data.favorites, playback.currentId == track.id, { vm.play(top, track) }, { vm.favorite(track) }, { actions.menu(track) }, { vm.next(listOf(track)) }, { actions.info(track) }, onSelect = { actions.add(listOf(track)) }) }
-        item { OutlinedButton(onLibrary, Modifier.fillMaxWidth().padding(20.dp)) { Icon(Icons.Outlined.LibraryMusic, null); Spacer(Modifier.width(8.dp)); Text("Bibliothèque de l’artiste") } }
+        item { OutlinedButton(onLibrary, Modifier.fillMaxWidth().padding(20.dp)) { NovaIcon(Icons.Outlined.LibraryMusic, null); Spacer(Modifier.width(8.dp)); Text("Bibliothèque de l’artiste") } }
         item { Spacer(Modifier.height(16.dp)) }
     }
     albumInfo?.let { value -> AlertDialog(onDismissRequest = { albumInfo = null }, title = { Text("Informations sur l’album") },
@@ -224,7 +224,7 @@ fun AlbumDetail(group: AlbumGroup, index: CatalogSnapshot, data: LocalData, play
                 Text(listOfNotNull(group.year.takeIf { it > 0 }?.toString(), group.kind.label.takeIf { group.kind != ReleaseKind.UNKNOWN }, itemCount(group.tracks.size, "titre"), totalDurationLabel(group.tracks.sumOf { it.durationMs })).joinToString(" · "))
                 if (group.editionCount > 1) Text(itemCount(group.editionCount, "édition"), style = MaterialTheme.typography.bodySmall)
                 Row {
-                    TextButton(onCovers) { Icon(Icons.Outlined.ImageSearch, null); Text("Pochette") }
+                    TextButton(onCovers) { NovaIcon(Icons.Outlined.ImageSearch, null); Text("Pochette") }
                     Box {
                         IconButton({ menu = true }) { Icon(Icons.Outlined.MoreVert, "Actions de l’album") }
                         DropdownMenu(menu, { menu = false }) {

@@ -87,7 +87,7 @@ internal fun QueryFields(title: String, onTitle: (String) -> Unit, artist: Strin
 @Composable
 internal fun WorkStatus(work: RemoteWork) {
     if (work.busy) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text("Opération en cours…", Modifier.weight(1f)); TextButton(work::cancel) { Text("Annuler") }
+        UniverseSpinner(Modifier.size(22.dp)); Spacer(Modifier.width(10.dp)); Text("Opération en cours…", Modifier.weight(1f)); TextButton(work::cancel) { Text("Annuler") }
     }
     if (work.message.isNotBlank()) Notice(work.message)
 }
@@ -134,7 +134,7 @@ private fun LyricsSearch(track: Track, vm: MainViewModel, onDismiss: () -> Unit)
     LazyColumn(Modifier.fillMaxSize().testTag("lyrics_search"), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Notice("Recherche volontaire : les champs ci-dessous et la durée locale (${durationLabel(track.durationMs)}) seront envoyés aux sources demandées. Aucun audio ni historique. Comparez l’artiste et la version ; cette recherche de remplacement n’applique rien avant votre confirmation.") }
         item { QueryFields(title, { title = it }, artist, { artist = it }, album, { album = it }, !work.busy) }
-        item { Button({ search(listOf(Provider.LRCRED, Provider.LRCLIB, Provider.LIRIQO), true) }, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("search_lyrics_core"), enabled = !work.busy) { Icon(Icons.Outlined.Search, null); Spacer(Modifier.width(8.dp)); Text("Rechercher · noyau de 3 sources") } }
+        item { Button({ search(listOf(Provider.LRCRED, Provider.LRCLIB, Provider.LIRIQO), true) }, Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("search_lyrics_core"), enabled = !work.busy) { NovaIcon(Icons.Outlined.Search, null); Spacer(Modifier.width(8.dp)); Text("Rechercher · noyau de 3 sources") } }
         item { WorkStatus(work) }
         items(notices) { Notice(it) }
         items(results, key = { it.credit.provider + it.id }) { candidate ->

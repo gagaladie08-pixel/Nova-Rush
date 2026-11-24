@@ -2,8 +2,6 @@ package com.novalisten.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -102,6 +100,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     val actions = TrackActions(menu = { menuTrack = it }, info = { infoTrack = it }, add = { addTracks = it }, delete = { deleteTracks = it })
     val current = catalog.tracks[playback.currentId]
     NovaTheme(settings.universe, settings.effects) {
+        val universe = settings.universe
         Box(Modifier.fillMaxSize().testTag("app_window")) {
             if (!playerOpen || current == null) UniverseBackdrop()
             Scaffold(modifier = if (playerOpen && current != null) Modifier.clearAndSetSemantics {} else Modifier,
@@ -157,15 +156,8 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                         else -> {
                             val t = settings.universe
                             AnimatedContent(targetState = tab, label = "Onglet", transitionSpec = {
-                                if (!settings.effects) EnterTransition.None togetherWith ExitTransition.None
-                                else when (t.effect) {
-                                    "villain", "venom" -> slideInHorizontally(tween(t.transitionMs ?: 150)) { 12 } togetherWith slideOutHorizontally(tween(t.transitionMs ?: 150)) { -12 }
-                                    "survivor" -> slideInVertically(if (t.id == "custom" && t.transitionMs != null) tween(t.transitionMs) else spring(dampingRatio = .9f)) { it / 4 } togetherWith ExitTransition.None
-                                    "y2k", "queen" -> (scaleIn(spring(dampingRatio = .65f), initialScale = .95f) + fadeIn(tween(t.transitionMs ?: 320))) togetherWith fadeOut(tween(120))
-                                    "velvet" -> slideInHorizontally(if (t.transitionMs != null) tween(t.transitionMs) else spring()) { it / 3 } togetherWith fadeOut(if (t.transitionMs != null) tween(t.transitionMs / 2) else spring())
-                                    "chaos" -> slideInHorizontally(if (t.id == "custom" && t.transitionMs != null) tween(t.transitionMs) else tween((100..400).random())) { 14 } togetherWith ExitTransition.None
-                                    else -> fadeIn(if (t.transitionMs != null) tween(t.transitionMs) else spring()) togetherWith fadeOut(if (t.transitionMs != null) tween(t.transitionMs) else spring())
-                                }
+                                // Une seule source de vérité pour les transitions d'univers.
+                                universeTransitionSpec(t, settings.effects)
                             }) { activeTab ->
                                 val destination = when (activeTab) {
                                     2 -> artistId?.let { "artist/detail/$it/$artistLibrary" } ?: "artist/index"
@@ -183,7 +175,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                         }
                                     })
                                 } else if (((library.loading && library.tracks.isEmpty()) || !catalog.ready) && activeTab < 5 && library.error == null) {
-                                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { CircularProgressIndicator(); Spacer(Modifier.height(18.dp)); Text("Lecture de votre bibliothèque…") }
+                                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { UniverseSpinner(Modifier.size(44.dp)); Spacer(Modifier.height(18.dp)); Text("Lecture de votre bibliothèque…") }
                                 } else if (library.error != null && activeTab < 5) {
                                     EmptyState("Bibliothèque indisponible", library.error!!, Icons.Outlined.ErrorOutline, Modifier.fillMaxSize(), action = { Button({ vm.repository.refresh() }) { Text("Réessayer") } })
                                 } else when (activeTab) {

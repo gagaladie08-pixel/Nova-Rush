@@ -50,7 +50,7 @@ fun HomeScreen(tracks: List<Track>, data: LocalData, vm: MainViewModel, onLibrar
                             Text("Votre bibliothèque. Sans compte. Sans réseau.", style = MaterialTheme.typography.bodyMedium)
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = { vm.play(tracks, shuffled = true) }, enabled = tracks.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
-                                Icon(Icons.Outlined.Shuffle, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("Laisser Nova choisir")
+                                NovaIcon(Icons.Outlined.Shuffle, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("Laisser Nova choisir")
                             }
                         }
                     }

@@ -25,6 +25,7 @@ import com.novalisten.app.enrichment.AutoLyricState
 import com.novalisten.app.enrichment.AutoLyricStatus
 import com.novalisten.app.ui.theme.LocalUniverse
 import kotlin.math.abs
+import com.novalisten.app.ui.components.NovaIcon
 
 /** Padding lets the first and last rows reach the same center as all the other rows. */
 private suspend fun LazyListState.centerLyric(index: Int) {
@@ -52,7 +53,7 @@ internal fun LyricsBody(trackKey: String, text: String, timed: List<LyricLine>, 
         if (text.isBlank()) {
             Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 val loading = automatic.trackId == trackKey && automatic.status == AutoLyricStatus.LOADING
-                if (loading) { CircularProgressIndicator(Modifier.size(28.dp)); Spacer(Modifier.height(18.dp)) }
+                if (loading) { UniverseSpinner(Modifier.size(28.dp)); Spacer(Modifier.height(18.dp)) }
                 Text(if (loading) "Chargement des paroles…" else "Paroles indisponibles", style = MaterialTheme.typography.titleLarge)
             }
         } else {
@@ -76,7 +77,7 @@ internal fun LyricsBody(trackKey: String, text: String, timed: List<LyricLine>, 
                 }
             }
             if (!follow && timed.isNotEmpty()) FilledTonalIconButton({ follow = true },
-                Modifier.align(Alignment.BottomEnd).padding(8.dp).testTag("lyrics_recenter")) { Icon(Icons.Outlined.MyLocation, "Recentrer la ligne en cours") }
+                Modifier.align(Alignment.BottomEnd).padding(8.dp).testTag("lyrics_recenter")) { NovaIcon(Icons.Outlined.MyLocation, "Recentrer la ligne en cours") }
         }
     }
 }

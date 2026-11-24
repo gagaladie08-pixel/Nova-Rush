@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -32,7 +31,7 @@ fun AppearanceScreen(settings: ThemeSettings, preferences: ThemePreferences, onB
                 }
             }
         }
-        item { OutlinedButton(onCustom, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp).heightIn(min = 54.dp).testTag("custom_theme")) { Icon(Icons.Outlined.Tune, null); Spacer(Modifier.width(8.dp)); Text("Créer mon univers personnalisé") } }
+        item { OutlinedButton(onCustom, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp).heightIn(min = 54.dp).testTag("custom_theme")) { NovaIcon(Icons.Outlined.Tune, null); Spacer(Modifier.width(8.dp)); Text("Créer mon univers personnalisé") } }
         items(themeCatalog, key = { it.id }) { spec ->
             NovaTheme(spec, effects = false) {
                 NovaCard(Modifier.padding(horizontal = 20.dp, vertical = 7.dp).clickable { preferences.select(spec.id) }.testTag("theme_${spec.id}"), selected = settings.selected == spec.id) {
@@ -44,10 +43,23 @@ fun AppearanceScreen(settings: ThemeSettings, preferences: ThemePreferences, onB
                             RadioButton(settings.selected == spec.id, onClick = { preferences.select(spec.id) })
                         }
                         Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            spec.palette.take(3).plus(spec.palette.last()).forEach { color -> Box(Modifier.size(19.dp).clip(CircleShape).background(Color(color.toColorInt()))) }
+                            spec.palette.take(3).plus(spec.palette.last()).forEach { color -> Box(Modifier.size(19.dp).clip(buttonShape(spec)).background(Color(color.toColorInt()))) }
                             Spacer(Modifier.weight(1f)); Text(if (spec.radius == null) "Angles coupés" else "${spec.radius} dp", style = MaterialTheme.typography.bodySmall)
                         }
+                        // Aperçu vivant : formes, curseur et ornement de l'univers, pas seulement des pastilles.
                         CurvePreview(spec, Modifier.fillMaxWidth().height(45.dp).padding(top = 8.dp))
+                        Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(Modifier.size(width = 84.dp, height = 30.dp).clip(buttonShape(spec)).background(spec.primary), contentAlignment = Alignment.Center) {
+                                Text("Lire", style = MaterialTheme.typography.labelMedium, color = onColor(spec.primary))
+                            }
+                            Box(Modifier.size(width = 84.dp, height = 30.dp).clip(panelShape(spec)).background(spec.accent.copy(alpha = .18f)), contentAlignment = Alignment.Center) {
+                                Text("Accent", style = MaterialTheme.typography.labelMedium, color = spec.text)
+                            }
+                            NovaIcon(Icons.Outlined.PlayArrow, null, Modifier.size(26.dp), tint = spec.text)
+                            NovaIcon(Icons.Outlined.FavoriteBorder, null, Modifier.size(26.dp), tint = spec.text)
+                            Spacer(Modifier.weight(1f))
+                            Text("${spec.glyphs.name.lowercase()}", style = MaterialTheme.typography.labelSmall, color = spec.readableSecondaryText())
+                        }
                     }
                 }
             }
@@ -60,7 +72,7 @@ fun AppearanceScreen(settings: ThemeSettings, preferences: ThemePreferences, onB
                 }
             }
         }
-        item { Notice("Palettes et polices fournies, ressources incluses hors ligne. Les dessins et effets de cette première version sont une interprétation initiale, pas encore un rendu final validé.") }
+        item { Notice("Chaque univers transforme les couleurs, les deux polices, trois niveaux de formes (cartes, boutons, panneaux), les icônes dessinées, les décors et la barre de progression du lecteur. Palettes fournies conservées ; seuls les textes secondaires trop peu contrastés (Pink Y2K, Cloud Nine) sont rapprochés du texte principal.") }
     }
 }
 
@@ -141,7 +153,7 @@ private fun ChoiceMenu(label: String, selected: String, options: Map<String, Str
     var expanded by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 5.dp)) {
         OutlinedButton({ expanded = true }, Modifier.fillMaxWidth()) {
-            Text("$label : ${options[selected] ?: selected}", Modifier.weight(1f)); Icon(Icons.Outlined.ExpandMore, null)
+            Text("$label : ${options[selected] ?: selected}", Modifier.weight(1f)); NovaIcon(Icons.Outlined.ExpandMore, null)
         }
         DropdownMenu(expanded, { expanded = false }, Modifier.heightIn(max = 320.dp)) {
             options.forEach { (key, name) -> DropdownMenuItem({ Text(name) }, { onSelect(key); expanded = false }) }

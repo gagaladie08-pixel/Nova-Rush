@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NovaListen — banc d'essai des thèmes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Rajdhani:wght@300;400;500;600;700&family=Audiowide&family=Poppins:wght@300;400;600;700&family=Bebas+Neue&family=Inter:wght@300;400;600;800&family=Playfair+Display:wght@400..900&family=Montserrat:wght@300..900&family=Baloo+2:wght@400..800&family=Fredoka:wght@300..700&family=Abril+Fatface&family=Anton&family=Comfortaa:wght@300..700&family=Quicksand:wght@300..700&family=DM+Serif+Display&family=Syne:wght@400..800&family=Unica+One&family=Righteous&family=Nunito:wght@300..900&family=Bungee&family=Bowlby+One+SC&family=Fraunces:opsz,wght@9..144,300..900&family=Ubuntu:wght@300;400;500;700&family=Cinzel:wght@400..900&family=Cormorant:wght@300..700&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: #08080c; color: #e8e8f0; font-family: Inter, system-ui, sans-serif; }
+
+  /* ---------- le simulateur occupe tout l'écran ---------- */
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  #screen { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; transition: opacity var(--dur, 300ms) cubic-bezier(.2,.7,.3,1); }
+  #screen.fx-out { opacity: 0; }
+  .wrap { min-height: 100%; padding: 0 0 calc(150px + env(safe-area-inset-bottom)); }
+
+  /* ---------- décor ---------- */
+  .decor { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .decor .glow { position: absolute; width: 130vmax; height: 130vmax; border-radius: 50%; right: -55vmax; top: -70vmax;
+    background: radial-gradient(circle, var(--glow) 0%, transparent 62%); opacity: .30; animation: float 26s linear infinite; }
+  @keyframes float { 0% { transform: translate3d(0,0,0) rotate(0deg);} 100% { transform: translate3d(-4vmax, 6vmax, 0) rotate(360deg);} }
+  .decor .grid { position: absolute; inset: 0; opacity: .20;
+    background-image: linear-gradient(var(--accent) 1px, transparent 1px), linear-gradient(90deg, var(--accent) 1px, transparent 1px);
+    background-size: 46px 46px; mask-image: radial-gradient(circle at 70% 20%, #000 0%, transparent 72%); }
+  .decor .scan { position: absolute; inset: -20%; opacity: .10;
+    background: repeating-linear-gradient(0deg, transparent 0 2px, var(--accent) 2px 3px); animation: scan 8s linear infinite; }
+  @keyframes scan { 0% { transform: translateY(0);} 100% { transform: translateY(6px);} }
+  .decor .noise { position: absolute; inset: 0; opacity: .05; mix-blend-mode: overlay;
+    background-image: radial-gradient(#fff .5px, transparent .5px); background-size: 4px 4px; }
+  .decor .beam { position: absolute; left: 50%; top: -10%; width: 60vmax; height: 140vmax; transform: translateX(-50%) rotate(8deg);
+    background: linear-gradient(to bottom, var(--glow), transparent 70%); opacity: .13; filter: blur(14px); }
+
+  /* ---------- typographie du thème ---------- */
+  .u-title { font-family: var(--font-title), sans-serif; }
+  .u-body { font-family: var(--font-body), sans-serif; }
+  #screen { font-family: var(--font-body), sans-serif; color: var(--text); }
+  h1.u-title { font-size: calc(30px * var(--title-scale, 1)); line-height: 1.12; margin: 0; letter-spacing: var(--title-spacing, 0); }
+  h2.u-title { font-size: calc(21px * var(--title-scale, 1)); margin: 0; letter-spacing: var(--title-spacing, 0); }
+  .muted { color: var(--text2); font-size: 13.5px; }
+  .tag { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+
+  /* ---------- chrome ---------- */
+  header.top { padding: calc(18px + env(safe-area-inset-top)) 20px 6px; display: flex; align-items: flex-start; gap: 12px; }
+  .round-btn { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); border-radius: var(--r-btn); flex: none; }
+  .shell { padding: 8px 20px 0; display: flex; flex-direction: column; gap: 18px; }
+
+  /* ---------- cartes ---------- */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden;
+    box-shadow: var(--card-shadow, none); position: relative; }
+  .card::after { content:""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: var(--card-sheen, none); }
+  .paper { aspect-ratio: 1; background: var(--paper); position: relative; display: grid; place-items: center; }
+  .paper::before { content:""; position: absolute; inset: 0; background: var(--paper-ornament, none); opacity: .5; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hero { border-radius: var(--r-card); overflow: hidden; position: relative; box-shadow: var(--hero-shadow, none); }
+  .hero .art { aspect-ratio: 1.35; background: var(--paper); position: relative; }
+  .hero .art::after { content:""; position: absolute; inset: 0; background: linear-gradient(to top, var(--surface) 4%, transparent 62%); }
+  .hero .meta { position: relative; padding: 14px 16px 16px; margin-top: -46px; }
+
+  /* ---------- boutons ---------- */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px;
+    border-radius: var(--r-btn); border: 1px solid transparent; background: var(--primary); color: var(--on-primary);
+    font-family: var(--font-body); font-weight: 700; font-size: 15px; letter-spacing: var(--btn-tracking, 0); }
+  .btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn.accent { background: var(--accent); color: var(--on-accent); }
+  .btn.row2 { flex: 1; }
+
+  /* ---------- sidebar de test ---------- */
+  #panel { position: fixed; inset: auto 0 0 0; z-index: 40; transform: translateY(calc(100% - 62px)); transition: transform .32s cubic-bezier(.2,.8,.2,1);
+    background: #0d0d14ee; backdrop-filter: blur(14px); border-top: 1px solid #24243a; padding-bottom: env(safe-area-inset-bottom); border-radius: 22px 22px 0 0;
+    box-shadow: 0 -14px 40px #0009; max-height: 76vh; overflow: hidden; }
+  #panel.open { transform: translateY(0); }
+  #panel .handle { height: 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; cursor: pointer; }
+  #panel .handle strong { font-size: 14px; letter-spacing: .02em; }
+  #panel .pill { font-size: 11px; padding: 5px 10px; border-radius: 999px; background: #ffffff12; color: #b9b9d0; }
+  #panel .body { overflow-y: auto; max-height: calc(76vh - 62px); padding: 0 14px 18px; }
+  .group { margin: 14px 0 6px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #7d7d99; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 8px 11px; border-radius: 11px; border: 1px solid #2a2a40;
+    background: #14141f; color: #dcdcea; cursor: pointer; }
+  .chip.on { border-color: #7a7aff; box-shadow: inset 0 0 0 1px #7a7aff55; background: #1b1b30; }
+  .chip i { width: 13px; height: 13px; border-radius: 4px; display: block; border: 1px solid #ffffff22; }
+  .seg { display: flex; gap: 6px; background: #14141f; padding: 4px; border-radius: 12px; border: 1px solid #232338; }
+  .seg button { flex: 1; border: 0; background: transparent; color: #a8a8c2; padding: 9px 6px; border-radius: 9px; font-size: 12.5px; font-weight: 600; }
+  .seg button.on { background: #ffffff14; color: #fff; }
+  .note { font-size: 11.5px; color: #83839c; line-height: 1.5; margin-top: 8px; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 9px 0; border-bottom: 1px solid #1e1e2e; }
+  .switch { width: 42px; height: 24px; border-radius: 999px; background: #2b2b42; position: relative; transition: background .2s; }
+  .switch::after { content:""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch.on { background: #6f6fff; } .switch.on::after { transform: translateX(18px); }
+  /* ---------- progress ---------- */
+  .bar { height: 3px; border-radius: 999px; background: var(--border); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 42%; background: var(--accent); }
+  .progress { display: flex; gap: 10px; align-items: center; font-size: 11.5px; color: var(--text2); }
+  .actions { display: flex; justify-content: space-between; padding: 0 6px; }
+  .actions button { border: 0; background: none; color: var(--text); display: grid; gap: 5px; place-items: center; font-size: 10.5px; color: var(--text2); font-family: var(--font-body); }
+  .transport { display: flex; align-items: center; justify-content: center; gap: 26px; padding: 10px 0 4px; }
+  .transport button { border: 0; background: none; color: var(--text); display: grid; place-items: center; }
+  .play { width: 66px; height: 66px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: grid; place-items: center;
+    box-shadow: var(--play-shadow, none); }
+  /* artwork décoré */
+  .art-cyber::before { background: linear-gradient(var(--accent) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, var(--accent) 1px, transparent 1px) 0 0/26px 26px; mask-image: linear-gradient(135deg,#000,transparent 60%); opacity:.35}
+  .art-royal::before { background: radial-gradient(circle at 50% 0%, var(--accent) 0 2px, transparent 3px) 50% 0/64px 64px; opacity:.5 }
+  .art-bubble::before { background: radial-gradient(circle at 28% 24%, var(--primary) 0 16%, transparent 17%), radial-gradient(circle at 74% 68%, var(--secondary) 0 20%, transparent 21%); opacity:.5 }
+  .art-sharp::before { background: repeating-linear-gradient(135deg, var(--primary) 0 2px, transparent 2px 22px); opacity:.55 }
+  .art-prism::before { background: conic-gradient(from 30deg at 50% 50%, var(--primary), var(--secondary), var(--accent), var(--primary)); opacity:.5; filter: blur(12px) }
+  .art-halo::before { background: radial-gradient(circle at 50% 40%, var(--glow) 0 26%, transparent 55%); opacity:.6 }
+  .art-solar::before { background: repeating-conic-gradient(from 0deg, var(--accent) 0 2deg, transparent 2deg 12deg); opacity:.35; mask-image: radial-gradient(circle, transparent 28%, #000 30%) }
+  .art-frame::before { background: linear-gradient(var(--text) 0 0) 12px 12px/ calc(100% - 24px) 2px no-repeat, linear-gradient(var(--text) 0 0) 12px calc(100% - 14px)/ calc(100% - 24px) 2px no-repeat; opacity:.5 }
+  .art-metal::before { background: linear-gradient(120deg, transparent 30%, #ffffff55 48%, transparent 62%); opacity:.7 }
+  .art-stage::before { background: radial-gradient(ellipse at 50% 0%, var(--glow) 0 30%, transparent 62%); opacity:.55 }
+  .fx-off .decor .glow, .fx-off .decor .scan, .fx-off .decor .beam { animation: none !important; }
+  .badge { position: absolute; top: 10px; left: 10px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 5px 9px; border-radius: 999px;
+    background: #000000a8; color: #fff; backdrop-filter: blur(6px); }
+  .compare-shell { padding: 14px 12px 8px; display: grid; gap: 12px; }
+  .mini { border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+  .mini .strip { display: flex; gap: 0; height: 58px; }
+  .mini .strip i { flex: 1; }
+  .mini .info { display: flex; align-items: center; justify-content: space-between; padding: 8px 11px; gap: 8px; }
+  .mini .info b { font-family: var(--font-title); font-size: 14px; letter-spacing: var(--title-spacing,0); }
+  .score { font-size: 10.5px; color: var(--text2); text-align: right; line-height: 1.3; }
+  @media (min-width: 900px) {
+    #stage { left: 0; }
+    #panel { left: 50%; transform: translate(-50%, calc(100% - 62px)); width: min(780px, 96vw); }
+    #panel.open { transform: translate(-50%, 0); }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="screen"></div>
+</div>
+
+<div id="panel">
+  <div class="handle" id="handle">
+    <strong>Banc d'essai · thèmes</strong>
+    <span class="pill" id="pill">Cyber Nova</span>
+  </div>
+  <div class="body">
+    <div class="group">Écran</div>
+    <div class="seg" id="screens">
+      <button data-screen="home" class="on">Accueil</button>
+      <button data-screen="library">Bibliothèque</button>
+      <button data-screen="player">Player</button>
+      <button data-screen="compare">Comparer</button>
+    </div>
+
+    <div class="group">Direction visuelle</div>
+    <div class="chips" id="variants"></div>
+
+    <div class="group">Univers (palette d'origine)</div>
+    <div class="chips" id="universes"></div>
+
+    <div class="toggle"><span>Effets et décors</span><span class="switch on" id="fx"></span></div>
+    <div class="toggle"><span>Afficher les mesures de contraste</span><span class="switch" id="contrast"></span></div>
+    <div class="note" id="metrics"></div>
+    <div class="note">Les polices sont les vraies (Google Fonts). Les palettes sont celles de la fiche 21. Cette page ne modifie pas l'application : c'est un banc d'essai.</div>
+  </div>
+</div>
+
+<script>
+const U = {
+  cyber:   {name:"Cyber Nova",     p:["#FF006E","#00B4FF","#BD00FF","#050510","#0D0D2B","#F0F0FF","#A0A0C0","#00FFF0"], title:"Orbitron", body:"Rajdhani", r:6,  card:"cyber",  scale:1.02, spacing:".04em", dark:true},
+  disco:   {name:"Neon Disco",     p:["#9B00FF","#FFD700","#FF69B4","#0A0010","#1A0030","#E8E8FF","#B0A0C0","#C0C0C0"], title:"Audiowide", body:"Poppins", r:24, card:"disco",  scale:1,    spacing:".01em", dark:true},
+  villain: {name:"Villain Era",    p:["#CC0000","#4A4A4A","#8B0000","#080808","#111111","#EEEEEE","#888888","#FF0000"], title:"Bebas Neue", body:"Inter", r:0, card:"sharp", scale:1.42, spacing:".06em", dark:true},
+  queen:   {name:"Slay Queen",     p:["#FFD700","#FF1493","#FFA500","#0A0A0A","#1A1500","#FFFFFF","#D4AF37","#B76E79"], title:"Playfair Display", body:"Montserrat", r:18, card:"royal", scale:1, spacing:"0", dark:true},
+  y2k:     {name:"Pink Y2K",       p:["#FF69B4","#87CEEB","#FF1493","#FFF0F5","#FFE4E1","#8B0045","#C06080","#DA70D6"], title:"Baloo 2", body:"Fredoka", r:28, card:"bubble", scale:1.04, spacing:".01em", dark:false},
+  velvet:  {name:"Velvet Stage",   p:["#8B0000","#722F37","#CFB53B","#0C0008","#1A0010","#FFF8DC","#D4AF37","#FFD700"], title:"Abril Fatface", body:"Poppins", r:12, card:"stage", scale:1.06, spacing:".02em", dark:true},
+  venom:   {name:"Pink Venom",     p:["#FF0080","#FF0030","#FF69B4","#000000","#0D0008","#FFFFFF","#FFB6C1","#FF007F"], title:"Anton", body:"Inter", r:0, card:"sharp", scale:1.3, spacing:".03em", cut:12, dark:true},
+  cloud:   {name:"Cloud Nine",     p:["#FFB6C1","#E6E6FA","#FFC0CB","#FAFAFA","#FFF5F7","#555555","#9090A0","#C8A2C8"], title:"Comfortaa", body:"Quicksand", r:26, card:"halo", scale:1, spacing:".01em", dark:false},
+  solara:  {name:"Solara",         p:["#FF6B35","#C4622D","#FFA500","#1A0A00","#2D1200","#FFF3E0","#D4A056","#FFD700"], title:"DM Serif Display", body:"Poppins", r:20, card:"solar", scale:1.08, spacing:"0", dark:true},
+  chaos:   {name:"Chaos Born",     p:["#C0C0C0","#1A1A1A","#E8E8E8","#050505","#111111","#F0F0F0","#909090","#DFDFDF"], title:"Syne", body:"Unica One", r:2, card:"metal", scale:1.12, spacing:".03em", dark:true},
+  survivor:{name:"Survivor",       p:["#F77FB4","#5BCEFA","#9B4F96","#080808","#121018","#FFFFFF","#FFB7D5","#26CEAA"], title:"Righteous", body:"Nunito", r:16, card:"prism", scale:1.02, spacing:".02em", dark:true},
+  rainbow: {name:"Rainbow Pop",    p:["#FF4DA6","#4D79FF","#9B4DFF","#0A0010","#100020","#FFFFFF","#FFB3D9","#FFD700"], title:"Bungee", body:"Baloo 2", r:22, card:"prism", scale:1.12, spacing:".01em", dark:true},
+  revolution:{name:"Pop Revolution",p:["#4A90D9","#FF6B9D","#00BFFF","#050A1A","#0A1428","#FFFFFF","#A0C4FF","#F0F8FF"], title:"Bowlby One SC", body:"Inter", r:10, card:"frame", scale:1.0, spacing:".01em", dark:true},
+  african: {name:"African Confessions",p:["#C4622D","#2D5A27","#D4A017","#120800","#1E0E00","#FFF3E0","#C4922D","#FFB347"], title:"Fraunces", body:"Ubuntu", r:8, card:"solar", scale:1.04, spacing:"0", dark:true},
+  angel:   {name:"Bad Angel",      p:["#CC0033","#FFFFFF","#FF3366","#080808","#141414","#FFFFFF","#AAAAAA","#FF0044"], title:"Cinzel", body:"Cormorant", r:14, card:"halo", scale:1.06, spacing:".05em", dark:true},
+};
+
+const VARIANTS = [
+  {id:"a", code:"A", label:"Matériaux & profondeur", hint:"Cartes en verre dépoli, bordures lumineuses, ombres colorées, pochette qui déborde."},
+  {id:"b", code:"B", label:"Typographie forte",       hint:"Titres très grands, chiffres display, contrastes francs, hiérarchie assumée."},
+  {id:"c", code:"C", label:"Ornements d'univers",     hint:"Pochette décorée par l'univers, cadres, halos, motifs géométriques."},
+  {id:"d", code:"D", label:"Mise en page éditoriale", hint:"Grandes respirations, une info par bloc, séparateurs, détails d'écoute."},
+];
+
+const state = {screen:"home", universe:"cyber", variant:"a", fx:true, contrast:false};
+
+const $ = (s) => document.querySelector(s);
+const ui = () => U[state.universe];
+
+function tokens(){
+  const u = ui(), [P,S,G,F,Surf,T,T2,A] = u.p;
+  const onP = luminance(P) > .42 ? "#000" : "#fff";
+  const onA = luminance(A) > .42 ? "#000" : "#fff";
+  return {P,S,G,F,Surf,T,T2,A,onP,onA,u};
+}
+function luminance(hex){
+  const c = hex.replace('#',''); const v = [0,2,4].map(i => {
+    let x = parseInt(c.substr(i,2),16)/255; return x <= .03928 ? x/12.92 : Math.pow((x+.055)/1.055, 2.4);
+  });
+  return .2126*v[0] + .7152*v[1] + .0722*v[2];
+}
+function contrast(a,b){
+  const l1 = luminance(a), l2 = luminance(b);
+  return ((Math.max(l1,l2)+.05)/(Math.min(l1,l2)+.05));
+}
+
+function apply(){
+  const t = tokens(), u = t.u, r = u.cut !== undefined ? 0 : u.r;
+  const s = document.documentElement.style;
+  s.setProperty('--primary', t.P); s.setProperty('--secondary', t.S); s.setProperty('--glow', t.G);
+  s.setProperty('--background', t.F); s.setProperty('--surface', t.Surf); s.setProperty('--text', t.T);
+  s.setProperty('--text2', t.T2); s.setProperty('--accent', t.A);
+  s.setProperty('--on-primary', t.onP); s.setProperty('--on-accent', t.onA);
+  s.setProperty('--font-title', `"${u.title}"`); s.setProperty('--font-body', `"${u.body}"`);
+  s.setProperty('--title-scale', u.scale || 1); s.setProperty('--title-spacing', u.spacing || '0');
+
+  // Variation de formes selon la direction (règle demandée : rayons nuancés, pas un seul partout)
+  const card = state.variant === 'b' ? Math.max(0, r - 6) : r;
+  const btn  = state.variant === 'b' ? 4 : Math.round(r * .62);
+  s.setProperty('--r-card', card + 'px');
+  s.setProperty('--r-btn', Math.min(btn, 26) + 'px');
+  if (u.cut !== undefined && state.variant !== 'b') s.setProperty('--r-card', '0px');
+
+  const border = state.variant === 'a' ? hexA(t.P, .30) : hexA(t.P, .18);
+  s.setProperty('--border', border);
+  s.setProperty('--card-shadow', state.variant === 'a' ? `0 18px 40px -22px ${hexA(t.G,.85)}, inset 0 1px 0 ${hexA(t.T,.10)}` : 'none');
+  s.setProperty('--hero-shadow', state.variant === 'a' ? `0 26px 60px -30px ${hexA(t.P,.9)}` : 'none');
+  s.setProperty('--play-shadow', state.variant === 'a' ? `0 12px 34px -10px ${hexA(t.P,.85)}` : 'none');
+  s.setProperty('--card-sheen', state.variant === 'a'
+      ? `linear-gradient(160deg, ${hexA(t.T,.10)} 0%, transparent 34%), radial-gradient(120% 90% at 90% 0%, ${hexA(t.G,.20)}, transparent 60%)`
+      : 'none');
+  s.setProperty('--paper', `linear-gradient(150deg, ${hexA(t.P,.30)}, ${hexA(t.S,.18)} 45%, ${t.Surf})`);
+  s.setProperty('--paper-ornament', u.card === 'prism'
+      ? `conic-gradient(from 30deg at 50% 50%, ${hexA(t.P,.45)}, ${hexA(t.S,.35)}, ${hexA(t.A,.45)}, ${hexA(t.P,.45)})`
+      : `radial-gradient(circle at 50% 38%, ${hexA(t.G,.34)}, transparent 62%)`);
+  s.setProperty('--btn-tracking', state.variant === 'b' ? '.08em' : '0');
+  s.setProperty('--dur', (u.r > 18 ? 320 : 240) + 'ms');
+
+  document.body.classList.toggle('fx-off', !state.fx);
+  document.body.style.background = t.F;
+  $('#pill').textContent = u.name + ' · ' + VARIANTS.find(v => v.id === state.variant).code;
+  document.querySelectorAll('#universes .chip').forEach(c => c.classList.toggle('on', c.dataset.u === state.universe));
+  document.querySelectorAll('#variants .chip').forEach(c => c.classList.toggle('on', c.dataset.v === state.variant));
+  document.querySelectorAll('#screens button').forEach(b => b.classList.toggle('on', b.dataset.screen === state.screen));
+  $('#fx').classList.toggle('on', state.fx);
+  $('#contrast').classList.toggle('on', state.contrast);
+  $('#metrics').innerHTML = state.contrast ? metrics(t) : '';
+}
+function hexA(hex, a){
+  const c = hex.replace('#','');
+  return `rgba(${parseInt(c.substr(0,2),16)},${parseInt(c.substr(2,2),16)},${parseInt(c.substr(4,2),16)},${a})`;
+}
+function metrics(t){
+  const rows = [
+    ['Texte / fond', contrast(t.T, t.F), 4.5],
+    ['Texte2 / fond', contrast(t.T2, t.F), 3.0],
+    ['Texte2 / carte', contrast(t.T2, t.Surf), 3.0],
+    ['Étiquette accent / carte', contrast(t.A, t.Surf), 3.0],
+    ['Sur primaire', contrast(t.onP, t.P), 4.5],
+    ['Sur accent', contrast(t.onA, t.A), 4.0],
+  ];
+  return '<b>Contraste réel (WCAG)</b><br>' + rows.map(([n,v,min]) =>
+    `${v >= min ? '✅' : '❌'} ${n} : <b>${v.toFixed(2)}</b> (min ${min})`).join('<br>');
+}
+
+/* ---------------- écrans ---------------- */
+const ART = [
+  {t:"Velvet Rope", s:"Ariana Nova · 3:41"},
+  {t:"Nova Incident", s:"Kira & The Static · 4:12"},
+  {t:"Midnight Signal", s:"LUNE · 3:05"},
+  {t:"Golden Hour", s:"Selah · 2:58"},
+];
+
+function hero(){
+  const t = tokens();
+  const h = ART[0];
+  return `<div class="hero">
+    <div class="art art-${t.u.card}"></div>
+    <div class="meta">
+      <div class="tag">En lecture</div>
+      <h1 class="u-title" style="margin:6px 0 2px">${h.t}</h1>
+      <div class="muted">${h.s}</div>
+    </div>
+  </div>`;
+}
+function cardRow(a, i){
+  const t = tokens();
+  return `<div class="card"><div class="row">
+      <div style="width:52px;height:52px;border-radius:${i%2? '50%' : 'var(--r-btn)'};background:var(--paper);position:relative;overflow:hidden" class="art-${t.u.card}"></div>
+      <div style="flex:1;min-width:0">
+        <div class="u-body" style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.t}</div>
+        <div class="muted" style="margin-top:2px">${a.s}</div>
+      </div>
+      <div style="color:var(--text2);font-size:18px">⋯</div>
+    </div></div>`;
+}
+function grid(){
+  const t = tokens();
+  return `<div class="grid2">${["Nova Era","Static Bloom","Velours","Night Drive"].map((n,i) => `
+    <div class="card">
+      <div class="paper art-${t.u.card}"><div style="position:relative;font-family:var(--font-title);font-size:26px;color:var(--text);opacity:.9">${n.split(' ').map(w=>w[0]).join('')}</div></div>
+      <div style="padding:9px 11px 11px"><div class="u-body" style="font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n}</div>
+      <div class="muted" style="font-size:11.5px">${i+3} titres</div></div>
+    </div>`).join('')}</div>`;
+}
+function nowPlayingMini(){
+  const t = tokens();
+  return `<div class="card"><div class="row" style="gap:10px">
+    <div style="width:40px;height:40px;border-radius:var(--r-btn);background:var(--paper)" class="art-${t.u.card}"></div>
+    <div style="flex:1"><div style="font-size:13px;font-weight:700">${ART[0].t}</div><div class="bar" style="margin-top:6px"><i></i></div></div>
+    <div class="play" style="width:40px;height:40px">▶</div>
+  </div></div>`;
+}
+function playerBody(){
+  const t = tokens(), h = ART[0];
+  return `<div style="padding:0 20px">
+    <div class="card" style="padding:0;box-shadow:var(--hero-shadow)">
+      <div class="paper art-${t.u.card}" style="aspect-ratio:1"></div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-top:20px">
+      <div style="flex:1">
+        <h1 class="u-title">${h.t}</h1>
+        <div class="muted" style="margin-top:4px">Ariana Nova · Velvet Rope</div>
+      </div>
+      <button class="round-btn">♡</button>
+    </div>
+    <div style="margin-top:16px">
+      <div class="bar"><i></i></div>
+      <div class="progress" style="margin-top:8px"><span>1:32</span><span style="flex:1"></span><span>3:41</span></div>
+    </div>
+    <div class="transport">
+      <button style="font-size:20px">⤺</button>
+      <button style="font-size:26px">⏮</button>
+      <div class="play">▶</div>
+      <button style="font-size:26px">⏭</button>
+      <button style="font-size:20px">≡</button>
+    </div>
+    <div class="actions" style="margin-top:14px">
+      <button>♡<span>Favori</span></button><button>＋<span>Playlist</span></button>
+      <button>◫<span>Paroles</span></button><button>✎<span>Édition</span></button>
+    </div>
+    <div style="margin-top:26px;text-align:center">
+      <div class="muted" style="letter-spacing:.18em;text-transform:uppercase;font-size:10.5px">Paroles synchronisées</div>
+      <div class="u-title" style="font-size:calc(19px * var(--title-scale));opacity:.45;margin-top:16px">Et la nuit nous répond</div>
+      <div class="u-title" style="font-size:calc(22px * var(--title-scale));margin-top:14px;color:var(--accent)">Velvet rope, velvet secret</div>
+      <div class="u-title" style="font-size:calc(19px * var(--title-scale));opacity:.55;margin-top:14px">Tu traces encore mes contours</div>
+    </div>
+  </div>`;
+}
+
+function screenHome(){
+  $('#screen').className = '';
+  $('#screen').innerHTML = `<div class="decor">
+      <div class="glow"></div>${state.fx ? '<div class="grid"></div><div class="scan"></div><div class="beam"></div>' : ''}<div class="noise"></div>
+    </div><div class="wrap">
+    <header class="top">
+      <div style="flex:1">
+        <div class="tag">Bonsoir</div>
+        <h1 class="u-title" style="margin-top:4px">NovaListen</h1>
+      </div>
+      <button class="round-btn">⌕</button><button class="round-btn">☰</button>
+    </header>
+    <div class="shell">
+      ${hero()}
+      <div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+          <h2 class="u-title">Reprendre</h2><span class="muted" style="font-size:11.5px">Tout voir</span>
+        </div>
+        ${ART.slice(1).map(cardRow).join('<div style="height:8px"></div>')}
+      </div>
+      <div>
+        <h2 class="u-title" style="margin-bottom:10px">Ajouts récents</h2>
+        ${grid()}
+      </div>
+    </div></div>`;
+}
+function screenLibrary(){
+  $('#screen').className = '';
+  $('#screen').innerHTML = `<div class="decor"><div class="glow"></div><div class="noise"></div></div>
+  <div class="wrap">
+    <header class="top"><div style="flex:1"><div class="tag">Bibliothèque</div>
+      <h1 class="u-title" style="margin-top:4px">1 248 titres</h1></div>
+      <button class="round-btn">⌕</button></header>
+    <div class="shell">
+      <div class="seg" style="background:var(--surface);border-color:var(--border)">
+        <button class="on">Titres</button><button style="color:var(--text2)">Artistes</button>
+        <button style="color:var(--text2)">Albums</button><button style="color:var(--text2)">Playlists</button>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn row2">▶ Tout lire</button>
+        <button class="btn ghost row2">⤨ Aléatoire</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">${ART.concat(ART).map(cardRow).join('')}</div>
+    </div></div>`;
+}
+function screenPlayer(){
+  $('#screen').className = '';
+  $('#screen').innerHTML = `<div class="decor"><div class="glow"></div><div class="noise"></div></div>
+    <div class="wrap" style="padding-bottom:calc(120px + env(safe-area-inset-bottom))">
+      <header class="top"><button class="round-btn">⌄</button><div style="flex:1"></div><button class="round-btn">☰</button></header>
+      ${playerBody()}
+    </div>`;
+}
+function screenCompare(){
+  $('#screen').className = '';
+  const rows = Object.entries(U).map(([k,u]) => {
+    const [P,S,G,F,Surf,T,T2,A] = u.p;
+    return `<div class="mini" style="--surface:${Surf};--border:${hexA(P,.28)};--font-title:'${u.title}';--font-body:'${u.body}';--title-spacing:${u.spacing||'0'};--r-card:${u.r}px">
+      <div class="strip" style="--paper:${Surf}"><i style="background:${P}"></i><i style="background:${S}"></i><i style="background:${G}"></i><i style="background:${A}"></i><i style="background:${Surf}"></i><i style="background:${F}"></i></div>
+      <div class="info" style="background:${Surf};color:${T}">
+        <b>${u.name}</b>
+        <span class="score" style="color:${hexA(T,.75)}">texte ${contrast(T,F).toFixed(1)} · contour ${u.r===0?(u.cut?'coupé':'vif'):u.r+'px'}<br>${u.title} / ${u.body}</span>
+      </div>
+    </div>`;
+  }).join('');
+  $('#screen').innerHTML = `<div class="decor"><div class="noise"></div></div>
+    <div class="wrap" style="padding-bottom:120px">
+      <header class="top"><div style="flex:1"><div class="tag">Diagnostic</div>
+        <h1 class="u-title" style="margin-top:4px">Les 15 univers</h1></div></header>
+      <div class="compare-shell">${rows}</div>
+      <div class="note" style="padding:0 14px">Appuie sur un univers dans le panneau pour l'appliquer partout. Les ratios de contraste sont calculés, pas estimés : en dessous de 4.5 pour le texte, c'est un défaut réel.</div>
+    </div>`;
+}
+
+function render(){
+  const map = {home:screenHome, library:screenLibrary, player:screenPlayer, compare:screenCompare};
+  map[state.screen]();
+  apply();
+  $('#screen').scrollTop = 0;
+}
+
+/* ---------------- panneau ---------------- */
+$('#universes').innerHTML = Object.entries(U).map(([k,u]) =>
+  `<div class="chip" data-u="${k}"><i style="background:${u.p[0]};box-shadow:0 0 0 1px ${u.p[7]}"></i>${u.name}</div>`).join('');
+$('#variants').innerHTML = VARIANTS.map(v =>
+  `<div class="chip" data-v="${v.id}" title="${v.hint}"><b style="font-size:11px;opacity:.7">${v.code}</b>${v.label}</div>`).join('');
+
+document.querySelectorAll('#universes .chip').forEach(c => c.onclick = () => { transitionTo(() => { state.universe = c.dataset.u; }); });
+document.querySelectorAll('#variants .chip').forEach(c => c.onclick = () => { state.variant = c.dataset.v; render(); });
+document.querySelectorAll('#screens button').forEach(b => b.onclick = () => { transitionTo(() => { state.screen = b.dataset.screen; }); });
+$('#fx').onclick = () => { state.fx = !state.fx; render(); };
+$('#contrast').onclick = () => { state.contrast = !state.contrast; apply(); };
+$('#handle').onclick = () => $('#panel').classList.toggle('open');
+
+function transitionTo(mutate){
+  const el = $('#screen');
+  el.classList.add('fx-out');
+  setTimeout(() => { mutate(); render(); el.classList.remove('fx-out'); }, 160);
+}
+render();
+</script>
+</body>
+</html>
