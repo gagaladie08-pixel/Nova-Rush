@@ -1,0 +1,120 @@
+name: NovaListen Next — publier l’APK compilé
+
+# Publie la version inscrite dans app/build.gradle.kts à partir du dernier run vert du
+# workflow « APK et tests ». Aucune recompilation : on vérifie et on publie un binaire existant.
+# Déclenchement : commit contenant [publish-apk], ou manuel.
+
+on:
+  push:
+    branches: [arena/216bd0ac-nova-rush, arena/bc2e07e6-nova-rush]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: novalisten-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish-apk]') }}
+    name: Récupérer l’APK vérifié, contrôler la continuité, publier
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: build-tools;35.0.0
+
+      - name: Lire la version demandée
+        id: v
+        run: |
+          version="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)"
+          code="$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Version publiée::$version (code $code)"
+
+      - name: Trouver le dernier run vert de compilation sur cette branche
+        id: run
+        run: |
+          run_id="$(gh run list --workflow "novalisten-apk.yml" --branch "$GITHUB_REF_NAME" \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if [ -z "$run_id" ]; then echo "::error::Aucun run vert de compilation sur cette branche."; exit 1; fi
+          echo "id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Run source::$run_id"
+
+      - name: Récupérer l’artefact (aucune recompilation)
+        run: |
+          gh run download "${{ steps.run.outputs.id }}" --name "NovaListen-Next-${{ steps.v.outputs.version }}" --dir dist
+          ls -l dist
+
+      - name: Vérifier la clé, la signature réelle et la somme
+        run: |
+          python3 scripts/signing_policy.py verify-keystore
+          python3 scripts/signing_policy.py verify-apk "dist/NovaListen-Next-${{ steps.v.outputs.version }}.apk"
+          cd dist && sha256sum "NovaListen-Next-${{ steps.v.outputs.version }}.apk" | tee SHA256SUMS.txt
+
+      - name: Publier la version GitHub (lien direct pour le téléphone)
+        env:
+          TAG: novalisten-next-v${{ steps.v.outputs.version }}
+        run: |
+          notes=$(printf '%s\n' \
+            "**${{ steps.v.outputs.version }} — quinze univers, player immersif, file d’attente.**" \
+            '' \
+            '- Player plein écran : fond de pochette lisible (480 px, un seul flou), trois lignes en mode immersif.' \
+            '- Mini-player et notification : verre teinté, pochette du morceau en cours visible.' \
+            '- File d’attente : pochettes, morceau en cours marqué, réordonnancement par appui long.' \
+            '- Albums : un featuring ne crée plus un second album (cas « 143 »).' \
+            '- Même clé et même `com.novalisten.app.next` : installation par-dessus la version précédente.')
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "dist/NovaListen-Next-${{ steps.v.outputs.version }}.apk" dist/SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" "dist/NovaListen-Next-${{ steps.v.outputs.version }}.apk" dist/SHA256SUMS.txt \
+              --title "NovaListen Next ${{ steps.v.outputs.version }}" --notes "$notes" --prerelease
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq '.assets[] | "::notice title=APK::" + .name + " " + .browser_download_url'
+
+      - name: Enregistrer la livraison (dossier nommé par le SHA-256)
+        run: |
+          sha=$(sha256sum "dist/NovaListen-Next-${{ steps.v.outputs.version }}.apk" | cut -d' ' -f1)
+          python3 scripts/record_delivery.py "dist/NovaListen-Next-${{ steps.v.outputs.version }}.apk" \
+            --version-code "${{ steps.v.outputs.code }}" --version-name "${{ steps.v.outputs.version }}"
+          git config user.name "NovaListen delivery"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f "apk-livraison/$sha/NovaListen-Next-${{ steps.v.outputs.version }}.apk" "apk-livraison/$sha/manifeste.json"
+          git commit -m "delivery: signed NovaListen Next ${{ steps.v.outputs.version }} ($sha)"
+          git push
+          echo "::notice title=APK récupérable::apk-livraison/$sha/NovaListen-Next-${{ steps.v.outputs.version }}.apk"
+
+      - name: Tester la récupération par l’API (même chemin que le poste de travail)
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, subprocess
+          from pathlib import Path
+          repo = os.environ['GITHUB_REPOSITORY']
+          version = os.environ['VERSION']
+          name = f'NovaListen-Next-{version}.apk'
+          local = Path('dist') / name
+          sha = hashlib.sha256(local.read_bytes()).hexdigest()
+          base = f'apk-livraison/{sha}'
+          tree = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/git/trees/{base}?recursive=1']))
+          blob = next(e['sha'] for e in tree['tree'] if e['path'] == name)
+          body = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/git/blobs/{blob}']))
+          data = base64.b64decode(''.join(body['content'].split()))
+          assert hashlib.sha256(data).hexdigest() == sha, 'récupération API divergente'
+          assert len(data) == local.stat().st_size, 'taille divergente'
+          print('::notice title=Récupération API vérifiée::' + sha + ' ' + str(len(data)) + ' octets')
+          PY
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
