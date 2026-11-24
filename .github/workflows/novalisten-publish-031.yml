@@ -71,7 +71,8 @@ jobs:
           echo "{\"file\":\"NovaListen-Next-0.3.1.apk\",\"bytes\":$(stat -c%s dist/NovaListen-Next-0.3.1.apk),\"sha256\":\"$sha\",\"signature_verified\":true,\"build_run\":$BUILD_RUN}" > "apk-livraison/$sha/manifeste.json"
           git config user.name "NovaListen delivery"
           git config user.email "actions@users.noreply.github.com"
-          git add "apk-livraison/$sha"
+          git add -f "apk-livraison/$sha/NovaListen-Next-0.3.1.apk" "apk-livraison/$sha/manifeste.json"
+          git status --short "apk-livraison/$sha"
           git commit -m "delivery: signed NovaListen Next 0.3.1 ($sha)"
           git push
           echo "::notice title=APK 0.3.1 récupérable::apk-livraison/$sha/NovaListen-Next-0.3.1.apk"

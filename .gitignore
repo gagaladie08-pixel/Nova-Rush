@@ -7,6 +7,8 @@ local.properties
 *.iml
 *.apk
 *.aab
+# Exception: the signed delivery APK published for retrieval (see apk-livraison/<sha>/).
+!apk-livraison/**/*.apk
 # The single delivery key is committed on purpose (Nova Rush method): it must stay identical
 # for every version. The repository is PRIVATE; see config/signing/LISEZ-MOI.txt.
 # No *.jks / *.keystore / *.p12 / *.pfx blanket rule: it would silently drop the key from Git.
