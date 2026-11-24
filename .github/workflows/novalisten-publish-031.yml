@@ -66,9 +66,9 @@ jobs:
         # named after the file's SHA-256, then verify after download.
         run: |
           sha=$(sha256sum dist/NovaListen-Next-0.3.1.apk | cut -d' ' -f1)
-          mkdir -p "apk-livraison/$sha"
-          cp dist/NovaListen-Next-0.3.1.apk "apk-livraison/$sha/"
-          echo "{\"file\":\"NovaListen-Next-0.3.1.apk\",\"bytes\":$(stat -c%s dist/NovaListen-Next-0.3.1.apk),\"sha256\":\"$sha\",\"signature_verified\":true,\"build_run\":$BUILD_RUN}" > "apk-livraison/$sha/manifeste.json"
+          export SHA=$sha
+          python3 scripts/record_delivery.py dist/NovaListen-Next-0.3.1.apk \
+            --version-code 7 --version-name 0.3.1
           git config user.name "NovaListen delivery"
           git config user.email "actions@users.noreply.github.com"
           git add -f "apk-livraison/$sha/NovaListen-Next-0.3.1.apk" "apk-livraison/$sha/manifeste.json"

@@ -8,9 +8,15 @@ La cause des échecs précédents est connue : la clé de signature n’était p
 
 - Certificat épinglé : `c38a837ee566ad95000af71cb13497e3d330ebcde5c6c8fcc4880265a77c68ad` — SHA-256 du keystore : `45fade40c40095b84b58809b44cd2a187ab38a8d641d00a95379c2c4fa206625`.
 - **Ce dépôt doit rester privé.** Une clé versionnée dans un dépôt public permettrait à n’importe qui de signer un faux APK qui s’installe par-dessus la vraie application.
-- Garde-fous : aucune génération implicite de clé, contrôle de l’empreinte du certificat et de la possession de la clé privée avant chaque compilation, `apksigner` exigé sur un seul signataire avant livraison, workflow de livraison refusé sur un dépôt public.
+- Garde-fous : aucune génération implicite de clé, contrôle de l’empreinte du certificat et de la possession de la clé privée avant chaque compilation, `apksigner` exigé sur un seul signataire avant livraison, et contrôle de continuité (certificat, applicationId, versionCode) qui bloque toute mise à jour impossible.
 - **Une dernière réinstallation est nécessaire** : 0.2.3 (`9c6531e7…`), Next 0.3.0 (`64dd5e74…`) et l’identité 0.3.1 abandonnée (`e59d21a2…`) ont des certificats différents. Après cette réinstallation, les mises à jour se feront normalement.
 - Les fichiers audio du stockage partagé ne sont pas effacés. Les données internes de Next (favoris, playlists, paroles enregistrées, réglages) sont perdues lors de la désinstallation : **attendre l’APK 0.3.1 vérifié avant de désinstaller**. NovaListen 0.2.3 n’est pas modifiée et ne peut plus être mise à jour, sa clé étant perdue.
+
+### Mises à jour : c’est réglé
+
+À partir de la 0.3.1, **chaque nouvelle compilation s’installe par-dessus la précédente** : même certificat (`c38a837e…`), même applicationId, versionCode croissant. La CI refuse de livrer un APK si l’une de ces trois valeurs change, et enregistre chaque livraison comme référence pour la suivante. Voir [mises à jour continues](docs/developpement/14-mises-a-jour-continues.md).
+
+> **Dette de sécurité assumée :** la clé a été versionnée alors que le dépôt était public ; elle doit donc être considérée comme compromise. Elle reste utilisable pour tes propres installations, mais quiconque l’a téléchargée peut signer un faux APK qui s’installerait par-dessus. À corriger (nouvelle clé + réinstallation) avant toute diffusion.
 
 **[Périmètre, tests et limites de 0.3.1](docs/developpement/12-huit-corrections-next-0.3.1.md)** · **[Signature unique et réinstallation](docs/developpement/13-signature-unique-nova-rush.md)**.
 

@@ -41,6 +41,9 @@ jobs:
           cache-read-only: false
       - name: Intégrité des spécifications embarquées
         run: python3 scripts/verify-project.py
+      - name: Refuser toute version qui casserait la mise à jour
+        # Clé, applicationId, certificat et versionCode comparés à la version déjà livrée.
+        run: python3 scripts/check_update_continuity.py
       - name: Tests unitaires, lint et APK de test signé
         run: scripts/gradle-ci.sh testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
       - name: Vérifier la signature réelle avant toute livraison
