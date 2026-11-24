@@ -183,7 +183,8 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
         val raw = track.albumArtist.ifBlank { track.artist }
         return "${track.albumId}:${ArtistCredits.albumHead(raw).normalized()}"
     }
-    val sources = eligible.groupBy { it.editionKey to albumIdentity(it) }.flatMap { (_, songs) ->
+    val sources = eligible.groupBy { it.editionKey to albumIdentity(it) }.flatMap { (identity, songs) ->
+        val id = identity.first
         val identities = songs.mapNotNull(::nativeAlbumArtists).distinct()
         if (identities.size <= 1) listOf(id to songs)
         else songs.groupBy { nativeAlbumArtists(it) ?: "unidentified:${it.id}" }.map { (artist, files) -> "$id:album-artists:$artist" to files }
