@@ -67,7 +67,7 @@ data class ThemeSpec(
             "african" -> CurveReveal.DIAGONAL
             else -> CurveReveal.ALTERNATE
         },
-        breath = id !in listOf("villain", "chaos", "venom"),
+        breathe = id !in listOf("villain", "chaos", "venom"),
     ),
 ) {
     val primary get() = color(0)
@@ -154,7 +154,7 @@ val themeCatalog = listOf(
     ThemeSpec("solara", "Solara", listOf("#FF6B35", "#C4622D", "#FFA500", "#1A0A00", "#2D1200", "#FFF3E0", "#D4A056", "#FFD700"), "dmserifdisplay", "poppins", 20, IconStyle.SOLAR, "solara", 300, 10f,
         glyphs = GlyphFamily.RAY, titleScale = 1.08f),
     ThemeSpec("chaos", "Chaos Born", listOf("#C0C0C0", "#1A1A1A", "#E8E8E8", "#050505", "#111111", "#F0F0F0", "#909090", "#DFDFDF"), "syne", "unicaone", 2, IconStyle.METAL, "chaos", null, 3f,
-        glyphs = GlyphFamily.RIVET, titleScale = 1.12f, titleTracking = .03f, motion = UniverseMotion(CurveReveal.JITTER, breath = false)),
+        glyphs = GlyphFamily.RIVET, titleScale = 1.12f, titleTracking = .03f, motion = UniverseMotion(CurveReveal.JITTER, breathe = false)),
     ThemeSpec("survivor", "Survivor", listOf("#F77FB4", "#5BCEFA", "#9B4F96", "#080808", "#121018", "#FFFFFF", "#FFB7D5", "#26CEAA"), "righteous", "nunito", 16, IconStyle.PRISM, "survivor", null, 6f,
         glyphs = GlyphFamily.PRIDE, titleScale = 1.02f, titleTracking = .02f, motion = UniverseMotion(CurveReveal.RIBBON)),
     ThemeSpec("rainbow", "Rainbow Pop", listOf("#FF4DA6", "#4D79FF", "#9B4DFF", "#0A0010", "#100020", "#FFFFFF", "#FFB3D9", "#FFD700"), "bungee", "baloo2", 22, IconStyle.CRYSTAL, "rainbow", 250, 12f,
