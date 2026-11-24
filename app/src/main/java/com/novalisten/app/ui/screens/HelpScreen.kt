@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 import com.novalisten.app.ui.components.Notice
 import com.novalisten.app.ui.components.PageTitle
 import com.novalisten.app.ui.components.SectionHeader
-import com.novalisten.app.ui.components.NovaIcon
+import com.novalisten.app.ui.theme.NovaIcon
 
 /** Explanations live here, rather than between the user's music and its controls. */
 @Composable

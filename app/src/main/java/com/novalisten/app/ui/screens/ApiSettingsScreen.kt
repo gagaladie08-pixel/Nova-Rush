@@ -32,6 +32,7 @@ import com.novalisten.app.enrichment.*
 import com.novalisten.app.ui.components.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.novalisten.app.ui.theme.NovaIcon
 
 @Composable
 fun ApiSettingsScreen(vm: MainViewModel, onBack: () -> Unit) {

@@ -38,6 +38,7 @@ import com.novalisten.app.ui.theme.*
 import com.novalisten.app.ui.gestures.LibrarySwipeAction
 import com.novalisten.app.ui.gestures.librarySwipeAction
 import kotlin.math.abs
+import com.novalisten.app.ui.theme.NovaIcon
 
 @Composable
 fun NovaCard(modifier: Modifier = Modifier, selected: Boolean = false, content: @Composable ColumnScope.() -> Unit) {

@@ -23,6 +23,7 @@ import com.novalisten.app.MainViewModel
 import com.novalisten.app.PlaybackUi
 import com.novalisten.app.data.*
 import com.novalisten.app.ui.components.*
+import com.novalisten.app.ui.theme.NovaIcon
 
 @Composable
 fun PlaylistIndex(tracks: List<Track>, data: LocalData, vm: MainViewModel, onOpen: (String) -> Unit, onCreate: () -> Unit) {

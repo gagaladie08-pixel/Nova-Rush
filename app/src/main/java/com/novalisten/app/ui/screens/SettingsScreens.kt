@@ -17,6 +17,7 @@ import com.novalisten.app.MainViewModel
 import com.novalisten.app.data.*
 import com.novalisten.app.ui.components.*
 import com.novalisten.app.ui.theme.LocalUniverse
+import com.novalisten.app.ui.theme.NovaIcon
 
 @Composable
 fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onAppearance: () -> Unit, onHidden: () -> Unit, onHistory: () -> Unit, onSystem: () -> Unit, onNotifications: () -> Unit, onApi: () -> Unit, onHelp: () -> Unit) {

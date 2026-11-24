@@ -31,6 +31,7 @@ import com.novalisten.app.MainViewModel
 import com.novalisten.app.PlaybackUi
 import com.novalisten.app.data.*
 import com.novalisten.app.ui.components.*
+import com.novalisten.app.ui.theme.NovaIcon
 
 @Composable
 fun CatalogScreen(artists: Boolean, index: CatalogSnapshot, data: LocalData, vm: MainViewModel, onArtist: (String) -> Unit, onAlbum: (String) -> Unit, onAdd: (List<Track>) -> Unit, active: Boolean = true) {

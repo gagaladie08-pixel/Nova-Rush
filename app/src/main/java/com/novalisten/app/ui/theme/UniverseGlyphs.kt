@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
-import com.novalisten.app.ui.components.NovaIcon
+import com.novalisten.app.ui.theme.NovaIcon
 
 /**
  * Icône de l'univers : le sens et l'action ne changent jamais, seul le dessin change.

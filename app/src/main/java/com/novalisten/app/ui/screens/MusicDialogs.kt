@@ -28,6 +28,7 @@ import com.novalisten.app.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.novalisten.app.ui.theme.NovaIcon
 
 @Composable
 fun TrackMenu(track: Track, inPlaylist: Boolean, vm: MainViewModel, onDismiss: () -> Unit, onInfo: () -> Unit, onAdd: () -> Unit, onArtist: () -> Unit, onAlbum: () -> Unit, onDelete: () -> Unit, onRemove: () -> Unit, onOnlineLyrics: () -> Unit, onCatalog: () -> Unit, onCover: () -> Unit, hasLyrics: Boolean, onTranslateLyrics: () -> Unit, onEditLyrics: () -> Unit, onLyricsInfo: () -> Unit, onCorrectArtists: () -> Unit = {}) {

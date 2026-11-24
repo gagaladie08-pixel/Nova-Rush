@@ -25,6 +25,7 @@ import com.novalisten.app.enrichment.AutoLyricState
 import com.novalisten.app.enrichment.AutoLyricStatus
 import com.novalisten.app.ui.theme.LocalUniverse
 import kotlin.math.abs
+import com.novalisten.app.ui.theme.NovaIcon
 
 /** Padding lets the first and last rows reach the same center as all the other rows. */
 private suspend fun LazyListState.centerLyric(index: Int) {

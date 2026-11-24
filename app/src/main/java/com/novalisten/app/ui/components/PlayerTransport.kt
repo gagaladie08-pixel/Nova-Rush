@@ -16,6 +16,7 @@ import androidx.media3.common.Player
 import com.novalisten.app.PlaybackUi
 import com.novalisten.app.data.durationLabel
 import com.novalisten.app.ui.theme.LocalUniverse
+import com.novalisten.app.ui.theme.NovaIcon
 
 /** Playback controls keep their touch targets; optional content yields space, never these buttons. */
 @Composable

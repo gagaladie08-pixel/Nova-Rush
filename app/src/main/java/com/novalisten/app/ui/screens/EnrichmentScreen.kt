@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import com.novalisten.app.ui.theme.NovaIcon
 
 enum class EnrichmentMode(val label: String) { LYRICS("Rechercher des paroles"), CATALOG("Comparer les métadonnées"), BIOGRAPHY("Biographie en ligne"), PHOTOS("Photos d’artiste"), COVERS("Pochettes en ligne"), TRANSLATE("Traduire les paroles") }
 data class EnrichmentRequest(val mode: EnrichmentMode, val track: Track? = null, val artistId: String = "", val name: String = "", val albumKey: String = "")

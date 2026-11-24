@@ -19,6 +19,7 @@ import com.novalisten.app.MainViewModel
 import com.novalisten.app.PlaybackUi
 import com.novalisten.app.data.*
 import com.novalisten.app.ui.components.*
+import com.novalisten.app.ui.theme.NovaIcon
 
 data class TrackActions(
     val menu: (Track) -> Unit,

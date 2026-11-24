@@ -20,6 +20,7 @@ import com.novalisten.app.data.*
 import com.novalisten.app.ui.components.*
 import com.novalisten.app.ui.theme.LocalUniverse
 import java.time.LocalDate
+import com.novalisten.app.ui.theme.NovaIcon
 
 @Composable
 fun HomeScreen(tracks: List<Track>, data: LocalData, vm: MainViewModel, onLibrary: () -> Unit, onFavorites: () -> Unit, onHistory: () -> Unit, onPlaylist: (String) -> Unit) {
