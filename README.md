@@ -11,13 +11,13 @@ Le lot corrige les crédits de collaborations, partage l’index du catalogue ho
 
 **288 tests JVM/Robolectric + 49 tests Python réussis**, compilation Next et tests Android réussie, lint **zéro erreur / 43 avertissements** : [validation 45389015009](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/45389015009), code `f5fa872`. Les rendus API 28/35 sous Robolectric ne remplacent pas un essai sur téléphone ; la suite instrumentée est compilée, pas exécutée.
 
-**[Périmètre, confidentialité, tests et limites de 0.3.1](docs/developpement/12-huit-corrections-next-0.3.1.md).** Version source `0.3.1 / code 7` ; même identité et politique de clé Next. Aucun nouvel APK signé/publication 0.3.1 dans ce lot : **le lien ci-dessous reste 0.3.0 et ne contient pas ces huit corrections**. Aucune modification de 0.2.3 ni nouvelle clé.
+**[Périmètre, confidentialité, tests et limites de 0.3.1](docs/developpement/12-huit-corrections-next-0.3.1.md).** Version source `0.3.1 / code 7` ; même identifiant Next. Aucun nouvel APK signé/publication 0.3.1 dans ce lot : **le lien ci-dessous reste 0.3.0 et ne contient pas ces huit corrections**. Aucune modification de 0.2.3 ; voir ci-dessous l’état ultérieur de la nouvelle signature autorisée.
 
 ## Continuité de Next — réinstallation autorisée, coffre en préparation
 
-**La clé Next 0.3.0 n’est plus accessible dans l’espace actuel.** L’utilisateur a autorisé une **nouvelle signature pour réinstaller Next uniquement**, après avertissement de la perte des données internes, et choisi les **secrets chiffrés du dépôt + une copie privée indépendante**. Aucun changement pour 0.2.3. **Aucune nouvelle clé générée pour le moment** : l’accès aux secrets est bloqué et le stockage doit d’abord être rendu utilisable.
+**La clé Next 0.3.0 n’est plus accessible dans l’espace actuel.** L’utilisateur a autorisé une **nouvelle signature pour réinstaller Next uniquement**, après avertissement de la perte des données internes, et choisi les **secrets chiffrés du dépôt + une copie privée indépendante**. Une nouvelle clé stable a été créée après confirmation de l’accès propriétaire à la page des secrets. Sa récupération locale est vérifiée ; **son stockage distant et la copie indépendante restent à confirmer**, donc aucun APK signé 0.3.1 n’est remis. Aucun changement pour 0.2.3 ou les téléchargements 0.3.0.
 
-Le contrôle de restauration du coffre est préparé : **80 tests Python de signature réussis localement**, dont 31 nouveaux tests synthétiques, sans clé réelle générée. Cela ne vaut pas encore preuve de récupération depuis Actions ni nouveau livrable APK. [État précis, procédure et garde-fous](docs/developpement/13-stockage-durable-cle-next.md).
+Nouvelle politique publique `config/next-signing-policy.json`, distincte des deux politiques historiques inchangées. **97 tests Python de signature réussis localement**, dont 48 nouveaux tests synthétiques. Le provisionnement ne peut pas se répéter ; une clé absente ne déclenche aucune régénération. [État précis, empreintes et contrôles manquants](docs/developpement/13-stockage-durable-cle-next.md).
 
 ## APK 0.3.0 — NovaListen Next, installation parallèle
 
@@ -57,7 +57,7 @@ Ce sont des essais ciblés d’installation/démarrage, **pas la suite instrumen
 
 Pour l’identifiant historique `com.novalisten.app`, le certificat de **0.2.3 reste obligatoire** : sa chaîne de livraison bloque sans la clé privée originale, toujours non retrouvée. Aucune substitution ou désinstallation n’est effectuée. [Audit et blocage historique](docs/developpement/09-continuite-signature.md).
 
-**Next est une identité distincte**, autorisée ensuite pour l’installation parallèle. Son historique 0.3.0 (signature locale et sauvegarde vérifiée à la livraison) est décrit dans la [procédure initiale](docs/developpement/11-installation-parallele-et-cle-next.md). Cette clé n’est plus accessible : une réinstallation de Next avec une nouvelle signature et un coffre Actions est désormais autorisée, mais **aucune nouvelle clé n’est encore provisionnée**. [Conservation durable et état réel](docs/developpement/13-stockage-durable-cle-next.md). Aucune clé Next ne permet de mettre à jour 0.2.3.
+**Next est une identité distincte**, autorisée ensuite pour l’installation parallèle. Son historique 0.3.0 (signature locale et sauvegarde vérifiée à la livraison) est décrit dans la [procédure initiale](docs/developpement/11-installation-parallele-et-cle-next.md). Cette clé n’est plus accessible. Une nouvelle clé a été créée après autorisation de réinstaller Next, avec une politique distincte ; **la livraison reste bloquée tant que sa conservation hors session n’est pas vérifiée**. [Conservation durable et état réel](docs/developpement/13-stockage-durable-cle-next.md). Aucune clé Next ne permet de mettre à jour 0.2.3.
 
 ## Historique 0.2.2 — swipes et commandes plein écran
 

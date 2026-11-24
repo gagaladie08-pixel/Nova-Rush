@@ -1,0 +1,14 @@
+{
+  "application_id": "com.novalisten.app.next",
+  "label": "NovaListen Next",
+  "first_version": "0.3.1",
+  "certificate_sha256": "e59d21a28a6a32f335248e742a319e9e82a1b871d60cd2d3f703f6dc1798644f",
+  "key_alias": "novalisten-next",
+  "keystore_type": "PKCS12",
+  "key_algorithm": "RSA-3072",
+  "automatic_key_generation": false,
+  "private_key_in_ci": true,
+  "storage": "github-actions-secret-and-independent-owner-backup",
+  "requires_reinstall_from_0_3_0": true,
+  "previous_certificate_sha256": "64dd5e7487e743a4af30a8a7c7f045251e54730d01009295783d98ace87fde17"
+}

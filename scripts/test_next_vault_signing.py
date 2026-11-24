@@ -15,6 +15,7 @@ import warnings
 import zipfile
 
 import next_key_vault as vault
+import next_signing_identity as identity
 import parallel_signing as signing
 
 
@@ -26,19 +27,26 @@ class NextVaultSigningTest(unittest.TestCase):
         (self.root / 'config').mkdir()
         self.private_root = self.root / 'private-signing'
         self.private = self.private_root / 'novalisten-next'
-        self.policy_path = self.root / 'config/parallel-signing-policy.json'
+        self.policy_path = self.root / 'config/next-signing-policy.json'
+        self.old_policy_path = self.root / 'config/parallel-signing-policy.json'
         self.custody_path = self.root / 'config/next-signing-custody.json'
         self.policy = {'application_id': signing.APPLICATION_ID, 'label': signing.LABEL,
                        'certificate_sha256': hashlib.sha256(b'synthetic-certificate').hexdigest(),
-                       'key_alias': signing.ALIAS, 'private_key_in_ci': True}
+                       'key_alias': signing.ALIAS, 'private_key_in_ci': True,
+                       'keystore_type': 'PKCS12', 'key_algorithm': 'RSA-3072', 'first_version': '0.3.1',
+                       'automatic_key_generation': False, 'storage': identity.STORAGE,
+                       'requires_reinstall_from_0_3_0': True, 'previous_certificate_sha256': '1' * 64}
         self.policy_path.write_text(json.dumps(self.policy))
+        self.old_policy_path.write_text(json.dumps({'application_id': signing.APPLICATION_ID,
+            'label': signing.LABEL, 'key_alias': signing.ALIAS, 'certificate_sha256': '1' * 64}))
         (self.root / 'config/signing-policy.json').write_text(json.dumps({'certificate_sha256': '9' * 64}))
-        paths = {'ROOT': self.root, 'POLICY_PATH': self.policy_path,
+        paths = {'ROOT': self.root, 'POLICY_PATH': self.old_policy_path,
                  'PRIVATE_ROOT': self.private_root, 'PRIVATE': self.private,
                  'KEY': self.private / 'novalisten-next.p12', 'PASSWORD': self.private / 'password.txt',
                  'BACKUP': self.private_root / 'backup.zip',
                  'ACKNOWLEDGEMENT': self.private / 'owner-backup-confirmed.json'}
         patches = [patch.multiple(signing, **paths), patch.object(vault, 'CUSTODY_PATH', self.custody_path),
+                   patch.multiple(identity, ROOT=self.root, POLICY_PATH=self.policy_path),
                    patch.dict(os.environ, {}, clear=True)]
         for item in patches:
             item.start(); self.addCleanup(item.stop)

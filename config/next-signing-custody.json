@@ -3,8 +3,8 @@
   "application_id": "com.novalisten.app.next",
   "repository": "gagaladie08-pixel/Nova-Rush",
   "secret_name": "NOVALISTEN_NEXT_SIGNING_BACKUP_B64",
-  "status": "pending_secret_access",
-  "certificate_sha256": null,
-  "backup_sha256": null,
+  "status": "awaiting_remote_verification",
+  "certificate_sha256": "e59d21a28a6a32f335248e742a319e9e82a1b871d60cd2d3f703f6dc1798644f",
+  "backup_sha256": "2365a6d5713021eb0a7bfb3d668ea9044edf204772e8ef6a4ca36b6e2efe33bd",
   "owner_recovery_copy_confirmed": false
 }

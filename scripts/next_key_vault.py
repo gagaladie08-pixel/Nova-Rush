@@ -21,6 +21,7 @@ import tempfile
 import zipfile
 
 import parallel_signing as signing
+import next_signing_identity as identity
 
 SECRET_NAME = 'NOVALISTEN_NEXT_SIGNING_BACKUP_B64'
 REPOSITORY = 'gagaladie08-pixel/Nova-Rush'
@@ -42,7 +43,7 @@ class VaultError(Exception):
 
 def load_configuration():
     try:
-        policy = signing.load_policy()
+        policy = identity.load_policy()
         custody = json.loads(CUSTODY_PATH.read_text())
     except Exception:
         raise VaultError('Politique Next ou registre de conservation absent/invalide.') from None
