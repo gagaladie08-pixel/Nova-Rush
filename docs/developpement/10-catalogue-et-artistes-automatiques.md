@@ -1,5 +1,7 @@
 # Sources 0.3.0 — catalogue, artistes automatiques et ouverture du lecteur
 
+> **Historique du lot 0.3.0.** Les sources 0.3.1 élargissent notamment l’automatisme artistes à la bibliothèque progressive et corrigent catalogue/lecteur : voir [les huit corrections et leur confidentialité](12-huit-corrections-next-0.3.1.md). Les limites et résultats ci-dessous restent ceux de 0.3.0, pas les vérifications de ce nouveau lot.
+
 ## État de livraison
 
 Lot autorisé par **« Je valide tout maintenant code les »**, implémenté après 0.2.3. La mise à jour de l’identifiant historique reste bloquée : sa clé originale n’est toujours pas retrouvée et aucune clé n’est substituée. **Après choix explicite de l’installation parallèle, un APK distinct NovaListen Next 0.3.0 est désormais signé et remis**, sans remplacer 0.2.3. Nouvelle identité, sauvegarde privée confirmée, binaire exact et essais de coexistence Android 10/15 : voir [l’installation parallèle](11-installation-parallele-et-cle-next.md). Les résultats ci-dessous décrivent le lot source et ses vérifications antérieures ; ceux du binaire Next sont détaillés dans cette fiche dédiée.

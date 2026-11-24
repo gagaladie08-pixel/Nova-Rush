@@ -5,6 +5,14 @@ Lecteur musical Android local, utilisable hors ligne. **Nouveau : NovaListen Nex
 Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
 
 
+## Sources 0.3.1 — huit corrections, pas encore un nouvel APK
+
+Le lot corrige les crédits de collaborations, partage l’index du catalogue hors interface, regroupe les fragments d’albums compatibles et complète progressivement les artistes de la bibliothèque, **même jamais écoutés**, selon les options réseau. Les actions du lecteur sont rapprochées de la progression, le doublon immersif retiré, les paroles centrées sur un fond de pochette assombri/flouté et les explications regroupées dans Informations et aide.
+
+**288 tests JVM/Robolectric + 49 tests Python réussis**, compilation Next et tests Android réussie, lint **zéro erreur / 43 avertissements** : [validation 45389015009](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/45389015009), code `f5fa872`. Les rendus API 28/35 sous Robolectric ne remplacent pas un essai sur téléphone ; la suite instrumentée est compilée, pas exécutée.
+
+**[Périmètre, confidentialité, tests et limites de 0.3.1](docs/developpement/12-huit-corrections-next-0.3.1.md).** Version source `0.3.1 / code 7` ; même identité et politique de clé Next. Aucun nouvel APK signé/publication 0.3.1 dans ce lot : **le lien ci-dessous reste 0.3.0 et ne contient pas ces huit corrections**. Aucune modification de 0.2.3 ni nouvelle clé.
+
 ## APK 0.3.0 — NovaListen Next, installation parallèle
 
 **[Télécharger NovaListen Next 0.3.0 — APK signé (89,8 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.3.0/NovaListen-Next-0.3.0-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.3.0/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-next-v0.3.0). Exactement le binaire signé et testé, publié sans recompilation ni nouvelle signature.
@@ -15,7 +23,7 @@ Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’
 - SHA-256 du fichier : `3a15fc41a8beffcb02c262b6759867df6c4113262f3812a99811fce6f01c52ec`.
 - **[Binaire exact, récupération par API, signature, sauvegarde et preuves](docs/developpement/11-installation-parallele-et-cle-next.md)**. Le fichier signé est remis dans la session ; les liens de téléchargement 0.2.3 et antérieurs ci-dessous restent historiques, pas des liens vers Next.
 
-## Sources 0.3.0 — nouveau lot
+## Sources 0.3.0 — historique du binaire publié
 
 - Artistes et collaborations séparés, corrections locales et préservation des anciens profils.
 - Biographies FR et portraits pendant l’écoute, lien d’identité au morceau local puis vérification croisée et droits avant attribution automatique ; choix manuels prioritaires, réglages indépendants. Cascade photo conditionnelle avec raisons des sources sautées, résultats progressifs et cache partagé.
@@ -118,16 +126,17 @@ Le dépôt étant public, les sources et artefacts Actions sont publics. **Aucun
 
 ### Développement local
 
-Installer JDK 17 et le SDK Android 35, renseigner `ANDROID_HOME` ou `local.properties`, puis :
+Installer JDK 17 et le SDK Android 35, renseigner `ANDROID_HOME` ou `local.properties`, puis vérifier sans générer de binaire ni clé :
 
 ```sh
 python3 scripts/verify-project.py
-./gradlew testDebugUnitTest lintDebug assembleDebug
-# Avec un émulateur/appareil Android démarré :
-./gradlew connectedDebugAndroidTest
+python3 -m unittest discover -s scripts -p 'test_*signing*.py'
+NOVALISTEN_VERIFY_SOURCES=true ./gradlew -PnovalistenParallel=true testDebugUnitTest compileDebugAndroidTestKotlin lintDebug
 ```
 
-Le résultat local est `app/build/outputs/apk/debug/app-debug.apk`. **Sans la clé originale et le contrôle de signature, ce build local est réservé au développement et ne doit pas être livré comme mise à jour compatible de 0.2.3.** Les téléchargements de dépendances ont lieu sur la machine de compilation, **pas au lancement de l’application**.
+Les tests JVM comprennent SQLite et des rendus Compose sous Robolectric ; `compileDebugAndroidTestKotlin` **compile**, mais n’exécute pas, la suite instrumentée sur appareil. Les dépendances sont téléchargées sur la machine de compilation, pas au lancement de l’application.
+
+Le mode sources refuse assemblage, signature et installation. L’identité historique exige toujours sa clé originale 0.2.3. La préparation non signée Next, sa signature séparée avec **la clé Next existante** et les validations nécessaires sont décrites dans [la procédure de continuité Next](docs/developpement/11-installation-parallele-et-cle-next.md). Aucun keystore de remplacement ne doit être créé pour contourner ces protections.
 
 ## Socle local conservé de 0.1
 
@@ -157,7 +166,7 @@ Ce n’est pas l’ensemble des 21 fiches de conception en une version. Voir [le
 
 ## Confidentialité
 
-Les sources actuelles demandent **Internet** et utilisent HTTPS uniquement. Le scan et la lecture restent locaux ; aucune collection, musique ou historique n’est envoyé automatiquement. Les paroles automatiques transmettent seulement titre/artiste/album/durée du morceau réellement écouté si aucune VO n’est sauvegardée et que l’option est active. Les automatismes artistes 0.3.0 transmettent uniquement les noms/identifiants des artistes du morceau écouté lorsque des informations manquent, selon leurs réglages ; les autres recherches transmettent les champs affichés seulement sur commande. Azure envoie la VO seulement après un consentement dédié. **ML Kit est facultatif mais ses diagnostics Google ne sont pas une promesse de zéro réseau** ; son initialisation automatique au lancement est retirée. Pas de compte obligatoire, publicité, microphone ou localisation.
+Les sources actuelles demandent **Internet** et utilisent HTTPS uniquement. Le scan et la lecture restent locaux ; aucun audio, fichier, URI locale ou historique n’est envoyé. Les paroles automatiques transmettent seulement titre/artiste/album/durée du morceau réellement écouté si aucune VO n’est sauvegardée et que l’option est active. **À partir des sources 0.3.1, les artistes de la bibliothèque peuvent être recherchés progressivement même sans écoute**, selon les options indépendantes de biographies et portraits : noms/identifiants et, si nécessaire pour l’identité, titre/album/durée d’un morceau de contexte sont transmis aux sources admissibles. Cela peut donc décrire progressivement une partie de la collection aux fournisseurs ; ce n’est pas limité au morceau joué ni un envoi de toute la liste en une seule fois. Les deux options peuvent être désactivées dans API et clés, sans supprimer les contenus locaux déjà sauvegardés. Les recherches restantes restent volontaires. Azure envoie la VO seulement après un consentement dédié. **ML Kit est facultatif mais ses diagnostics Google ne sont pas une promesse de zéro réseau** ; son initialisation automatique au lancement est retirée. Pas de compte obligatoire, publicité, microphone ou localisation.
 
 Les fichiers audio ne sont pas modifiés par les recherches, traductions, favoris, thèmes, playlists, pochettes d’affichage ou masquages. Seule l’action explicite **Effacer** peut supprimer de l’audio. Les images choisies, textes et crédits sont conservés dans le stockage privé. Sauvegarde/transfert automatique Android désactivés. Les secrets sont chiffrés sur le téléphone, jamais intégrés au dépôt, à l’APK ou aux workflows.
 
