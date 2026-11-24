@@ -191,7 +191,7 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
     }
     val editions = sources.map { (id, songs) ->
         val tagged = songs.map { it.releaseKind }.filter { it != ReleaseKind.UNKNOWN }.distinct().singleOrNull() ?: ReleaseKind.UNKNOWN
-        val artist = songs.first().catalogAlbumArtist
+        val artist = ArtistCredits.albumHead(songs.first().catalogAlbumArtist)
         val nativeCredits = songs.map { it.albumCredits }.filter { it.isNotEmpty() }.distinct().singleOrNull()
         AlbumEdition(id, CatalogText.display(songs.first().album), CatalogText.display(artist),
             songs.sortedWith(compareBy<Track> { it.discNumber }.thenBy { it.number }.thenBy { it.title.normalized() }.thenBy { it.id }),
