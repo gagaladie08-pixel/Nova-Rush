@@ -10,7 +10,7 @@ fun artistRequestsForTrack(track: Track, local: LocalData, groups: List<ArtistGr
     return groups.filter { group -> group.tracks.any { it.id == track.id } }.map { group ->
         // A MBID inferred from a different file with the same name is not local evidence for THIS file.
         val chosen = local.identities["artist:${group.id}"]
-            ?: if (group.inheritLegacy) local.identities["artist:${group.legacyId}"] else null
+            ?: if (group.inheritLegacy) group.legacyIds.mapNotNull { local.identities["artist:$it"] }.distinct().singleOrNull() else null
         val fromThisFile = native.filter { it.name.artistNameKey() == group.name.artistNameKey() || (validMusicId(it.mbid) && it.mbid.equals(group.mbid, true)) }
             .map { it.mbid }.filter(::validMusicId).distinct().singleOrNull()
         ArtistRequest(group.id, group.name, chosen?.takeIf(::validMusicId) ?: fromThisFile.orEmpty(),

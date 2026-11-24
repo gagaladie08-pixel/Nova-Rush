@@ -85,7 +85,7 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(playback.currentId) { presentation = presentation.onPlayback(playback.currentId) }
     LaunchedEffect(playerRequest.token) { presentation = presentation.accept(playerRequest) }
-    fun openArtist(id: String) { tab = 2; artistId = artists.firstOrNull { it.id == id || (it.inheritLegacy && it.legacyId == id) }?.id ?: id; artistLibrary = false; route = ""; presentation = presentation.dismiss() }
+    fun openArtist(id: String) { tab = 2; artistId = artists.firstOrNull { it.id == id || (it.inheritLegacy && id in it.legacyIds) }?.id ?: id; artistLibrary = false; route = ""; presentation = presentation.dismiss() }
     fun openAlbum(id: String) { tab = 3; albumId = id; route = ""; presentation = presentation.dismiss() }
     fun openPlaylist(id: String) { tab = 4; playlistId = id; route = "" }
     fun goBack() {

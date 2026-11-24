@@ -139,7 +139,8 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
             if (artistRequestsForTrack(track, local, groups).none { it == request }) return@withLock false
             val artistId = request.id
             val group = groups.firstOrNull { it.id == artistId } ?: return@withLock false
-            if (group.inheritLegacy && artistId !in local.artists) local.artists[group.legacyId]?.let { database.saveArtist(artistId, it) }
+            val seed = artistNote(group, local)
+            if (seed != (local.artists[artistId] ?: ArtistNote())) database.saveArtist(artistId, seed)
             // Re-read the live switches AFTER waiting for the mutex, not only at request start.
             val allowed = automaticArtistPolicy()
             val incoming = note.copy(biography = note.biography.takeIf { allowed.biography }.orEmpty(),

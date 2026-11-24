@@ -60,7 +60,9 @@ class CatalogCorrectionsTest {
     }
     @Test(timeout = 15000) fun aLargeLocalIndexPrecomputesAssociationsAndExcludesHiddenAndUnplayableFiles() {
         val tracks = (0 until 10000).map { n -> song("$n", n / 10L + 1, n % 10 + 1, "Album ${n / 10}").copy(artist = "Artist ${n / 100}", albumArtist = "Artist ${n / 100}") }
+        val started = System.nanoTime()
         val index = CatalogSnapshot.build(tracks + song("unknown").copy(durationMs = 0), setOf("0"), CatalogChoices())
+        println("catalog-index fixture=10000 files elapsed_ms=${(System.nanoTime() - started) / 1_000_000}")
         assertTrue(index.ready); assertEquals(9999, index.tracks.size)
         assertEquals(100, index.artists.size); assertEquals(1000, index.albums.size)
         assertEquals(10, index.albumsByArtist.getValue("artist 0").size)
@@ -113,6 +115,18 @@ class CatalogCorrectionsTest {
         assertFalse(index.isCurrent(track, LocalData(hidden = setOf("one"))))
         assertFalse(index.isCurrent(track, LocalData(catalog = CatalogChoices(artists = mapOf(track.id to listOf(ArtistCredit("Chosen")))))))
         assertFalse(index.isCurrent(track.copy(title = "Changed"), LocalData()))
+    }
+
+    @Test fun repairedArtistNamesKeepManualLegacyFieldsIncludingClearingAndNeverBorrowCollectiveProfiles() {
+        val raw = song("one").copy(artist = "BeyoncÃ©", albumArtist = "BeyoncÃ©")
+        val group = artistGroups(listOf(raw)).single()
+        val manual = ArtistNote("", "Deliberate clearing", "file:///chosen.jpg", "Chosen", biographyLocked = true, portraitLocked = true)
+        val local = LocalData(artists = mapOf(raw.artistKey to manual, group.id to ArtistNote("Late automatic", portrait = "file:///late.jpg")))
+        assertEquals(manual, artistNote(group, local))
+        assertEquals(raw.artist, "BeyoncÃ©")
+        val collective = raw.copy(id = "duet", artist = "BeyoncÃ© feat. Guest")
+        val participants = artistGroups(listOf(collective))
+        assertTrue(participants.all { artistNote(it, LocalData(artists = mapOf(collective.artistKey to manual))) == ArtistNote() })
     }
 
 }

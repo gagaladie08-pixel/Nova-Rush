@@ -71,7 +71,7 @@ class PlayerCorrectionsRenderTest {
                 assertTrue("$tag horizontal / $viewport", button.left >= safe.left - 2.dp && button.right <= safe.right + 2.dp)
                 assertTrue("$tag vertical / $viewport", button.top >= safe.top - 2.dp && button.bottom <= safe.bottom + 2.dp)
                 assertTrue("$tag navigation / $viewport", frame.bottom - button.bottom >= (viewport.bottom + 20 - 2).dp)
-                assertTrue("$tag target / $viewport", button.width >= 46.dp && button.height >= 46.dp)
+                assertTrue("$tag target / $viewport", button.right - button.left >= 46.dp && button.bottom - button.top >= 46.dp)
             }
         }
         compose.runOnIdle { assertEquals(sizes.size, favorite) }

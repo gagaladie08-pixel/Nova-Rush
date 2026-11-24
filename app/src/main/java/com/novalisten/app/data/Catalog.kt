@@ -71,7 +71,8 @@ data class CatalogChoices(
     val separated: Set<String> = emptySet(),
     val resolvedArtists: Map<String, ResolvedArtistCredits> = emptyMap(),
 )
-data class ArtistGroup(val id: String, val name: String, val tracks: List<Track>, val mbid: String = "", val legacyId: String = name.artistNameKey(), val inheritLegacy: Boolean = true)
+data class ArtistGroup(val id: String, val name: String, val tracks: List<Track>, val mbid: String = "", val legacyId: String = name.artistNameKey(), val inheritLegacy: Boolean = true,
+                       val legacyIds: Set<String> = setOf(legacyId))
 data class AlbumEdition(val id: String, val name: String, val artist: String, val tracks: List<Track>, val kind: ReleaseKind,
                         val artistCredits: List<ArtistCredit> = emptyList(), val fragmentKey: String = id) {
     val artwork: String? get() = (tracks.firstOrNull { it.displayCover != null } ?: tracks.firstOrNull())?.artwork
@@ -124,11 +125,38 @@ fun artistGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()
     } }
     return groups.map { (id, songs) ->
         val credit = credits.getValue(id)
-        ArtistGroup(id, credit.name, songs.distinctBy { it.id }, credit.mbid, inheritLegacy = (idsByName[credit.name.artistNameKey()]?.size ?: 0) <= 1)
+        val aliases = buildSet {
+            add(credit.name.artistNameKey())
+            songs.forEach { song ->
+                val participants = parsed.getValue(song)
+                participants.filter { it.name.artistNameKey() == credit.name.artistNameKey() }.forEach { add(it.name.normalized()) }
+                // A repaired SINGLE artist may inherit its old spelling. Never let a former
+                // collective profile become the biography or photo of an individual guest.
+                if (participants.size == 1 && song.artist.artistNameKey() == credit.name.artistNameKey()) add(song.artist.normalized())
+            }
+        }
+        ArtistGroup(id, credit.name, songs.distinctBy { it.id }, credit.mbid,
+            inheritLegacy = (idsByName[credit.name.artistNameKey()]?.size ?: 0) <= 1, legacyIds = aliases)
     }.sortedBy { it.name.normalized() }
 }
-fun artistNote(group: ArtistGroup, data: LocalData): ArtistNote = data.artists[group.id]
-    ?: if (group.inheritLegacy) data.artists[group.legacyId] ?: ArtistNote() else ArtistNote()
+/** Existing/manual fields outrank automatic aliases independently, including intentional empties. */
+fun protectArtistNote(current: ArtistNote?, seed: ArtistNote): ArtistNote {
+    val base = current ?: seed
+    return base.copy(
+        biography = if (!base.biographyLocked && seed.biographyLocked) seed.biography else base.biography,
+        source = if (!base.biographyLocked && seed.biographyLocked) seed.source else base.source,
+        portrait = if (!base.portraitLocked && seed.portraitLocked) seed.portrait else base.portrait,
+        portraitSource = if (!base.portraitLocked && seed.portraitLocked) seed.portraitSource else base.portraitSource,
+        biographyLocked = base.biographyLocked || seed.biographyLocked,
+        portraitLocked = base.portraitLocked || seed.portraitLocked,
+    )
+}
+fun artistNote(group: ArtistGroup, data: LocalData): ArtistNote {
+    val current = data.artists[group.id]
+    if (!group.inheritLegacy) return current ?: ArtistNote()
+    val aliases = group.legacyIds.mapNotNull { data.artists[it] }
+    return aliases.fold(current ?: aliases.firstOrNull() ?: ArtistNote()) { note, alias -> protectArtistNote(note, alias) }
+}
 
 /** Edition relationships are local; recording identity remains separate from album title matching. */
 fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()): List<AlbumGroup> {
