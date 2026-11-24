@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -38,13 +39,21 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) { refresh(debounce = true) }
     }
+    val catalog = combine(library.map { it.tracks }.distinctUntilChanged(),
+        data.map { it.hidden to it.catalog }.distinctUntilChanged()) { tracks, choices -> tracks to choices }
+        .mapLatest { (tracks, choices) -> withContext(Dispatchers.Default) { CatalogSnapshot.build(tracks, choices.first, choices.second) } }
+        .stateIn(scope, SharingStarted.Eagerly, CatalogSnapshot())
+    private var decoratedCovers: Map<String, SavedCover>? = null
     init {
         scope.launch(Dispatchers.IO) { dataMutex.withLock { updateLocalData() } }
     }
     private fun updateLocalData() {
         _data.value = database.snapshot()
         _localDataReady.value = true
-        _library.value = _library.value.copy(tracks = decorate(_library.value.tracks))
+        if (decoratedCovers != _data.value.covers) {
+            decoratedCovers = _data.value.covers
+            _library.value = _library.value.copy(tracks = decorate(_library.value.tracks))
+        }
     }
     private fun decorate(tracks: List<Track>): List<Track> = tracks.map { it.copy(displayCover = _data.value.covers[it.albumKey]?.uri) }
     fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(context, audioPermission()) == PackageManager.PERMISSION_GRANTED
@@ -120,12 +129,25 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
         dataMutex.withLock {
             val local = _data.value
             val track = _library.value.tracks.firstOrNull { it.id == trackId && it.id !in local.hidden } ?: return@withLock false
-            val groups = artistGroups(_library.value.tracks.filter { it.id !in local.hidden }, local.catalog)
+            val index = catalog.value
+            if (!index.ready || index.tracks[trackId] != track) return@withLock false
+            val groups = index.artistsByTrack[trackId].orEmpty()
             if (artistRequestsForTrack(track, local, groups).none { it == request }) return@withLock false
             val artistId = request.id
             val group = groups.firstOrNull { it.id == artistId } ?: return@withLock false
             if (group.inheritLegacy && artistId !in local.artists) local.artists[group.legacyId]?.let { database.saveArtist(artistId, it) }
             database.saveAutomaticArtist(artistId, note).also { updateLocalData() }
+        }
+    }
+    suspend fun saveResolvedArtists(trackId: String, request: ArtistRequest, credits: List<ArtistCredit>): Boolean = withContext(Dispatchers.IO) {
+        dataMutex.withLock {
+            val local = _data.value
+            val track = _library.value.tracks.firstOrNull { it.id == trackId && it.id !in local.hidden } ?: return@withLock false
+            if (track.id in local.catalog.artists || track.credits.isNotEmpty() || request.name != track.artist ||
+                request.context != com.novalisten.app.enrichment.ArtistLocalContext(track.title, track.album, track.durationMs, track.recordingId)) return@withLock false
+            database.saveResolvedArtists(track, credits)
+            updateLocalData()
+            true
         }
     }
     suspend fun createPlaylist(name: String, ids: List<String>): LocalPlaylist = withContext(Dispatchers.IO) {

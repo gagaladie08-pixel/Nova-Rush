@@ -104,15 +104,8 @@ class PlaybackService : MediaSessionService() {
                     stored = playback?.let { local.automaticLyrics[it.trackId] })
             }.collect { }
         }
-        scope.launch {
-            combine(lyricPlayback, repository.library, repository.data, repository.localDataReady, app.artistPreferences.state) { playback, library, local, ready, settings ->
-                val active = playback?.takeIf { it.playing && it.trackId !in local.hidden }
-                val artists = if (active == null) emptyList() else artistGroups(playableTracks(library.tracks, local.hidden), local.catalog).filter { group -> group.tracks.any { it.id == active.trackId } }
-                val track = active?.let { playing -> library.tracks.firstOrNull { it.id == playing.trackId } }
-                val request = track?.let { ArtistPlayback(it.id, artistRequestsForTrack(it, local, artists), true) }
-                app.automaticArtists.onPlayback(request, settings, artists.associate { it.id to artistNote(it, local) }, ready)
-            }.collect { }
-        }
+        app.startArtistEnrichment()
+        scope.launch { lyricPlayback.collect { playing -> app.artistPlaying.value = playing?.takeIf { it.playing }?.trackId } }
         scope.launch {
             repository.data.collect { local ->
                 if (player.currentMediaItem?.mediaId in local.hidden) {
@@ -134,7 +127,7 @@ class PlaybackService : MediaSessionService() {
         handler.removeCallbacksAndMessages(null)
         scope.cancel()
         app.automaticLyrics.stop()
-        app.automaticArtists.stop()
+        app.artistPlaying.value = null
         session?.release()
         player.release()
         super.onDestroy()

@@ -144,6 +144,27 @@ class RemoteSources(val transport: RemoteTransport, private val credential: susp
         } }.map { it.lowercase(java.util.Locale.ROOT) }.distinct()
         return ids.singleOrNull()
     }
+    /** Resolve an unstructured collaboration from the recording's complete native credit, not a name hit. */
+    suspend fun collaborationCredits(request: ArtistRequest): List<com.novalisten.app.data.ArtistCredit> {
+        val local = request.context ?: return emptyList()
+        val candidates = com.novalisten.app.data.ArtistCredits.candidates(request.name).map { it.artistNameKey() }.toSet()
+        if (candidates.size !in 2..16 || local.title.isBlank() || local.album.isBlank() || local.durationMs < MIN_ARTIST_CONTEXT_DURATION ||
+            listOf(local.title, local.album, request.name).any { it.length > 300 || it.any(Char::isISOControl) }) return emptyList()
+        val root = jsonObject(transport.request(Provider.MUSICBRAINZ, "/ws/2/recording/", mapOf(
+            "query" to "recording:${term(local.title)} AND release:${term(local.album)}", "fmt" to "json", "limit" to "12")))
+        val found = root.objects("recordings")
+        if (root.optInt("count", -1) != found.size || found.size > 12) return emptyList()
+        val matches = found.filter { recording -> recording.str("title").artistNameKey() == local.title.artistNameKey() &&
+            recording.optLong("length", 0) > 0 && kotlin.math.abs(recording.optLong("length", 0) - local.durationMs) <= 2000 &&
+            recording.objects("releases").any { it.str("title").artistNameKey() == local.album.artistNameKey() }
+        }.mapNotNull { recording ->
+            val credits = recording.objects("artist-credit").mapNotNull { item -> item.optJSONObject("artist")?.let { artist ->
+                artist.str("id").takeIf { com.novalisten.app.data.validMusicId(it) }?.let { com.novalisten.app.data.ArtistCredit(artist.str("name"), it) }
+            } }
+            credits.takeIf { it.size == candidates.size && it.map { c -> c.name.artistNameKey() }.toSet() == candidates }
+        }.distinctBy { it.map { credit -> credit.id }.sorted() }
+        return matches.singleOrNull().orEmpty()
+    }
     suspend fun artistWikidata(mbid: String): String? {
         val root = jsonObject(transport.request(Provider.MUSICBRAINZ, "/ws/2/artist/${RemoteSafety.mbid(mbid)}", mapOf("inc" to "url-rels", "fmt" to "json")))
         if (!root.str("id").equals(mbid, true) || root.str("type") !in setOf("Person", "Group", "Orchestra", "Choir", "Character", "Other")) return null

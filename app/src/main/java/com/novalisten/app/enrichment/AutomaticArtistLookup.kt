@@ -6,14 +6,26 @@ import kotlinx.coroutines.CancellationException
 
 /** No first-result/name-only assignment. MusicBrainz → Wikidata backlink → exact FR page / P18. */
 class AutomaticArtistLookup(private val remote: RemoteSources) : ArtistLookup {
+    private val identities = linkedMapOf<ArtistRequest, Triple<String, VerifiedArtistEntity, Long>>()
+    override suspend fun progressively(request: ArtistRequest, biography: Boolean, portrait: Boolean, emit: suspend (ArtistResult) -> Unit) {
+        if (biography) {
+            val result = resolve(request, true, false)
+            emit(result)
+            if (!result.identityVerified) return
+        }
+        if (portrait) emit(resolve(request, false, true))
+    }
     override suspend fun resolve(request: ArtistRequest, biography: Boolean, portrait: Boolean): ArtistResult {
         if (request.name.isBlank() || request.name.length > 300 || request.name.artistNameKey() in setOf("artiste inconnu", "unknown artist", "various artists", "artistes divers"))
             return ArtistResult(note = "Artiste non identifié : utilisez la correction locale des crédits.")
-        val mbid = if (validMusicId(request.mbid)) request.mbid else remote.artistForCurrentRecording(request)
+        val cached = identities[request]?.takeIf { it.third > System.currentTimeMillis() }
+        val mbid = cached?.first ?: if (validMusicId(request.mbid)) request.mbid else remote.artistForCurrentRecording(request)
             ?: return ArtistResult(note = "Le nom seul ne prouve pas l’identité de l’artiste de ce fichier. Aucun contenu attribué sans identifiant local/choisi ou concordance titre, album, durée et crédits du morceau écouté. Vous pouvez choisir l’association dans Photos en ligne.")
-        val linked = remote.artistWikidata(mbid) ?: return ArtistResult(note = "Pas de lien d’identité Wikidata vérifiable. Aucun portrait choisi sur le seul nom.")
-        val entity = remote.verifiedArtistEntity(linked, mbid)
+        val linked = cached?.second?.qid ?: remote.artistWikidata(mbid) ?: return ArtistResult(note = "Pas de lien d’identité Wikidata vérifiable. Aucun portrait choisi sur le seul nom.")
+        val entity = cached?.second ?: remote.verifiedArtistEntity(linked, mbid)
             ?: return ArtistResult(note = "Les identifiants d’artiste ne concordent pas ; choix manuel nécessaire.")
+        identities[request] = Triple(mbid, entity, System.currentTimeMillis() + 600_000)
+        while (identities.size > 128) identities.remove(identities.keys.first())
         var bio: Biography? = null
         var selected: ImageCandidate? = null
         val notices = mutableListOf<String>()

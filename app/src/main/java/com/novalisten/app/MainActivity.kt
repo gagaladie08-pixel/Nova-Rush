@@ -90,6 +90,8 @@ class MainActivity : ComponentActivity() {
                 { kind, id -> imageKind = kind; imageId = id; imagePicker.launch(arrayOf("image/*")) })
         }
     }
+    override fun onStart() { super.onStart(); (application as NovaApplication).artistForeground.value = true }
+    override fun onStop() { (application as NovaApplication).artistForeground.value = false; super.onStop() }
     override fun onResume() { super.onResume(); vm.repository.refresh(); applySystemBars(vm.themes.state.value.universe.background.luminance() > .5f) }
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)

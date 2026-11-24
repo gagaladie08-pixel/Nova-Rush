@@ -15,7 +15,7 @@ internal object AlbumFamilies {
     private val trailingGroup = Regex("\\s*(?:\\(|\\[)([^()\\[\\]]+)(?:\\)|\\])\\s*$")
     private val trailingDash = Regex("\\s+[—–-]\\s+([^—–]+)$")
 
-    fun titleKey(raw: String): String = raw.normalized().replace(Regex("[\\p{P}\\p{S}]+"), " ").replace(Regex("\\s+"), " ").trim()
+    fun titleKey(raw: String): String = CatalogText.key(raw).replace(Regex("[\\p{P}\\p{S}]+"), " ").replace(Regex("\\s+"), " ").trim()
     fun baseTitle(raw: String): String {
         var result = raw.trim()
         repeat(3) {
@@ -36,6 +36,34 @@ internal object AlbumFamilies {
         val original = editions.firstOrNull(::isRequestedOriginal) ?: return null
         return if (editions.mapNotNull { requested(it)?.key }.distinct().size == 1 && editions.all { requested(it) != null })
             original.kind.takeIf { it != ReleaseKind.UNKNOWN } ?: ReleaseKind.ALBUM else null
+    }
+
+    /** Same-edition fragments need compatible contents, not just a matching album title. */
+    fun fragments(one: AlbumEdition, two: AlbumEdition): Boolean {
+        if (titleKey(one.name) != titleKey(two.name) || titleKey(one.name) in setOf("", "album inconnu", "unknown album")) return false
+        val releasesOne = one.tracks.map { it.releaseId }.filter(::validMusicId).toSet()
+        val releasesTwo = two.tracks.map { it.releaseId }.filter(::validMusicId).toSet()
+        if (releasesOne.isNotEmpty() && releasesTwo.isNotEmpty() && releasesOne != releasesTwo) return false
+        if (one.releaseGroupId.isNotEmpty() && two.releaseGroupId.isNotEmpty() && one.releaseGroupId != two.releaseGroupId) return false
+        if (one.kind != ReleaseKind.UNKNOWN && two.kind != ReleaseKind.UNKNOWN && one.kind != two.kind) return false
+        if (one.year > 0 && two.year > 0 && one.year != two.year) return false
+        fun slots(edition: AlbumEdition) = edition.tracks.filter { it.number > 0 }.groupBy { (it.discNumber.coerceAtLeast(1) to it.number) }
+        val a = slots(one); val b = slots(two)
+        val common = a.keys.intersect(b.keys)
+        if (common.any { slot -> a.getValue(slot).any { first -> b.getValue(slot).any { second ->
+            CatalogText.key(first.title) != CatalogText.key(second.title) || kotlin.math.abs(first.durationMs - second.durationMs) > 2000
+        } } }) return false
+        return (a.keys + b.keys).size >= 2 || common.isNotEmpty() ||
+            (a.isEmpty() && b.isEmpty() && one.year > 0 && one.year == two.year)
+    }
+    private fun markFragments(editions: List<AlbumEdition>, separated: Set<String>): List<AlbumEdition> {
+        val parent = editions.indices.toMutableList()
+        fun root(index: Int): Int { var at = index; while (parent[at] != at) at = parent[at]; return at }
+        editions.indices.forEach { a -> (a + 1 until editions.size).forEach { b ->
+            if (editions[a].id !in separated && editions[b].id !in separated && fragments(editions[a], editions[b])) parent[root(b)] = root(a)
+        } }
+        val keys = editions.indices.groupBy(::root).mapValues { (_, indices) -> indices.map { editions[it].id }.sorted().joinToString("|") }
+        return editions.mapIndexed { index, edition -> edition.copy(fragmentKey = keys.getValue(root(index))) }
     }
 
     data class Bucket(val id: String, val editions: List<AlbumEdition>, val family: AlbumFamily? = null, val reason: String = "")
@@ -66,6 +94,12 @@ internal object AlbumFamilies {
             // Strong local release-group links and the user's explicitly accepted families.
             versions.indices.filter(::allowed).groupBy { versions[it].releaseGroupId }.filterKeys(::validMusicId).values.forEach { indices -> indices.drop(1).forEach { join(indices.first(), it) } }
             versions.indices.filter(::allowed).filter { requestedByIndex[it] != null }.groupBy { requestedByIndex[it]!!.key }.values.forEach { indices -> indices.drop(1).forEach { join(indices.first(), it) } }
+            // Android album IDs and text encoding differences are not editions by themselves.
+            versions.indices.filter(::allowed).groupBy { titleKey(versions[it].name) }.values.forEach { indices ->
+                indices.forEachIndexed { at, a -> indices.drop(at + 1).forEach { b ->
+                    if (fragments(versions[a], versions[b])) join(a, b)
+                } }
+            }
             // An edition suffix is only a hint. Require an actual shared recording identity as well.
             versions.indices.filter(::allowed).groupBy { baseTitle(versions[it].name) }.filterKeys { it.isNotBlank() }.values.forEach { indices ->
                 indices.forEachIndexed { at, a -> indices.drop(at + 1).forEach { b ->
@@ -93,7 +127,7 @@ internal object AlbumFamilies {
         // Newly scanned editions with the same proven family must not create duplicate UI keys.
         return result.groupBy { it.id }.map { (id, buckets) ->
             val selected = buckets.firstOrNull { it.family != null }
-            Bucket(id, buckets.flatMap { it.editions }.distinctBy { it.id }, selected?.family,
+            Bucket(id, markFragments(buckets.flatMap { it.editions }.distinctBy { it.id }, choices.separated), selected?.family,
                 selected?.reason ?: buckets.first().reason)
         }
     }
