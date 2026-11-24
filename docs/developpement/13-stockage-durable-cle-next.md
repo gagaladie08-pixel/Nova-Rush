@@ -24,6 +24,22 @@ a été restaurée et réellement utilisée localement. **La lecture depuis Acti
 la copie indépendante du propriétaire ne sont pas encore confirmées. Aucun APK
 0.3.1 signé ou remis.** Le registre reste à `awaiting_remote_verification`.
 
+**Dernier contrôle après confirmation de l’ajout du secret :** le secret est
+présent, mais sa valeur ne se décode pas en base64 valide. Le run
+[45450316869](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/45450316869)
+au commit `b1221d4` échoue avec ce diagnostic même après acceptation des seuls
+espaces ASCII et retours à la ligne de copier-coller. Aucun caractère invalide
+n’est ignoré, et le hash exact du ZIP reste obligatoire. Le contenu n’est jamais
+affiché ; seules des erreurs fixes et assainies sont exposées en annotations.
+
+Les fichiers privés créés précédemment ne sont **plus présents dans l’espace
+local actuel**, contrairement aux fichiers sources retrouvés identiques à la
+branche distante. Ne pas prétendre les rouvrir, ne pas régénérer la clé épinglée
+et ne pas passer le registre à `ready`. Pour corriger le secret, retrouver le
+contenu du TXT d’origine ou sa sauvegarde privée auprès du propriétaire. GitHub
+ne permet pas de relire un secret en clair par son API de gestion. Une lecture
+réussie par Actions devra toujours être prouvée avant toute signature/livraison.
+
 ## Empreintes publiques et séparation des historiques
 
 - Nouvelle politique, à partir de 0.3.1 : `config/next-signing-policy.json`.
@@ -132,12 +148,19 @@ une disponibilité éternelle.
 
 ## Preuves disponibles et limites
 
-- **97 tests Python de signature locaux réussis**, dont 48 nouveaux tests de
+- **102 tests Python de signature locaux réussis**, dont 53 nouveaux tests de
   conservation/provisionnement sur fixtures synthétiques. Aucune vraie clé ni
   requête réseau pendant ces tests. La création réelle autorisée est distincte.
 - Récupération réelle locale de la nouvelle clé : certificat et CSR vérifiés avec
   Java/keytool ; contenu du fichier destiné au secret décodé/restauré et utilisé
   à nouveau. `durable_secret_read_verified` reste **faux**, aucune signature d’APK.
+- Validation des sources au commit `b1221d4` :
+  [45450316847](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/45450316847),
+  job `138645538574`, succès en 3 min 8 s. 102 tests Python, 288 JVM/Robolectric
+  (22 suites, zéro échec/erreur/ignoré), lint zéro erreur / 43 avertissements,
+  tests Android compilés seulement. Rapports téléchargés et hachages vérifiés.
+  Ce succès ne valide pas le secret : le contrôle du coffre est un run distinct
+  et reste en échec pour format invalide.
 - Validation précédente du vérificateur au commit `96f0787` :
   [45395059786](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/45395059786),
   80 tests Python + 288 JVM/Robolectric, lint zéro erreur / 43 avertissements,

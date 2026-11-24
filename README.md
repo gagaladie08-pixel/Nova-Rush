@@ -15,9 +15,9 @@ Le lot corrige les crédits de collaborations, partage l’index du catalogue ho
 
 ## Continuité de Next — réinstallation autorisée, coffre en préparation
 
-**La clé Next 0.3.0 n’est plus accessible dans l’espace actuel.** L’utilisateur a autorisé une **nouvelle signature pour réinstaller Next uniquement**, après avertissement de la perte des données internes, et choisi les **secrets chiffrés du dépôt + une copie privée indépendante**. Une nouvelle clé stable a été créée après confirmation de l’accès propriétaire à la page des secrets. Sa récupération locale est vérifiée ; **son stockage distant et la copie indépendante restent à confirmer**, donc aucun APK signé 0.3.1 n’est remis. Aucun changement pour 0.2.3 ou les téléchargements 0.3.0.
+**La clé Next 0.3.0 n’est plus accessible dans l’espace actuel.** L’utilisateur a autorisé une **nouvelle signature pour réinstaller Next uniquement**, après avertissement de la perte des données internes, et choisi les **secrets chiffrés du dépôt + une copie privée indépendante**. Une nouvelle clé stable a été créée après confirmation de l’accès propriétaire à la page des secrets. Sa copie avait été vérifiée localement à la création, mais les fichiers privés ne sont plus disponibles dans l’espace actuel. **Le secret distant est présent mais son contenu échoue au décodage : stockage durable et copie indépendante non validés**, donc aucun APK signé 0.3.1 n’est remis. Aucun changement pour 0.2.3 ou les téléchargements 0.3.0.
 
-Nouvelle politique publique `config/next-signing-policy.json`, distincte des deux politiques historiques inchangées. **97 tests Python de signature réussis localement**, dont 48 nouveaux tests synthétiques. Le provisionnement ne peut pas se répéter ; une clé absente ne déclenche aucune régénération. [État précis, empreintes et contrôles manquants](docs/developpement/13-stockage-durable-cle-next.md).
+Nouvelle politique publique `config/next-signing-policy.json`, distincte des deux politiques historiques inchangées. **102 tests Python de signature réussis localement**, dont 53 nouveaux tests synthétiques. Le provisionnement ne peut pas se répéter ; une clé absente ne déclenche aucune régénération. [État précis, empreintes et contrôles manquants](docs/developpement/13-stockage-durable-cle-next.md).
 
 ## APK 0.3.0 — NovaListen Next, installation parallèle
 
