@@ -55,11 +55,15 @@ class FeaturingAlbumIdentityTest {
         assertEquals(3, group.tracks.size)
     }
 
-    @Test fun twoMediaStoreIdsOfTheSameAlbumAreReunitedWhenTheCoverAndYearAgree() {
+    /**
+     * Deux identifiants MediaStore pour un même disque : Android duplique parfois l'album quand les
+     * étiquettes diffèrent. Le regroupement doit réunir les deux identifiants en une seule carte.
+     */
+    @Test fun twoMediaStoreIdsOfTheSameAlbumAreReunitedIntoSingleCard() {
         val first = (1..3).map { song("a$it", it, albumId = 143) }
         val second = song("b4", 4, albumId = 144, albumArtist = "Katy Perry, Doechii", title = "Chanson 4")
         val group = albumGroups(first + second).single()
-        assertEquals("143", group.name)
         assertEquals(4, group.tracks.size)
+        assertEquals("143", group.name)
     }
 }

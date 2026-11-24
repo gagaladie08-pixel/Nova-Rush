@@ -187,7 +187,9 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
         val id = identity.first
         val identities = songs.mapNotNull(::nativeAlbumArtists).distinct()
         if (identities.size <= 1) listOf(id to songs)
-        else songs.groupBy { nativeAlbumArtists(it) ?: "unidentified:${it.id}" }.map { (artist, files) -> "$id:album-artists:$artist" to files }
+        // Sans identifiant MusicBrainz natif (cas MediaStore), deux identifiants Android du même
+        // album ne doivent pas rester séparés : la clé de sous-groupe vaut alors le disque logique.
+        else songs.groupBy { nativeAlbumArtists(it) ?: albumIdentity(it) }.map { (artist, files) -> "$id:album-artists:$artist" to files }
     }
     val editions = sources.map { (id, songs) ->
         val tagged = songs.map { it.releaseKind }.filter { it != ReleaseKind.UNKNOWN }.distinct().singleOrNull() ?: ReleaseKind.UNKNOWN
