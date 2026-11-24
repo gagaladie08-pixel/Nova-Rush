@@ -98,23 +98,32 @@ jobs:
           echo "::notice title=APK récupérable::apk-livraison/$sha/NovaListen-Next-${{ steps.v.outputs.version }}.apk"
 
       - name: Tester la récupération par l’API (même chemin que le poste de travail)
+        # git/trees n'accepte pas un chemin : on résout dossier par dossier, puis on lit le blob.
+        # Contourne la limite de 1 Mo de l'API contents.
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
           python3 - <<'PY'
           import base64, hashlib, json, os, subprocess
           from pathlib import Path
           repo = os.environ['GITHUB_REPOSITORY']
-          version = os.environ['VERSION']
-          name = f'NovaListen-Next-{version}.apk'
+          branch = os.environ['GITHUB_REF_NAME']
+          name = f'NovaListen-Next-{os.environ["VERSION"]}.apk'
           local = Path('dist') / name
           sha = hashlib.sha256(local.read_bytes()).hexdigest()
-          base = f'apk-livraison/{sha}'
-          tree = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/git/trees/{base}?recursive=1']))
-          blob = next(e['sha'] for e in tree['tree'] if e['path'] == name)
-          body = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/git/blobs/{blob}']))
+
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+
+          def entry(tree_sha, entry_name):
+              return next(e['sha'] for e in api(f'git/trees/{tree_sha}')['tree'] if e['path'] == entry_name)
+
+          root = api(f'git/trees/{branch}')['sha']
+          folder = entry(entry(root, 'apk-livraison'), sha)
+          blob = entry(folder, name)
+          body = api(f'git/blobs/{blob}')
           data = base64.b64decode(''.join(body['content'].split()))
           assert hashlib.sha256(data).hexdigest() == sha, 'récupération API divergente'
           assert len(data) == local.stat().st_size, 'taille divergente'
           print('::notice title=Récupération API vérifiée::' + sha + ' ' + str(len(data)) + ' octets')
           PY
-        env:
-          VERSION: ${{ steps.v.outputs.version }}
