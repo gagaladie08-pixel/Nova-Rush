@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -42,6 +43,7 @@ import com.novalisten.app.ui.theme.NovaIcon
  * réordonnancement par appui long. L'ordre affiché ne devient réel qu'au relâchement, ce qui
  * évite de déplacer la file pendant que le lecteur joue.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun QueueSheet(playback: PlaybackUi, byId: Map<String, Track>, onDismiss: () -> Unit, onPlay: (Int) -> Unit, onMove: (Int, Int) -> Unit) {
     val universe = LocalUniverse.current
