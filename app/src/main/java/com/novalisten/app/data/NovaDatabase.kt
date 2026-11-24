@@ -223,15 +223,15 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         try { return block().also { db.setTransactionSuccessful() } } finally { db.endTransaction() }
     }
     fun saveArtistBiography(id: String, biography: String, source: String, seed: ArtistNote = ArtistNote()) = artistTransaction {
-        val current = protectArtistNote(storedArtist(id), seed)
+        val current = storedArtist(id) ?: seed
         saveArtist(id, current.copy(biography = biography, source = source, biographyLocked = true))
     }
     fun saveArtistPortrait(id: String, portrait: String?, source: String, seed: ArtistNote = ArtistNote()) = artistTransaction {
-        val current = protectArtistNote(storedArtist(id), seed)
+        val current = storedArtist(id) ?: seed
         saveArtist(id, current.copy(portrait = portrait, portraitSource = source, portraitLocked = true))
     }
     fun allowMissingArtistFields(id: String, seed: ArtistNote = ArtistNote()) = artistTransaction {
-        val current = protectArtistNote(storedArtist(id), seed)
+        val current = storedArtist(id) ?: seed
         saveArtist(id, current.copy(biographyLocked = current.biographyLocked && current.biography.isNotBlank(), portraitLocked = current.portraitLocked && current.portrait != null))
     }
     /** Re-read and merge in one SQLite transaction as well as under the repository mutex. */

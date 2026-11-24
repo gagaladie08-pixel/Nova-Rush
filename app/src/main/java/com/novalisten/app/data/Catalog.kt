@@ -153,7 +153,9 @@ fun protectArtistNote(current: ArtistNote?, seed: ArtistNote): ArtistNote {
 }
 fun artistNote(group: ArtistGroup, data: LocalData): ArtistNote {
     val current = data.artists[group.id]
-    if (!group.inheritLegacy) return current ?: ArtistNote()
+    // Once this identity has its own row, its latest explicit edits/unlocks are authoritative.
+    // Legacy aliases are a migration seed, never a reason to re-lock a field the user allowed.
+    if (current != null || !group.inheritLegacy) return current ?: ArtistNote()
     val aliases = group.legacyIds.mapNotNull { data.artists[it] }
     return aliases.fold(current ?: aliases.firstOrNull() ?: ArtistNote()) { note, alias -> protectArtistNote(note, alias) }
 }

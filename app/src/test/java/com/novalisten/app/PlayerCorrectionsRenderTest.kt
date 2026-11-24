@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -114,6 +117,32 @@ class PlayerCorrectionsRenderTest {
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(TextAlign.Center, layouts.single().layoutInput.style.textAlign)
+    }
+
+    @Test fun centeredNativeKaraokeStillFillsPixelsAndResetsOnBackwardSeek() {
+        val position = mutableLongStateOf(1000)
+        val line = LyricTiming.line(1000, "Clarté nouvelle", listOf(TimedToken("Clarté", 1000, 2000), TimedToken("nouvelle", 2500, 3500)))
+        val theme = themeCatalog.first()
+        compose.setContent { NovaTheme(theme, effects = false) {
+            KaraokeLine(line, true, position.longValue, false, theme.text, theme.accent,
+                androidx.compose.material3.MaterialTheme.typography.headlineSmall.copy(textAlign = TextAlign.Center),
+                Modifier.width(280.dp).background(theme.background).testTag("native_fill"))
+        } }
+        fun coloredPixels(): Int {
+            val bitmap = compose.onNodeWithTag("native_fill").captureToImage().asAndroidBitmap()
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            val accent = theme.accent.toArgb()
+            return pixels.count { pixel -> listOf(0, 8, 16).all { shift -> abs((pixel ushr shift and 255) - (accent ushr shift and 255)) < 35 } }
+        }
+        val start = coloredPixels()
+        compose.runOnIdle { position.longValue = 1500 }
+        val middle = coloredPixels()
+        compose.runOnIdle { position.longValue = 2000 }
+        val end = coloredPixels()
+        assertTrue(middle > start + 10); assertTrue(end > middle + 10)
+        compose.runOnIdle { position.longValue = 1000 }
+        assertEquals(start, coloredPixels())
     }
 
     @Test fun savedTabAndDestinationKeysKeepIndependentSearchStates() {

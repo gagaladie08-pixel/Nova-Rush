@@ -145,4 +145,16 @@ class AutomaticArtistLookupTest {
         assertEquals(other, artistRequestsForTrack(two, manual, groups).single().mbid)
         assertNotEquals(artistRequestsForTrack(two, LocalData(), groups), artistRequestsForTrack(two, manual, groups))
     }
+    @Test fun progressiveLookupEmitsFrenchBeforePortraitWithoutRepeatingIdentityRequests() = runTest {
+        val transport = Transport()
+        val results = mutableListOf<ArtistResult>()
+        AutomaticArtistLookup(RemoteSources(transport) { null }).progressively(request, true, true) { results += it }
+        assertEquals(2, results.size)
+        assertNotNull(results.first().biography); assertNull(results.first().portrait); assertFalse(results.first().portraitComplete)
+        assertNull(results.last().biography); assertNotNull(results.last().portrait); assertTrue(results.last().portraitComplete)
+        assertEquals(1, transport.calls.count { it.first == Provider.WIKIDATA })
+        assertEquals(1, transport.calls.count { it.second == "/ws/2/recording/" })
+        assertEquals(1, transport.calls.count { it.first == Provider.MUSICBRAINZ && it.second.startsWith("/ws/2/artist/") })
+    }
+
 }

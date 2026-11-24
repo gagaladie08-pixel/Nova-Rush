@@ -12,7 +12,7 @@ class CatalogCorrectionsTest {
         assertEquals("Destinée Supremacy", CatalogText.display("DestinÃƒÂ©e Supremacy"))
         for (valid in listOf("Ärzte", "Åsa", "Âme", "Beyoncé", "宇多田ヒカル", "LISA")) assertEquals(valid, CatalogText.display(valid))
     }
-    @Test fun theFourScreenshotFragmentsBecomeOneCardAndOneEditionWithoutRewritingTracks() {
+    @Test fun fourCompatibleFragmentsWithScreenshotLikeCountsBecomeOneCardWithoutRewritingTracks() {
         val original = (1..15).map { song("original$it", number = it) }
         val additions = (16..19).map { song("extra$it", 2, it) }
         val broken = (20..21).map { song("broken$it", 3, it, "DestinÃ©e Supremacy") }
@@ -121,12 +121,25 @@ class CatalogCorrectionsTest {
         val raw = song("one").copy(artist = "BeyoncÃ©", albumArtist = "BeyoncÃ©")
         val group = artistGroups(listOf(raw)).single()
         val manual = ArtistNote("", "Deliberate clearing", "file:///chosen.jpg", "Chosen", biographyLocked = true, portraitLocked = true)
-        val local = LocalData(artists = mapOf(raw.artistKey to manual, group.id to ArtistNote("Late automatic", portrait = "file:///late.jpg")))
+        val local = LocalData(artists = mapOf(raw.artistKey to manual))
         assertEquals(manual, artistNote(group, local))
-        assertEquals(raw.artist, "BeyoncÃ©")
+        val unlocked = manual.copy(biographyLocked = false, portraitLocked = false)
+        assertEquals(unlocked, artistNote(group, local.copy(artists = local.artists + (group.id to unlocked))))
+        assertEquals("BeyoncÃ©", raw.artist)
         val collective = raw.copy(id = "duet", artist = "BeyoncÃ© feat. Guest")
         val participants = artistGroups(listOf(collective))
         assertTrue(participants.all { artistNote(it, LocalData(artists = mapOf(collective.artistKey to manual))) == ArtistNote() })
+    }
+
+    @Test fun oneVisualCardDoesNotDependOnWhetherTwentyTwoFilesRepresentFifteenOrTwentyTwoRecordings() {
+        val files = (1..15).map { song("original$it", 1, it) } + (1..4).map { song("copy$it", 2, it) } +
+            (3..4).map { song("broken$it", 3, it, "DestinÃ©e Supremacy") } + song("last", 4, 7)
+        val unproven = albumGroups(files).single()
+        assertEquals(1, unproven.editionCount); assertEquals(22, unproven.tracks.size)
+        val identified = files.map { it.copy(recordingId = "%08d-1111-1111-1111-111111111111".format(it.number)) }
+        val proven = albumGroups(identified).single()
+        assertEquals(1, proven.editionCount); assertEquals(15, proven.tracks.size)
+        assertEquals(22, proven.editions.sumOf { it.tracks.size })
     }
 
 }

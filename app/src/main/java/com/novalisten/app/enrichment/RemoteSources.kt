@@ -148,10 +148,10 @@ class RemoteSources(val transport: RemoteTransport, private val credential: susp
     suspend fun collaborationCredits(request: ArtistRequest): List<com.novalisten.app.data.ArtistCredit> {
         val local = request.context ?: return emptyList()
         val candidates = com.novalisten.app.data.ArtistCredits.candidates(request.name).map { it.artistNameKey() }.toSet()
-        if (candidates.size !in 2..16 || local.title.isBlank() || local.album.isBlank() || local.durationMs < MIN_ARTIST_CONTEXT_DURATION ||
+        if (candidates.size !in 2..16 || local.title.isBlank() || local.durationMs < MIN_ARTIST_CONTEXT_DURATION ||
             listOf(local.title, local.album, request.name).any { it.length > 300 || it.any(Char::isISOControl) }) return emptyList()
         val native = com.novalisten.app.data.validMusicId(local.recordingId)
-        if (!native && local.album.artistNameKey() in setOf("album inconnu", "unknown album")) return emptyList()
+        if (!native && (local.album.isBlank() || local.album.artistNameKey() in setOf("album inconnu", "unknown album"))) return emptyList()
         val root = jsonObject(if (native) transport.request(Provider.MUSICBRAINZ,
             "/ws/2/recording/${RemoteSafety.mbid(local.recordingId)}", mapOf("inc" to "artist-credits+releases", "fmt" to "json"))
             else transport.request(Provider.MUSICBRAINZ, "/ws/2/recording/", mapOf(
