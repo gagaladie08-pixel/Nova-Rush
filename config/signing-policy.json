@@ -1,5 +1,23 @@
 {
-  "reference_version": "0.2.3",
-  "certificate_sha256": "9c6531e77ff9c802dc5622d2d041b07812e5790a56b159c27502214d4ff77d95",
-  "key_alias": "androiddebugkey"
+  "reference_version": "0.3.1",
+  "application_id": "com.novalisten.app.next",
+  "label": "NovaListen Next",
+  "certificate_sha256": "c38a837ee566ad95000af71cb13497e3d330ebcde5c6c8fcc4880265a77c68ad",
+  "keystore_sha256": "45fade40c40095b84b58809b44cd2a187ab38a8d641d00a95379c2c4fa206625",
+  "keystore_path": "config/signing/NovaListen-release.p12",
+  "password_path": "config/signing/signing-password.txt",
+  "key_alias": "novalisten-release",
+  "keystore_type": "PKCS12",
+  "key_algorithm": "RSA-3072",
+  "storage": "in-repository-keystore-requires-private-repository",
+  "automatic_key_generation": false,
+  "install_over_previous_versions": true,
+  "first_version_using_this_key": "0.3.1",
+  "reinstall_required_from": ["0.2.3", "0.3.0"],
+  "previous_certificates": [
+    "9c6531e77ff9c802dc5622d2d041b07812e5790a56b159c27502214d4ff77d95",
+    "64dd5e7487e743a4af30a8a7c7f045251e54730d01009295783d98ace87fde17",
+    "e59d21a28a6a32f335248e742a319e9e82a1b871d60cd2d3f703f6dc1798644f"
+  ],
+  "private_key_in_ci": false
 }

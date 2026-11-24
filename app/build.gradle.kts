@@ -6,20 +6,19 @@ plugins {
 
 // Source verification is a separate, non-delivery mode: no signing, packaging or installation.
 val verifySourcesOnly = System.getenv("NOVALISTEN_VERIFY_SOURCES") == "true"
-val deliveryKeystore = System.getenv("NOVALISTEN_KEYSTORE_PATH")
-// Explicitly authorized parallel installation. CI prepares ONLY an unsigned Next APK;
-// the owner-backed Next key never enters Gradle or GitHub Actions.
-val parallelInstall = providers.gradleProperty("novalistenParallel").orNull == "true"
+// Nova Rush method: ONE delivery key committed with its password, so every build is signed with
+// the same certificate and each version installs over the previous one. The repository must stay
+// PRIVATE. The pinned fingerprint is enforced by scripts/signing_policy.py before Gradle signs.
+val deliveryKeystore = rootProject.file("config/signing/NovaListen-release.p12")
+val deliveryPassword = rootProject.file("config/signing/signing-password.txt")
 val prepareUnsignedParallel = System.getenv("NOVALISTEN_PREPARE_PARALLEL") == "true"
-check(!prepareUnsignedParallel || parallelInstall) { "Préparation parallèle interdite pour l’identifiant historique." }
-check(!prepareUnsignedParallel || deliveryKeystore.isNullOrBlank()) { "Aucune clé privée admise dans la compilation parallèle." }
 
 android {
     namespace = "com.novalisten.app"
     compileSdk = 35
     defaultConfig {
-        applicationId = if (parallelInstall) "com.novalisten.app.next" else "com.novalisten.app"
-        manifestPlaceholders["novaApplicationLabel"] = if (parallelInstall) "NovaListen Next" else "@string/app_name"
+        applicationId = "com.novalisten.app.next"
+        manifestPlaceholders["novaApplicationLabel"] = "NovaListen Next"
         minSdk = 26
         targetSdk = 35
         versionCode = 7
@@ -27,20 +26,31 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
-    // CI must restore the existing, fingerprint-verified key before Gradle can sign anything.
-    if (System.getenv("GITHUB_ACTIONS") == "true" && !verifySourcesOnly && !parallelInstall) {
-        check(!deliveryKeystore.isNullOrBlank()) { "Clé de signature existante requise : aucune génération automatique en CI." }
-    }
-    deliveryKeystore?.takeIf { it.isNotBlank() && !parallelInstall }?.let {
-        val existingKeystore = rootProject.file(it)
-        check(existingKeystore.isFile) { "Keystore original absent : aucune clé de remplacement autorisée." }
-        signingConfigs.getByName("debug").storeFile = existingKeystore
+    // Both build types use the same committed key. Without it, no signing config is attached and
+    // the task graph below refuses to produce any installable binary: never a silent debug key.
+    signingConfigs {
+        if (!verifySourcesOnly) {
+            create("delivery") {
+                if (deliveryKeystore.isFile && deliveryPassword.isFile) {
+                    storeFile = deliveryKeystore
+                    storeType = "PKCS12"
+                    storePassword = deliveryPassword.readText().trim()
+                    keyAlias = "novalisten-release"
+                    keyPassword = deliveryPassword.readText().trim()
+                }
+            }
+        }
     }
     buildTypes {
-        getByName("debug") { if (verifySourcesOnly || parallelInstall) signingConfig = null }
+        // The committed key is the app's permanent identity: the release build is signed too,
+        // so no future delivery can silently use a different certificate.
+        getByName("debug") {
+            signingConfig = if (verifySourcesOnly || prepareUnsignedParallel) null else signingConfigs.findByName("delivery")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (verifySourcesOnly || prepareUnsignedParallel) null else signingConfigs.findByName("delivery")
         }
     }
     compileOptions {
@@ -94,26 +104,22 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-// The original identity still refuses all replacement keys/unsigned APKs.
-// Only the distinct, authorized Next identity may prepare unsigned intermediates.
 gradle.taskGraph.whenReady {
     val packaging = Regex("^(assemble.*|install.*|validateSigning.*|package(Debug|Release)(AndroidTest)?|bundle(Debug|Release))$")
     val producesBinary = allTasks.any { packaging.matches(it.name) }
     if (verifySourcesOnly) {
         check(!producesBinary) { "Vérification des sources uniquement : génération d’APK/AAB et signature interdites." }
-    } else if (producesBinary && parallelInstall) {
-        check(prepareUnsignedParallel) { "NovaListen Next : préparation non signée explicite obligatoire ; signature locale séparée." }
-        check(allTasks.filter { packaging.matches(it.name) }.all { it.name in setOf("assembleDebug", "packageDebug") }) {
-            "Préparation Next limitée à l’APK debug non signé : aucune signature, installation ou autre variante."
-        }
     } else if (producesBinary) {
-        // Also fail closed outside GitHub Actions: never let AGP silently generate a debug key.
-        check(!deliveryKeystore.isNullOrBlank()) { "Clé privée originale 0.2.3 obligatoire : aucun APK ni nouvelle clé de remplacement." }
-        val checkKey = ProcessBuilder("python3", rootProject.file("scripts/signing_policy.py").absolutePath,
-            "verify-keystore", rootProject.file(deliveryKeystore).absolutePath)
-            .directory(rootProject.projectDir).redirectErrorStream(true).start()
-        checkKey.outputStream.close()
-        val report = checkKey.inputStream.bufferedReader().use { it.readText() }
-        check(checkKey.waitFor() == 0) { "Clé privée originale 0.2.3 non vérifiée : livraison interdite.\n${report.take(1500)}" }
+        // Fail closed, in CI as well as locally: a missing or replaced key never falls back to a
+        // freshly generated debug key. Only the explicit unsigned-intermediate mode skips signing.
+        check(deliveryKeystore.isFile) { "Keystore de livraison absent (config/signing/NovaListen-release.p12) : aucun APK." }
+        check(deliveryPassword.isFile) { "Mot de passe de signature absent : aucun APK." }
+        if (!prepareUnsignedParallel) {
+            val checkKey = ProcessBuilder("python3", rootProject.file("scripts/signing_policy.py").absolutePath, "verify-keystore")
+                .directory(rootProject.projectDir).redirectErrorStream(true).start()
+            checkKey.outputStream.close()
+            val report = checkKey.inputStream.bufferedReader().use { it.readText() }
+            check(checkKey.waitFor() == 0) { "Clé de signature non vérifiée : livraison interdite.\n${report.take(1500)}" }
+        }
     }
 }

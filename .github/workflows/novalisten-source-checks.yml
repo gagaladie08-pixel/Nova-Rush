@@ -41,14 +41,21 @@ jobs:
           python3 scripts/expect-gradle-refusal.py --label source-only
           --message 'génération d’APK/AAB et signature interdites'
           -- ./gradlew --no-daemon --console=plain assembleDebug
-      - name: Vérifier aussi le refus local sans clé originale
-        run: >-
-          python3 scripts/expect-gradle-refusal.py --label legacy-signing
-          --message 'Clé privée originale 0.2.3 obligatoire'
-          -- env -u GITHUB_ACTIONS -u NOVALISTEN_KEYSTORE_PATH -u NOVALISTEN_VERIFY_SOURCES
-          ./gradlew --no-daemon --console=plain assembleDebug
+      - name: Confirmer que la clé de livraison est réellement versionnée
+        # A re-added *.p12 / *.jks ignore rule would silently drop the key from Git and
+        # bring back the 0.2.x update failures. The build gate then fails closed.
+        run: |
+          test -f config/signing/NovaListen-release.p12
+          test -f config/signing/signing-password.txt
+          git ls-files --error-unmatch config/signing/NovaListen-release.p12
+          git ls-files --error-unmatch config/signing/signing-password.txt
+          if git check-ignore -q config/signing/NovaListen-release.p12; then
+            echo '::error::La clé de livraison est ignorée par Git.'
+            exit 1
+          fi
+          python3 scripts/signing_policy.py verify-keystore
       - name: Compiler les sources et les tests Android, tester le domaine, analyser lint
-        run: scripts/gradle-ci.sh -PnovalistenParallel=true testDebugUnitTest compileDebugAndroidTestKotlin lintDebug
+        run: scripts/gradle-ci.sh testDebugUnitTest compileDebugAndroidTestKotlin lintDebug
       - name: Confirmer l’absence de binaire installable
         if: always()
         run: |

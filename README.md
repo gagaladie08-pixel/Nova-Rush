@@ -1,9 +1,18 @@
 # NovaListen
 
-Lecteur musical Android local, utilisable hors ligne. **Nouveau : NovaListen Next 0.3.0**, APK signé contenant les nouveautés catalogue/artistes, **installable à côté de NovaListen 0.2.3**. Ce n’est pas une mise à jour de son ancienne installation : sa clé reste non retrouvée. L’ancien APK et ses données ne sont pas remplacés.
-**Pour l’APK 0.2.3 uniquement : 145 tests unitaires + 30 tests Android répétés sur trois configurations réussis** (Android 10, Android 15 gestuel, Android 15 trois boutons), lint sans erreur / 34 avertissements. [Validation 44930520156](https://github.com/gagaladie08-pixel/Nova-Rush/actions/runs/44930520156) · [périmètre, conservation locale, preuves et essai ciblé](docs/developpement/08-commandes-fenetre-et-paroles-persistantes.md). Le rendu sur le téléphone de l'utilisateur reste à vérifier ; les preuves et binaires précédents ci-dessous restent historiques.
-Le document historique `Conception_Nova_Rush.docx` décrit un ancien jeu et n’est pas la spécification de cette application.
+Lecteur musical Android local, utilisable hors ligne. **Nouveau : une seule clé de livraison versionnée** — méthode Nova Rush — pour que chaque version s’installe par-dessus la précédente, sans désinstallation.
 
+## Clé de livraison unique — plus de réinstallation
+
+La cause des échecs précédents est connue : la clé de signature n’était pas conservée, chaque compilation en CI générait une nouvelle clé debug, et Android refuse alors d’installer une « mise à jour » signée différemment. À partir de **0.3.1**, la clé `config/signing/NovaListen-release.p12` est **versionnée avec son mot de passe**, comme la clé de test de Nova Rush : le certificat restera identique pour toutes les prochaines versions.
+
+- Certificat épinglé : `c38a837ee566ad95000af71cb13497e3d330ebcde5c6c8fcc4880265a77c68ad` — SHA-256 du keystore : `45fade40c40095b84b58809b44cd2a187ab38a8d641d00a95379c2c4fa206625`.
+- **Ce dépôt doit rester privé.** Une clé versionnée dans un dépôt public permettrait à n’importe qui de signer un faux APK qui s’installe par-dessus la vraie application.
+- Garde-fous : aucune génération implicite de clé, contrôle de l’empreinte du certificat et de la possession de la clé privée avant chaque compilation, `apksigner` exigé sur un seul signataire avant livraison, workflow de livraison refusé sur un dépôt public.
+- **Une dernière réinstallation est nécessaire** : 0.2.3 (`9c6531e7…`), Next 0.3.0 (`64dd5e74…`) et l’identité 0.3.1 abandonnée (`e59d21a2…`) ont des certificats différents. Après cette réinstallation, les mises à jour se feront normalement.
+- Les fichiers audio du stockage partagé ne sont pas effacés. Les données internes de Next (favoris, playlists, paroles enregistrées, réglages) sont perdues lors de la désinstallation : **attendre l’APK 0.3.1 vérifié avant de désinstaller**. NovaListen 0.2.3 n’est pas modifiée et ne peut plus être mise à jour, sa clé étant perdue.
+
+**[Périmètre, tests et limites de 0.3.1](docs/developpement/12-huit-corrections-next-0.3.1.md)** · **[Signature unique et réinstallation](docs/developpement/13-signature-unique-nova-rush.md)**.
 
 ## Sources 0.3.1 — huit corrections, pas encore un nouvel APK
 

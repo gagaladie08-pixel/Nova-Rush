@@ -15,8 +15,12 @@ concurrency:
 
 jobs:
   android:
+    # The delivery key is committed: never build a signed APK from a public repository.
     # Source-only checks and publication of an existing binary never start the APK chain.
-    if: ${{ !contains(github.event.head_commit.message, '[publish-apk]') && !contains(github.event.head_commit.message, '[sources-only]') }}
+    if: >-
+      github.event.repository.private == true &&
+      !contains(github.event.head_commit.message, '[publish-apk]') &&
+      !contains(github.event.head_commit.message, '[sources-only]')
     name: Compiler, vérifier et tester Android
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -26,12 +30,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Tester le verrou de signature (sans clé réelle)
-        run: python3 -m unittest discover -s scripts -p 'test_signing_policy.py' -v
-      - name: Restaurer la clé originale obligatoire (signature 0.2.3)
-        env:
-          NOVALISTEN_DEBUG_KEYSTORE_BASE64: ${{ secrets.NOVALISTEN_DEBUG_KEYSTORE_BASE64 }}
-        run: python3 scripts/signing_policy.py prepare
+      - name: Vérifier la clé de livraison épinglée (commitée, jamais générée)
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_signing_policy.py' -v
+          python3 scripts/signing_policy.py verify-keystore
       - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools platforms;android-35 build-tools;35.0.0
@@ -51,13 +53,13 @@ jobs:
           version="$(python3 -c 'import json; print(json.load(open("app/build/outputs/apk/debug/output-metadata.json"))["elements"][0]["versionName"])')"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           mkdir -p artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk "artifacts/NovaListen-$version-debug.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "artifacts/NovaListen-Next-$version.apk"
           cd artifacts
-          sha256sum "NovaListen-$version-debug.apk" > SHA256SUMS.txt
+          sha256sum "NovaListen-Next-$version.apk" > SHA256SUMS.txt
       - name: Publier l’APK installable
         uses: actions/upload-artifact@v7
         with:
-          name: NovaListen-${{ steps.apk.outputs.version }}-debug
+          name: NovaListen-Next-${{ steps.apk.outputs.version }}
           path: artifacts/
           if-no-files-found: error
           retention-days: 30
@@ -86,12 +88,6 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 2048
           script: scripts/test-android-device.sh navigation
-      - name: Retirer la copie éphémère de la clé privée
-        if: always()
-        run: |
-          if [ -n "${NOVALISTEN_KEYSTORE_PATH:-}" ]; then
-            rm -f -- "$NOVALISTEN_KEYSTORE_PATH"
-          fi
       - name: Publier les rapports de vérification
         if: always()
         uses: actions/upload-artifact@v7

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Fail closed on signing continuity. Never generate, upload or log a private key."""
+"""Fail closed on signing continuity. Never generate, upload or log a private key.
+
+Méthode Nova Rush : the delivery key lives in the repository, so every build is
+signed with the same certificate and each version installs over the previous one.
+The key must be identical to the pinned fingerprint in config/signing-policy.json;
+a replaced or missing file blocks the build instead of silently generating a new
+debug key (the cause of the 0.2.x update failures).
+"""
 import argparse
-import base64
-import binascii
 import hashlib
 import json
 import os
@@ -15,7 +20,6 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 POLICY_FILE = ROOT / 'config/signing-policy.json'
-MAX_KEYSTORE_BYTES = 32_768
 
 
 class SigningError(Exception):
@@ -24,9 +28,31 @@ class SigningError(Exception):
 
 def load_policy():
     policy = json.loads(POLICY_FILE.read_text())
-    if not re.fullmatch(r'[0-9a-f]{64}', policy['certificate_sha256']):
+    if not re.fullmatch(r'[0-9a-f]{64}', policy.get('certificate_sha256', '')):
         raise SigningError('Empreinte de certificat de référence invalide.')
+    if not re.fullmatch(r'[0-9a-f]{64}', policy.get('keystore_sha256', '')):
+        raise SigningError('Empreinte de keystore de référence invalide.')
     return policy
+
+
+def keystore_path():
+    return (ROOT / 'config/signing/NovaListen-release.p12').resolve()
+
+
+def password_path():
+    return (ROOT / 'config/signing/signing-password.txt').resolve()
+
+
+def read_password():
+    """Local password file only. The password is never printed or logged."""
+    path = password_path()
+    if not path.is_file():
+        raise SigningError('Mot de passe de signature absent ; build bloqué.')
+    return path.read_text().strip()
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
 
 
 def run_tool(command, binary=False):
@@ -35,73 +61,46 @@ def run_tool(command, binary=False):
     except OSError:
         raise SigningError('Outil de vérification de signature indisponible.') from None
     if result.returncode != 0:
-        # In particular, do not echo tool stderr, credentials, encoded data or command bodies.
+        # Never echo tool stderr: it can contain private paths or keystore details.
         raise SigningError('Vérification de signature impossible ; aucune clé de remplacement ne sera créée.')
     return result.stdout if binary else result.stdout.decode('utf-8', errors='replace')
 
 
-def validate_keystore(keystore, policy):
-    """Verify an existing private key, including for local Gradle packaging; never create one."""
-    keystore = Path(keystore).expanduser().resolve()
-    if keystore == ROOT or ROOT in keystore.parents:
-        raise SigningError('La clé privée originale doit rester hors du dépôt.')
-    try:
-        valid = keystore.is_file() and 0 < keystore.stat().st_size <= MAX_KEYSTORE_BYTES
-    except OSError:
-        valid = False
-    if not valid:
-        raise SigningError('Keystore original absent, illisible ou invalide ; aucune clé de remplacement.')
-    certificate = run_tool(['keytool', '-exportcert', '-keystore', str(keystore),
-                            '-alias', policy['key_alias'], '-storepass', 'android'], binary=True)
-    if hashlib.sha256(certificate).hexdigest() != policy['certificate_sha256']:
-        raise SigningError('Certificat différent de la référence. Build bloqué ; aucun changement de signature autorisé.')
-    # A public certificate alone cannot pass this existing-private-key operation.
-    run_tool(['keytool', '-certreq', '-keystore', str(keystore), '-alias', policy['key_alias'],
-              '-storepass', 'android', '-keypass', 'android'], binary=True)
-    return keystore
+def file_password(path, content):
+    """keytool/apksigner accept -storepass:file, so the password never appears in argv."""
+    path = Path(path)
+    with path.open('xb') as output:
+        os.chmod(path, 0o600)
+        output.write(content.encode())
+    return path
 
 
-def prepare_key(encoded, runner_temp, policy, github_env):
-    """Restore ONLY an existing original debug keystore, privately and outside the repository."""
-    if not encoded or not encoded.strip():
-        raise SigningError('Clé privée de référence non configurée. Build bloqué : aucune nouvelle clé automatique.')
-    compact = ''.join(encoded.split())
-    if len(compact) > 4 * ((MAX_KEYSTORE_BYTES + 2) // 3):
-        raise SigningError('Keystore trop volumineux ; build bloqué.')
-    try:
-        data = base64.b64decode(compact, validate=True)
-    except (binascii.Error, ValueError):
-        raise SigningError('Keystore encodé invalide ; build bloqué.') from None
-    if not data or len(data) > MAX_KEYSTORE_BYTES:
-        raise SigningError('Keystore vide ou trop volumineux ; build bloqué.')
-    temporary_root = Path(runner_temp).resolve()
-    if temporary_root == ROOT or ROOT in temporary_root.parents:
-        raise SigningError('La clé privée doit rester hors du dépôt.')
-    folder = Path(tempfile.mkdtemp(prefix='novalisten-signing-', dir=temporary_root))
-    try:
-        keystore = folder / 'original-debug.keystore'
-        with keystore.open('xb') as output:
-            os.chmod(keystore, 0o600)
-            output.write(data)
-        # These public debug defaults are not the private key: verify both certificate and key.
-        validate_keystore(keystore, policy)
-        path = str(keystore)
-        if '\n' in path or '\r' in path:
-            raise SigningError('Chemin de keystore invalide.')
-        # Only the path is passed to later steps, never the key or its base64 representation.
-        with Path(github_env).open('a') as output:
-            output.write('NOVALISTEN_KEYSTORE_PATH=' + path + '\n')
-        return keystore
-    except BaseException:
-        shutil.rmtree(folder)
-        raise
+def verify_keystore(keystore=None, policy=None):
+    """Check the pinned certificate AND that the private key is really usable."""
+    policy = policy or load_policy()
+    keystore = Path(keystore).resolve() if keystore else keystore_path()
+    if not keystore.is_file():
+        raise SigningError('Keystore de livraison absent ; build bloqué, aucune génération implicite.')
+    if digest(keystore.read_bytes()) != policy['keystore_sha256']:
+        raise SigningError('Keystore différent de celui épinglé ; build bloqué.')
+    password = read_password()
+    with tempfile.TemporaryDirectory(prefix='novalisten-verify-') as folder:
+        secret = file_password(Path(folder) / 'store.pass', password)
+        common = ['-keystore', str(keystore), '-storetype', 'PKCS12',
+                  '-alias', policy['key_alias'], '-storepass:file', str(secret)]
+        certificate = run_tool(['keytool', '-exportcert', *common], binary=True)
+        if digest(certificate) != policy['certificate_sha256']:
+            raise SigningError('Certificat différent de la référence ; build bloqué.')
+        # A public certificate alone cannot produce a CSR: this uses the real private key.
+        run_tool(['keytool', '-certreq', *common, '-keypass:file', str(secret)], binary=True)
+    return policy['certificate_sha256']
 
 
-def verify_apk(apk, apksigner, policy):
+def verify_apk(apk, apksigner, policy=None):
+    policy = policy or load_policy()
     apk = Path(apk)
     if not apk.is_file():
         raise SigningError('APK à vérifier absent ; livraison bloquée.')
-    # apksigner verifies the actual APK signature, not just a copied public certificate file.
     report = run_tool([str(apksigner), 'verify', '--verbose', '--print-certs', str(apk)])
     fingerprints = re.findall(r'^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})\s*$', report, re.MULTILINE)
     if [value.lower() for value in fingerprints] != [policy['certificate_sha256']]:
@@ -112,21 +111,14 @@ def verify_apk(apk, apksigner, policy):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
-    commands.add_parser('prepare')
-    key = commands.add_parser('verify-keystore')
-    key.add_argument('keystore')
+    commands.add_parser('verify-keystore', help='vérifie la clé épinglée et sa clé privée')
     verify = commands.add_parser('verify-apk')
     verify.add_argument('apk')
     args = parser.parse_args()
     try:
         policy = load_policy()
-        if args.command == 'prepare':
-            if not os.environ.get('RUNNER_TEMP') or not os.environ.get('GITHUB_ENV'):
-                raise SigningError('Préparation réservée au runner privé ; aucune clé n’est créée localement.')
-            prepare_key(os.environ.get('NOVALISTEN_DEBUG_KEYSTORE_BASE64', ''),
-                        os.environ['RUNNER_TEMP'], policy, os.environ['GITHUB_ENV'])
-        elif args.command == 'verify-keystore':
-            validate_keystore(args.keystore, policy)
+        if args.command == 'verify-keystore':
+            verify_keystore(policy=policy)
         else:
             sdk = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT')
             signer = Path(sdk) / 'build-tools/35.0.0/apksigner' if sdk else shutil.which('apksigner')
