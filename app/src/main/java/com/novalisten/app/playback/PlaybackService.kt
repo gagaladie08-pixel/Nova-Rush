@@ -12,7 +12,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import androidx.compose.ui.graphics.toArgb
 import com.novalisten.app.MainActivity
 import com.novalisten.app.NovaApplication
 import com.novalisten.app.data.*
@@ -100,8 +99,7 @@ class PlaybackService : MediaSessionService() {
             }
         }).build()
         // Une seule instance : setMediaNotificationProvider refuse un second appel.
-        if (notification == null) notification = UniverseNotification(this) { app.themes.state.value.universe.accent.toArgb() }
-            .also { setMediaNotificationProvider(it) }
+        if (notification == null) notification = UniverseNotification(this).also { setMediaNotificationProvider(it) }
         handler.post(ticker)
         scope.launch {
             combine(lyricPlayback, repository.data, repository.localDataReady, app.lyricPreferences.automatic) { playback, local, ready, enabled ->
