@@ -72,12 +72,12 @@ class ThemePreferences(context: Context) {
                 titleFont = json.optString("titleFont", base.titleFont).also { require(it in fontResources) },
                 bodyFont = json.optString("bodyFont", base.bodyFont).also { require(it in fontResources) },
                 radius = json.optInt("radius", base.cardRadius).coerceIn(0, 32).takeUnless { json.optBoolean("cut", false) },
-                cut = if (json.optBoolean("cut", false)) json.optInt("cut", 12).coerceIn(4, 30) else 0,
+                cut = if (json.optBoolean("cut", false)) json.optInt("cutSize", 12).coerceIn(4, 30) else 0,
                 icons = runCatching { IconStyle.valueOf(json.optString("icons", base.icons.name)) }.getOrDefault(base.icons),
                 glyphs = runCatching { GlyphFamily.valueOf(json.optString("glyphs", base.glyphs.name)) }.getOrDefault(base.glyphs),
                 effect = json.optString("effect", base.effect),
                 transitionMs = if (json.isNull("duration")) base.transitionMs else json.optInt("duration", 280).coerceIn(100, 700),
-                curveStyle = json.optString("curveStyle", base.curveStyle),
+                curveStyle = base.curveStyle,
                 curveWidth = json.optDouble("curveWidth", base.curveWidth.toDouble()).toFloat().coerceIn(1f, 6f),
                 curveHalo = json.optDouble("curveHalo", base.curveHalo.toDouble()).toFloat().coerceIn(0f, 20f),
                 titleScale = json.optDouble("titleScale", base.titleScale.toDouble()).toFloat().coerceIn(.9f, 1.5f),
@@ -94,7 +94,7 @@ class ThemePreferences(context: Context) {
             put("palette", JSONArray(value.palette)); put("titleFont", value.titleFont); put("bodyFont", value.bodyFont)
             put("radius", value.cardRadius); put("cut", value.radius == null); put("cutSize", value.cut)
             put("icons", value.icons.name); put("glyphs", value.glyphs.name)
-            put("base", value.curveStyle.takeIf { spec -> themeCatalog.any { it.id == spec } } ?: "cyber")
+            put("base", spec.id.takeIf { id -> themeCatalog.any { it.id == id } } ?: "cyber")
             put("effect", value.effect); put("duration", value.transitionMs ?: JSONObject.NULL)
             put("curveStyle", value.curveStyle); put("curveWidth", value.curveWidth); put("curveHalo", value.curveHalo)
             put("titleScale", value.titleScale); put("reveal", value.motion.curveReveal.name)
@@ -102,11 +102,6 @@ class ThemePreferences(context: Context) {
         preferences.edit().putString("custom", json.toString()).putString("selected", "custom").apply()
         _state.value = _state.value.copy(selected = "custom", custom = value)
     }
-}
-
-private fun Color.luminance(): Float {
-    fun channel(value: Float) = if (value <= .03928f) value / 12.92f else Math.pow((value + .055) / 1.055, 2.4).toFloat()
-    return .2126f * channel(red) + .7152f * channel(green) + .0722f * channel(blue)
 }
 
 /**

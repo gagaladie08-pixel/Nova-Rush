@@ -37,7 +37,7 @@ fun NovaIcon(
     val spec = LocalUniverse.current
     Box(modifier.size(26.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.matchParentSize()) { drawGlyphOrnament(spec, spec.glyphs) }
-        NovaIcon(image, description, tint = tint, modifier = Modifier.matchParentSize().padding(3.dp))
+        androidx.compose.material3.Icon(image, description, Modifier.matchParentSize().padding(3.dp), tint)
     }
 }
 
