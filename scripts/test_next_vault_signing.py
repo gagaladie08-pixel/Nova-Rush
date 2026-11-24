@@ -326,6 +326,28 @@ class NextVaultSigningTest(unittest.TestCase):
         self.assertNotIn('Traceback', err.getvalue())
         self.assertEqual([], list(self.private_root.iterdir()))
 
+    def test_ci_failure_annotation_describes_bad_encoding_without_exposing_input(self):
+        self.github_origin()
+        marker = 'synthetic-sensitive-value-not-base64'
+        os.environ[vault.SECRET_NAME] = marker
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(1, vault.main(['verify']))
+        self.assertIn('::error title=Next key recovery::', out.getvalue())
+        self.assertIn('base64 stricte attendue', out.getvalue())
+        self.assertNotIn(marker, out.getvalue() + err.getvalue())
+        self.runner.assert_not_called()
+
+    def test_ci_tool_failure_annotation_never_contains_private_tool_errors(self):
+        self.github_origin()
+        password = self.files['password.txt'].decode()
+        self.runner.side_effect = RuntimeError(password)
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(1, vault.main(['verify']))
+        self.assertIn('::error title=Next key recovery::', out.getvalue())
+        self.assertNotIn(password.strip(), out.getvalue() + err.getvalue())
+        self.assertNotIn('Traceback', out.getvalue() + err.getvalue())
+        self.assertEqual([], list(self.private_root.iterdir()))
+
     def test_cli_success_emits_only_public_receipt_not_key_password_or_archive(self):
         encoded = os.environ[vault.SECRET_NAME]
         with contextlib.redirect_stdout(io.StringIO()) as out:

@@ -158,6 +158,15 @@ def verify_from_environment():
             **origin}
 
 
+def report_failure(message):
+    # Callers pass only fixed messages, never input, archive contents or tool errors.
+    message = 'Coffre Next : ' + message
+    print(message, file=sys.stderr)
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        escaped = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print('::error title=Next key recovery::' + escaped)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['verify'])
@@ -165,11 +174,11 @@ def main(argv=None):
     try:
         result = verify_from_environment()
     except VaultError as error:
-        print('Coffre Next : ' + str(error), file=sys.stderr)
+        report_failure(str(error))
         return 1
     except Exception:
         # Never expose JSON input, archive contents, tool stderr or a traceback.
-        print('Coffre Next : contrôle interrompu ; aucun fichier privé publié.', file=sys.stderr)
+        report_failure('contrôle interrompu ; aucun fichier privé publié.')
         return 1
     prefix = '::notice title=Next key recovery::' if os.environ.get('GITHUB_ACTIONS') == 'true' else ''
     print(prefix + json.dumps(result, ensure_ascii=False))
