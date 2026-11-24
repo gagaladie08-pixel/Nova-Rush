@@ -38,32 +38,60 @@ internal object AlbumFamilies {
             original.kind.takeIf { it != ReleaseKind.UNKNOWN } ?: ReleaseKind.ALBUM else null
     }
 
-    /** Same-edition fragments need compatible contents, not just a matching album title. */
+    /** Presentation evidence, deliberately separate from recording/file deduplication. */
     fun fragments(one: AlbumEdition, two: AlbumEdition): Boolean {
         if (titleKey(one.name) != titleKey(two.name) || titleKey(one.name) in setOf("", "album inconnu", "unknown album")) return false
-        val releasesOne = one.tracks.map { it.releaseId }.filter(::validMusicId).toSet()
-        val releasesTwo = two.tracks.map { it.releaseId }.filter(::validMusicId).toSet()
-        if (releasesOne.isNotEmpty() && releasesTwo.isNotEmpty() && releasesOne != releasesTwo) return false
+        if (one.artist.artistNameKey() != two.artist.artistNameKey()) return false
+        fun artistIds(edition: AlbumEdition) = edition.artistCredits.map { it.mbid.lowercase(Locale.ROOT) }.filter(::validMusicId).toSet()
+        val artistsOne = artistIds(one); val artistsTwo = artistIds(two)
+        if (artistsOne.isNotEmpty() && artistsTwo.isNotEmpty() && artistsOne != artistsTwo) return false
+        fun releaseIds(edition: AlbumEdition) = edition.tracks.map { it.releaseId.lowercase(Locale.ROOT) }.filter(::validMusicId).toSet()
+        val releasesOne = releaseIds(one); val releasesTwo = releaseIds(two)
+        if (releasesOne.size > 1 || releasesTwo.size > 1 || (releasesOne.isNotEmpty() && releasesTwo.isNotEmpty() && releasesOne != releasesTwo)) return false
         if (one.releaseGroupId.isNotEmpty() && two.releaseGroupId.isNotEmpty() && one.releaseGroupId != two.releaseGroupId) return false
         if (one.kind != ReleaseKind.UNKNOWN && two.kind != ReleaseKind.UNKNOWN && one.kind != two.kind) return false
         if (one.year > 0 && two.year > 0 && one.year != two.year) return false
-        fun slots(edition: AlbumEdition) = edition.tracks.filter { it.number > 0 }.groupBy { (it.discNumber.coerceAtLeast(1) to it.number) }
+        fun slots(edition: AlbumEdition) = edition.tracks.filter { it.number > 0 }.groupBy { it.discNumber.coerceAtLeast(1) to it.number }
         val a = slots(one); val b = slots(two)
         val common = a.keys.intersect(b.keys)
         if (common.any { slot -> a.getValue(slot).any { first -> b.getValue(slot).any { second ->
             CatalogText.key(first.title) != CatalogText.key(second.title) || kotlin.math.abs(first.durationMs - second.durationMs) > 2000
         } } }) return false
-        return (a.keys + b.keys).size >= 2 || common.isNotEmpty() ||
-            (a.isEmpty() && b.isEmpty() && one.year > 0 && one.year == two.year)
+        if (releasesOne.isNotEmpty() && releasesOne == releasesTwo) return true
+        // Complementary, fully numbered contents can reunite Android's fragments even without
+        // recording IDs. Missing slots + a matching title/year/cover alone are not proof.
+        if (one.tracks.all { it.number > 0 } && two.tracks.all { it.number > 0 })
+            return (a.keys + b.keys).size >= 2 || common.isNotEmpty()
+        val recordings = one.tracks.map { it.recordingId.lowercase(Locale.ROOT) }.filter(::validMusicId).toSet()
+        return two.tracks.any { validMusicId(it.recordingId) && it.recordingId.lowercase(Locale.ROOT) in recordings }
     }
-    private fun markFragments(editions: List<AlbumEdition>, separated: Set<String>): List<AlbumEdition> {
+
+    /** Complete-link clusters: an unknown-year/ID fragment must not bridge contradictory editions. */
+    private fun fragmentSets(editions: List<AlbumEdition>, separated: Set<String>): List<List<Int>> {
         val parent = editions.indices.toMutableList()
         fun root(index: Int): Int { var at = index; while (parent[at] != at) at = parent[at]; return at }
-        editions.indices.forEach { a -> (a + 1 until editions.size).forEach { b ->
-            if (editions[a].id !in separated && editions[b].id !in separated && fragments(editions[a], editions[b])) parent[root(b)] = root(a)
-        } }
-        val keys = editions.indices.groupBy(::root).mapValues { (_, indices) -> indices.map { editions[it].id }.sorted().joinToString("|") }
-        return editions.mapIndexed { index, edition -> edition.copy(fragmentKey = keys.getValue(root(index))) }
+        val members = editions.indices.associateWith { mutableListOf(it) }.toMutableMap()
+        editions.indices.filter { editions[it].id !in separated }
+            .groupBy { editions[it].artist.artistNameKey() to titleKey(editions[it].name) }.values.forEach { candidates ->
+                val sorted = candidates.sortedBy { editions[it].id }
+                sorted.forEachIndexed { at, a -> sorted.drop(at + 1).forEach { b ->
+                    val first = root(a); val second = root(b)
+                    if (first != second && members.getValue(first).all { x -> members.getValue(second).all { y -> fragments(editions[x], editions[y]) } }) {
+                        parent[second] = first
+                        members.getValue(first).addAll(members.remove(second).orEmpty())
+                    }
+                } }
+            }
+        return editions.indices.groupBy(::root).values.toList()
+    }
+    private fun markFragments(editions: List<AlbumEdition>, separated: Set<String>): List<AlbumEdition> {
+        val keys = mutableMapOf<Int, String>()
+        fragmentSets(editions, separated).forEach { indices ->
+            // One bounded stable key per cluster; never concatenate a whole library of file IDs.
+            val key = indices.minOf { editions[it].id }
+            indices.forEach { keys[it] = key }
+        }
+        return editions.mapIndexed { index, edition -> edition.copy(fragmentKey = keys.getValue(index)) }
     }
 
     data class Bucket(val id: String, val editions: List<AlbumEdition>, val family: AlbumFamily? = null, val reason: String = "")
@@ -95,10 +123,8 @@ internal object AlbumFamilies {
             versions.indices.filter(::allowed).groupBy { versions[it].releaseGroupId }.filterKeys(::validMusicId).values.forEach { indices -> indices.drop(1).forEach { join(indices.first(), it) } }
             versions.indices.filter(::allowed).filter { requestedByIndex[it] != null }.groupBy { requestedByIndex[it]!!.key }.values.forEach { indices -> indices.drop(1).forEach { join(indices.first(), it) } }
             // Android album IDs and text encoding differences are not editions by themselves.
-            versions.indices.filter(::allowed).groupBy { titleKey(versions[it].name) }.values.forEach { indices ->
-                indices.forEachIndexed { at, a -> indices.drop(at + 1).forEach { b ->
-                    if (fragments(versions[a], versions[b])) join(a, b)
-                } }
+            fragmentSets(versions, choices.separated).forEach { indices ->
+                if (indices.all(::allowed)) indices.drop(1).forEach { join(indices.first(), it) }
             }
             // An edition suffix is only a hint. Require an actual shared recording identity as well.
             versions.indices.filter(::allowed).groupBy { baseTitle(versions[it].name) }.filterKeys { it.isNotBlank() }.values.forEach { indices ->
@@ -117,7 +143,12 @@ internal object AlbumFamilies {
                 when {
                     accepted != null -> { id = "requested-family:${accepted.key}:$artist"; reason = "Relation d’éditions explicitement demandée, limitée à cet artiste d’album local. Les identifiants différents n’interdisent pas ce regroupement." }
                     native != null -> { id = "release-group:$native:$artist"; reason = "Même release-group MusicBrainz local et même identité d’artiste d’album, sans requête réseau." }
-                    members.size > 1 -> { id = "local-editions:$artist:${baseTitle(members.first().name)}"; reason = "Même artiste d’album, indication d’édition et enregistrement commun identifié. Le titre d’album seul n’a pas déclenché ce regroupement." }
+                    members.size > 1 -> {
+                        id = "local-editions:$artist:${baseTitle(members.first().name)}:${members.minOf { it.id }}"
+                        reason = if (fragmentSets(members, choices.separated).size == 1)
+                            "Fragments locaux compatibles : même artiste d’album, titre réparé, identifiants non contradictoires et ordre/contenu des pistes concordants. Les identifiants Android ne comptent pas comme éditions."
+                        else "Même artiste d’album, indication d’édition et enregistrement commun identifié. Le titre d’album seul n’a pas déclenché ce regroupement."
+                    }
                     else -> { id = members.single().id; reason = "Édition locale isolée, ou séparation explicitement conservée." }
                 }
                 result += Bucket(id, members, reason = reason)

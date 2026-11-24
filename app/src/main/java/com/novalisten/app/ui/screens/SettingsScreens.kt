@@ -19,26 +19,22 @@ import com.novalisten.app.ui.components.*
 import com.novalisten.app.ui.theme.LocalUniverse
 
 @Composable
-fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onAppearance: () -> Unit, onHidden: () -> Unit, onHistory: () -> Unit, onSystem: () -> Unit, onNotifications: () -> Unit, onApi: () -> Unit) {
+fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onAppearance: () -> Unit, onHidden: () -> Unit, onHistory: () -> Unit, onSystem: () -> Unit, onNotifications: () -> Unit, onApi: () -> Unit, onHelp: () -> Unit) {
     val context = LocalContext.current
     var licenceDirectory by remember { mutableStateOf<String?>(null) }
     var licenceText by remember { mutableStateOf<String?>(null) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { PageTitle("Réglages", "NovaListen ${BuildConfig.VERSION_NAME} · version de test") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
-        item { SettingRow("API et clés", "Paroles automatiques · autres recherches sur demande · clés chiffrées", Icons.Outlined.Key, onApi) }
+        item { SettingRow("API et clés", "Paroles · artistes automatiques · identifiants chiffrés", Icons.Outlined.Key, onApi) }
         item { SettingRow("Votre univers", LocalUniverse.current.name, Icons.Outlined.Palette, onAppearance) }
         item { SettingRow("Morceaux masqués", "${data.hidden.size} référence(s) · fichiers conservés", Icons.Outlined.VisibilityOff, onHidden) }
         item { SettingRow("Historique local", "Une minute réellement jouée par écoute", Icons.Outlined.History, onHistory) }
         item { SettingRow("Relire la bibliothèque", "Réindexer l’affichage, sans toucher aux fichiers", Icons.Outlined.Refresh) { vm.repository.refresh(); vm.message("Actualisation de la bibliothèque demandée") } }
         item { SettingRow("Autorisation de notification", "Commandes de lecture et écran verrouillé", Icons.Outlined.NotificationsNone, onNotifications) }
         item { SettingRow("Autorisations Android", "Gérer l’accès à votre musique", Icons.Outlined.Security, onSystem) }
-        item { SectionHeader("Privé par construction") }
-        item { Notice("La lecture reste locale et sans compte obligatoire. Si l’option est activée, les paroles du morceau écouté sont cherchées à partir de son titre, artiste, album et durée ; vos versions sauvegardées ont priorité. Les autres recherches restent sur demande. Aucun audio, collection ou historique n’est transmis. Azure n’envoie les paroles qu’après confirmation dédiée. ML Kit peut émettre les diagnostics Google déclarés après activation. Les sauvegardes automatiques Android sont désactivées.") }
-        item { SectionHeader("Fonctions et limites actuelles") }
-        item { Notice("Paroles du morceau écouté automatiques, remplacement dans les trois points. Références de métadonnées, biographies, photos et pochettes sur commande ; traduction locale ML Kit et Azure F0 volontaire. Fil Rouge, modèles intelligents, édition des tags dans l’audio et fusion d’albums ne sont pas encore intégrés. Listening Party et YouTube restent à concevoir.") }
+        item { SettingRow("Informations et aide", "Gestes, catalogue, sources et confidentialité", Icons.Outlined.Info, onHelp) }
         item { SettingRow("Licences des polices", "25 familles embarquées · OFL / Ubuntu Font Licence", Icons.Outlined.Description) { licenceDirectory = "font-licenses" } }
         item { SettingRow("Licences des bibliothèques principales", "AndroidX, Media3, Kotlin, Coil et Guava", Icons.Outlined.Description) { licenceDirectory = "third-party" } }
-        item { Notice("APK de test signé automatiquement, pas une version de production. Les signatures des compilations peuvent différer ; conservez vos données avant toute désinstallation. Les réglages et enrichissements sont stockés seulement dans NovaListen.") }
     }
     licenceDirectory?.let { directory -> AlertDialog(onDismissRequest = { licenceDirectory = null }, title = { Text(if (directory == "font-licenses") "Polices libres" else "Bibliothèques principales") }, text = {
         LazyColumn { items(context.assets.list(directory)?.filter { it.endsWith(".txt") }?.toList().orEmpty()) { name -> TextButton({ licenceText = context.assets.open("$directory/$name").bufferedReader().use { it.readText() } }) { Text(name.removeSuffix(".txt")) } } }

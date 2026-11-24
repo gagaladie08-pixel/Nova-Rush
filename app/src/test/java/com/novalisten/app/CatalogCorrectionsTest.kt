@@ -39,12 +39,14 @@ class CatalogCorrectionsTest {
         val group = albumGroups(listOf(first, copy, live)).single()
         assertEquals(setOf("first", "copy", "live"), group.tracks.map { it.id }.toSet())
     }
-    @Test fun commaAndAmpersandCreditsCanUseOneKnownParticipantOrAnAlbumCredit() {
+    @Test fun commaAndAmpersandCreditsUseIndependentParticipantsWithoutBlindlySplittingUnknownGroups() {
         val lisa = song("lisa").copy(artist = "LISA", albumArtist = "LISA")
         val guest = song("guest").copy(artist = "Anyma & LISA", albumArtist = "Anyma & LISA")
-        assertEquals(setOf("LISA", "Anyma"), artistGroups(listOf(lisa, guest)).map { it.name }.toSet())
+        val anyma = song("anyma").copy(artist = "Anyma", albumArtist = "Anyma")
+        assertEquals(setOf("LISA", "Anyma"), artistGroups(listOf(lisa, anyma, guest)).map { it.name }.toSet())
+        assertEquals(listOf("Anyma & LISA"), ArtistCredits.parse(guest.artist, setOf("lisa")).map { it.name })
         val duet = song("duet").copy(artist = "Anitta, Shakira", albumArtist = "Anitta")
-        assertEquals(setOf("Anitta", "Shakira"), artistGroups(listOf(duet)).map { it.name }.toSet())
+        assertEquals(setOf("Anitta", "Shakira"), artistGroups(listOf(duet, song("shakira").copy(artist = "Shakira", albumArtist = "Shakira"))).map { it.name }.toSet())
         assertEquals(listOf("Simon & Garfunkel"), ArtistCredits.parse("Simon & Garfunkel", setOf("simon")).map { it.name })
         assertEquals(listOf("Tyler, the Creator"), ArtistCredits.parse("Tyler, the Creator", setOf("tyler")).map { it.name })
     }

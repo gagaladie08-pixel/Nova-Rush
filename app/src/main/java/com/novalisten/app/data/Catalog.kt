@@ -7,7 +7,7 @@ data class ArtistCredit(val name: String, val mbid: String = "") {
     val id: String get() = if (validMusicId(mbid)) "mbid:${mbid.lowercase(Locale.ROOT)}" else name.artistNameKey()
 }
 fun validMusicId(value: String): Boolean = value.matches(Regex("[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}"))
-fun String.artistNameKey(): String = normalized().replace(Regex("\\s+"), " ")
+fun String.artistNameKey(): String = CatalogText.key(this)
 
 object ArtistCredits {
     private val featuring = Regex("(?i)\\s+(?:feat\\.?|ft\\.?|featuring)\\s+")
@@ -25,7 +25,7 @@ object ArtistCredits {
             val amp = part.split(Regex("\\s+&\\s+|,\\s+")).map(String::trim)
             when {
                 splitSlash -> slash
-                amp.size in 2..8 && amp.all { it.length > 1 } && amp.any { it.artistNameKey() in knownNames } && part.artistNameKey() !in protected -> amp
+                amp.size in 2..8 && amp.all { it.isNotBlank() && it.artistNameKey() in knownNames } && part.artistNameKey() !in protected -> amp
                 else -> listOf(part)
             }.map { ArtistCredit(it) }
         }.distinctBy { it.id }.take(16)
@@ -60,8 +60,8 @@ enum class ReleaseKind(val label: String) {
 }
 
 data class AlbumFamily(val id: String, val editions: Set<String>, val original: String, val representative: String = original)
-data class ResolvedArtistCredits(val artist: String, val title: String, val album: String, val duration: Long, val credits: List<ArtistCredit>) {
-    fun matches(track: Track): Boolean = artist == track.artist && title == track.title && album == track.album && duration == track.durationMs
+data class ResolvedArtistCredits(val artist: String, val title: String, val album: String, val duration: Long, val credits: List<ArtistCredit>, val recordingId: String = "") {
+    fun matches(track: Track): Boolean = artist == track.artist && title == track.title && album == track.album && duration == track.durationMs && recordingId == track.recordingId
 }
 data class CatalogChoices(
     val artists: Map<String, List<ArtistCredit>> = emptyMap(),
@@ -118,7 +118,7 @@ fun artistGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()
     val groups = linkedMapOf<String, MutableList<Track>>()
     parsed.forEach { (track, artists) -> artists.forEach { value ->
         val knownId = idsByName[value.name.artistNameKey()]?.singleOrNull()
-        val artist = if (value.mbid.isBlank() && knownId != null) value.copy(mbid = knownId) else value
+        val artist = value.copy(name = CatalogText.display(value.name), mbid = if (value.mbid.isBlank() && knownId != null) knownId else value.mbid)
         credits.putIfAbsent(artist.id, artist)
         groups.getOrPut(artist.id) { mutableListOf() }.add(track)
     } }
@@ -155,13 +155,18 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
         val ordered = versions.sortedWith(compareBy<AlbumEdition> { if (AlbumFamilies.isRequestedOriginal(it)) 0 else 1 }
             .thenBy { it.year.takeIf { year -> year > 0 } ?: Int.MAX_VALUE }
             .thenBy { if (AlbumFamilies.baseTitle(it.name) != AlbumFamilies.titleKey(it.name)) 1 else 0 }
-            .thenBy { it.name.normalized() }.thenBy { it.id })
+            .thenByDescending { it.tracks.size }.thenBy { it.name.normalized() }.thenBy { it.id })
         val original = ordered.firstOrNull { it.id == family?.original } ?: ordered.first()
         val representative = ordered.firstOrNull { it.id == family?.representative } ?: original
         val sourceOrder = listOf(original) + ordered.filterNot { it.id == original.id }
         val unique = mutableListOf<Track>()
         val recordingIndex = mutableMapOf<String, MutableList<Track>>()
-        sourceOrder.forEach { edition -> edition.tracks.forEach { track ->
+        // Android fragments of ONE edition share disc/track order. True editions still append
+        // their additions after the chosen original. Unproven file copies are never discarded.
+        val logicalEditions = sourceOrder.groupBy { it.fragmentKey }.values
+        logicalEditions.forEach { fragments -> fragments.flatMap { it.tracks }
+            .sortedWith(compareBy<Track> { it.discNumber.coerceAtLeast(1) }.thenBy { it.number.takeIf { n -> n > 0 } ?: Int.MAX_VALUE })
+            .forEach { track ->
             val keys = buildList {
                 add("file:${track.id}")
                 if (validMusicId(track.recordingId)) add("mb:${track.recordingId.lowercase(Locale.ROOT)}")
@@ -197,7 +202,7 @@ fun sameRecording(first: Track, second: Track, choices: CatalogChoices): Boolean
     fun identities(artists: List<ArtistCredit>): List<String> = artists.map { artist ->
         if (artist.mbid.isBlank()) idsByName[artist.name.artistNameKey()]?.let { artist.copy(mbid = it).id } ?: artist.id else artist.id
     }.sorted()
-    return (sameId || sameIsrc) && first.title.normalized() == second.title.normalized() &&
+    return (sameId || sameIsrc) && CatalogText.key(first.title) == CatalogText.key(second.title) &&
         identities(firstArtists) == identities(secondArtists) &&
         kotlin.math.abs(first.durationMs - second.durationMs) <= 2000
 }

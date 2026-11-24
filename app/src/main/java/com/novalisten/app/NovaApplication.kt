@@ -14,7 +14,9 @@ import com.novalisten.app.data.ArtistCredits
 
 class NovaApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    val repository by lazy { MusicRepository(this, applicationScope) }
+    val repository by lazy { MusicRepository(this, applicationScope) {
+        if (artistForeground.value || artistPlaying.value != null) artistPreferences.state.value else ArtistAutomation(false, false)
+    } }
     val themes by lazy { ThemePreferences(this) }
     val credentials by lazy { CredentialVault(this) }
     private val http by lazy { RemoteHttp() }
@@ -29,11 +31,17 @@ class NovaApplication : Application() {
         saveImage = remoteImages::save, discardImage = { uri -> kotlinx.coroutines.withContext(Dispatchers.IO) { runCatching { java.io.File(java.net.URI(uri)).delete() }; Unit } },
         persist = repository::saveAutomaticArtist,
         resolveCredits = { work ->
-            val parts = ArtistCredits.candidates(work.artist.name)
-            if (parts.size <= 1) false else {
+            val local = repository.data.value
+            val track = repository.catalog.value.tracks[work.trackId]
+            // Native/manual credits may intentionally name a band containing punctuation.
+            val unresolved = track != null && track.credits.isEmpty() && track.id !in local.catalog.artists &&
+                local.catalog.resolvedArtists[track.id]?.matches(track) != true && !com.novalisten.app.data.validMusicId(work.artist.mbid) &&
+                work.artist.name == com.novalisten.app.data.CatalogText.display(track.artist)
+            if (!unresolved || ArtistCredits.candidates(work.artist.name).size <= 1) false else {
                 val credits = remote.collaborationCredits(work.artist)
                 if (credits.isNotEmpty()) repository.saveResolvedArtists(work.trackId, work.artist, credits)
-                true // Never assign a collective credit's biography to individual participants.
+                // A genuine group can still be verified as a whole if no collaboration matched.
+                credits.isNotEmpty()
             }
         }, discoverPortraits = { request, mbid -> artistPortraits.initial(PhotoSubject(request.name, mbid)) }) }
     val artistForeground = MutableStateFlow(false)
@@ -46,9 +54,12 @@ class NovaApplication : Application() {
         applicationScope.launch {
             combine(repository.catalog, repository.data, artistPreferences.state,
                 combine(artistForeground, artistPlaying, visibleArtists) { foreground, playing, visible -> Triple(foreground, playing, visible) }) { index, local, settings, priority ->
-                val works = kotlinx.coroutines.withContext(Dispatchers.Default) { artistLibraryWorks(index, local, priority.second, priority.third) }
-                automaticArtists.onLibrary(works, settings, index.artists.associate { it.id to artistNote(it, local) },
-                    index.ready && (priority.first || priority.second != null), index.artistsByTrack[priority.second].orEmpty().map { it.id }.toSet())
+                val current = index.ready && index.sourceChoices == local.catalog && index.sourceHidden == local.hidden
+                val (works, notes) = kotlinx.coroutines.withContext(Dispatchers.Default) {
+                    artistLibraryWorks(index, local, priority.second, priority.third) to index.artists.associate { it.id to artistNote(it, local) }
+                }
+                automaticArtists.onLibrary(works, settings, notes,
+                    current && (priority.first || priority.second != null), index.artistsByTrack[priority.second].orEmpty().map { it.id }.toSet(), priority.third.toSet())
             }.collect { }
         }
     }

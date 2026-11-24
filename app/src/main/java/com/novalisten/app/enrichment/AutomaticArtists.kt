@@ -14,7 +14,7 @@ interface ArtistLookup {
 }
 data class ArtistRequest(val id: String, val name: String, val mbid: String = "", val context: ArtistLocalContext? = null)
 data class ArtistResult(val biography: Biography? = null, val portrait: ImageCandidate? = null,
-                        val proposals: List<ImageCandidate> = emptyList(), val note: String = "", val identityVerified: Boolean = false, val verifiedMbid: String = "")
+                        val proposals: List<ImageCandidate> = emptyList(), val note: String = "", val identityVerified: Boolean = false, val verifiedMbid: String = "", val portraitComplete: Boolean = true)
 data class ArtistAutomation(val biography: Boolean = true, val portrait: Boolean = true)
 data class ArtistPlayback(val trackId: String, val artists: List<ArtistRequest>, val playing: Boolean)
 data class ArtistWork(val trackId: String, val artist: ArtistRequest)
@@ -37,6 +37,7 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
     private var notes = emptyMap<String, ArtistNote>()
     private var settings = ArtistAutomation()
     private var active: ArtistWork? = null
+    private var activeFields: CacheKey? = null
     private var job: Job? = null
     private var generation = 0
     private var playbackKey = ""
@@ -64,11 +65,17 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
 
     /** Sorted by the caller: playing artist, visible cards, remaining artists. No pause/queue requirement. */
     fun onLibrary(works: List<ArtistWork>, settings: ArtistAutomation, notes: Map<String, ArtistNote>, ready: Boolean,
-                  priorityPlaying: Set<String> = emptySet()) {
+                  priorityPlaying: Set<String> = emptySet(), priorityVisible: Set<String> = emptySet()) {
         val desired = if (ready && (settings.biography || settings.portrait)) works.distinctBy { it.artist.id } else emptyList()
-        if (this.settings != settings || (active != null && active !in desired) ||
-            (active != null && active!!.artist.id !in priorityPlaying && desired.any { it.artist.id in priorityPlaying && needed(it) != null })) cancel()
-        this.settings = settings; this.notes = notes; wanted = desired
+        val changedSettings = this.settings != settings
+        this.settings = settings; this.notes = notes
+        val higherPriority = desired.firstOrNull { needed(it) != null }
+        val preempt = active?.let { current ->
+            current.artist.id !in priorityPlaying && higherPriority?.artist?.id in priorityPlaying ||
+                (current.artist.id !in priorityPlaying && current.artist.id !in priorityVisible && higherPriority?.artist?.id in priorityVisible)
+        } == true
+        if (changedSettings || (active != null && active !in desired) || preempt) cancel()
+        wanted = desired
         if (job?.isActive == true || desired.none { needed(it) != null }) return
         val token = ++generation
         job = scope.launch {
@@ -77,7 +84,7 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
             while (token == generation) {
                 val next = wanted.firstNotNullOfOrNull { work -> needed(work)?.takeUnless { it in attempted }?.let { work to it } } ?: break
                 val (work, fields) = next
-                attempted += fields; active = work
+                attempted += fields; active = work; activeFields = fields
                 rememberAttempt(fields, 600_000) // mark before persistence emits another repository snapshot
                 publish(work.artist.id, AutoArtistState(loading = true))
                 try {
@@ -90,14 +97,12 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
                     rememberAttempt(fields, 120_000)
                     if (token == generation) publish(work.artist.id, stateFor(work).copy(note = "Recherche temporairement indisponible"))
                 } catch (cancelled: CancellationException) {
-                    // A preempted background request can resume later; don't poison its cache.
-                    cache.remove(CacheKey(cacheRequest(work.artist), true, false)); cache.remove(CacheKey(cacheRequest(work.artist), false, true))
                     throw cancelled
                 } catch (error: Exception) {
                     rememberAttempt(fields, 120_000)
                     if (token == generation) publish(work.artist.id, stateFor(work).copy(note = error.publicMessage()))
                 } finally {
-                    if (token == generation) { publish(work.artist.id, stateFor(work).copy(loading = false)); active = null }
+                    if (token == generation) { publish(work.artist.id, stateFor(work).copy(loading = false)); active = null; activeFields = null }
                 }
                 while (cache.size > maxOf(64, wanted.size * 2).coerceAtMost(20_000)) cache.remove(cache.keys.first())
                 yield()
@@ -113,30 +118,40 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
         val request = work.artist
         var pending: String? = null
         var selected: ImageCandidate? = null
-        var photos = result.proposals.takeIf { fields.photo }?.let { prepare(it) }.orEmpty()
+        fun photoWanted(): Boolean {
+            val note = notes[work.artist.id] ?: ArtistNote()
+            return fields.photo && settings.portrait && !note.portraitLocked && note.portrait == null
+        }
+        var photos = emptyList<PreparedPhoto>()
         var failed = false
         var notice = result.note
         try {
-            if (fields.photo && result.portrait != null) try {
+            if (photoWanted()) try { photos = prepare(result.proposals) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { failed = true; notice += "\n${error.publicMessage()}" }
+            if (photoWanted() && result.portrait != null) try {
                 photos = prepare(listOf(result.portrait))
                 selected = result.portrait.takeIf { candidate -> photos.any { it.image.id == candidate.id } && automaticPortraitAllowed(candidate, candidate.title) }
                 if (selected != null) pending = saveImage(selected)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { failed = true; notice += "\n${error.publicMessage()}" }
             ensureCurrent(token, work)
-            val bio = result.biography?.takeIf { fields.bio && it.language == "fr" }
+            val currentNote = notes[request.id] ?: ArtistNote()
+            val bio = result.biography?.takeIf { fields.bio && settings.biography && !currentNote.biographyLocked && currentNote.biography.isBlank() && it.language == "fr" }
             val note = ArtistNote(bio?.text.orEmpty(), bio?.credit?.text().orEmpty(), pending,
                 selected?.let { it.credit.text() + "\n" + it.date + "\nPortrait de l’identité vérifiée." }.orEmpty())
             // Persist independently of discovery of alternative pictures, which can be slow.
             if (note.biography.isNotBlank() || note.portrait != null) withContext(NonCancellable) {
                 if (token == generation && work in wanted && persist(work.trackId, request, note)) pending = null
             }
-            if (fields.photo && result.portrait == null && validMusicId(result.verifiedMbid)) try {
+            if (photoWanted() && result.portraitComplete && selected == null && validMusicId(result.verifiedMbid)) try {
                 discoverPortraits(request, result.verifiedMbid)?.let { batch -> photos = batch.photos; failed = batch.reports.any { it.status == PortraitStatus.FAILED } }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { failed = true; notice += "\n${error.publicMessage()}" }
             if (failed) rememberAttempt(CacheKey(request, false, true), 120_000)
-            if (token == generation) publish(request.id, AutoArtistState(true, notice, photos.ifEmpty { stateFor(work).proposals }, result.verifiedMbid))
+            if (token == generation) publish(request.id, AutoArtistState(true,
+                (stateFor(work).note.lines() + notice.lines()).filter(String::isNotBlank).distinct().joinToString("\n"),
+                photos.ifEmpty { stateFor(work).proposals }, result.verifiedMbid))
         } finally { pending?.let { withContext(NonCancellable) { discardImage(it) } } }
     }
     private fun ensureCurrent(token: Int, work: ArtistWork) { if (token != generation || work !in wanted) throw CancellationException() }
@@ -146,6 +161,16 @@ class AutomaticArtists(private val scope: CoroutineScope, private val lookup: Ar
         while (copy.size > 64) copy.remove(copy.keys.first())
         _state.value = copy
     }
-    private fun cancel() { generation++; job?.cancel(); job = null; active = null; _state.value = _state.value.mapValues { it.value.copy(loading = false) } }
+    private fun cancel() {
+        // Clear only the interrupted attempt, before a replacement job starts. A late cancelled
+        // job must never erase the cache of its successor.
+        activeFields?.let { fields ->
+            val request = cacheRequest(fields.request)
+            if (fields.bio) cache.remove(CacheKey(request, true, false))
+            if (fields.photo) cache.remove(CacheKey(request, false, true))
+        }
+        generation++; job?.cancel(); job = null; active = null; activeFields = null
+        _state.value = _state.value.mapValues { it.value.copy(loading = false) }
+    }
     fun stop() { cancel(); wanted = emptyList(); playbackKey = "" }
 }

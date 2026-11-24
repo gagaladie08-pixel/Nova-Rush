@@ -9,7 +9,11 @@ data class CatalogSnapshot(
     val artistsByTrack: Map<String, List<ArtistGroup>> = emptyMap(),
     val albumsByArtist: Map<String, List<AlbumGroup>> = emptyMap(),
     val albumByTrack: Map<String, AlbumGroup> = emptyMap(),
+    val sourceChoices: CatalogChoices = CatalogChoices(),
+    val sourceHidden: Set<String> = emptySet(),
 ) {
+    fun isCurrent(track: Track, local: LocalData): Boolean = ready && tracks[track.id] == track &&
+        sourceChoices == local.catalog && sourceHidden == local.hidden
     companion object {
         fun build(tracks: List<Track>, hidden: Set<String>, choices: CatalogChoices): CatalogSnapshot {
             val playable = tracks.filter { it.playable && it.id !in hidden }.distinctBy { it.id }
@@ -27,7 +31,7 @@ data class CatalogSnapshot(
                 } }
                 participants.forEach { albumsByArtist.getOrPut(it) { mutableListOf() }.add(album) }
             }
-            return CatalogSnapshot(true, playable.associateBy { it.id }, artists, albums, artistsByTrack, albumsByArtist, albumByTrack)
+            return CatalogSnapshot(true, playable.associateBy { it.id }, artists, albums, artistsByTrack, albumsByArtist, albumByTrack, choices, hidden)
         }
     }
 }

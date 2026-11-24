@@ -155,4 +155,22 @@ class CatalogStorageTest {
         }
     }
 
+    @Test fun automaticCollaborationChoicesPersistSeparatelyWithoutOverwritingManualCreditsOrExistingData() = database { name ->
+        val track = Track("duet", "Song", "One, Two", "Album", 1, "One", 65000, 0, 2020, 1, "duet.mp3", 100, "audio/mpeg")
+        val credits = listOf(ArtistCredit("One", "11111111-1111-1111-1111-111111111111"), ArtistCredit("Two", "22222222-2222-2222-2222-222222222222"))
+        NovaDatabase(context, name).withHelper { db ->
+            db.saveLyrics(track.id, SavedLyrics("Kept")); db.setFlag(track.id, "favorite", true)
+            db.saveResolvedArtists(track, credits)
+            db.saveArtistCredits(track.id, listOf(ArtistCredit("Chosen band")))
+        }
+        NovaDatabase(context, name).withHelper { db ->
+            val state = db.snapshot()
+            assertEquals(credits, state.catalog.resolvedArtists.getValue(track.id).credits)
+            assertEquals("Chosen band", ArtistCredits.forTrack(track, state.catalog).single().name)
+            assertEquals("Kept", state.lyrics.getValue(track.id).original); assertTrue(track.id in state.favorites)
+            db.saveArtistCredits(track.id, null)
+            assertEquals(credits, ArtistCredits.forTrack(track, db.snapshot().catalog))
+        }
+    }
+
 }

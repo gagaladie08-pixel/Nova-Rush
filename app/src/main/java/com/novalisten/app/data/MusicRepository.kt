@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
+import com.novalisten.app.enrichment.ArtistAutomation
 import com.novalisten.app.enrichment.ArtistRequest
 import com.novalisten.app.enrichment.artistRequestsForTrack
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +25,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-class MusicRepository(private val context: Context, private val scope: CoroutineScope) {
+class MusicRepository(private val context: Context, private val scope: CoroutineScope,
+                      private val automaticArtistPolicy: () -> ArtistAutomation = { ArtistAutomation() }) {
     private val database = NovaDatabase(context)
     private val _library = MutableStateFlow(LibraryState())
     val library = _library.asStateFlow()
@@ -39,9 +41,11 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) { refresh(debounce = true) }
     }
-    val catalog = combine(library.map { it.tracks }.distinctUntilChanged(),
-        data.map { it.hidden to it.catalog }.distinctUntilChanged()) { tracks, choices -> tracks to choices }
-        .mapLatest { (tracks, choices) -> withContext(Dispatchers.Default) { CatalogSnapshot.build(tracks, choices.first, choices.second) } }
+    val catalog = combine(library.map { it.tracks to it.permission }.distinctUntilChanged(),
+        data.map { it.hidden to it.catalog }.distinctUntilChanged(), localDataReady) { source, choices, localReady -> Triple(source, choices, localReady) }
+        .mapLatest { (source, choices, localReady) -> withContext(Dispatchers.Default) {
+            if (source.second && localReady) CatalogSnapshot.build(source.first, choices.first, choices.second) else CatalogSnapshot()
+        } }
         .stateIn(scope, SharingStarted.Eagerly, CatalogSnapshot())
     private var decoratedCovers: Map<String, SavedCover>? = null
     init {
@@ -130,21 +134,31 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
             val local = _data.value
             val track = _library.value.tracks.firstOrNull { it.id == trackId && it.id !in local.hidden } ?: return@withLock false
             val index = catalog.value
-            if (!index.ready || index.tracks[trackId] != track) return@withLock false
+            if (!index.isCurrent(track, local)) return@withLock false
             val groups = index.artistsByTrack[trackId].orEmpty()
             if (artistRequestsForTrack(track, local, groups).none { it == request }) return@withLock false
             val artistId = request.id
             val group = groups.firstOrNull { it.id == artistId } ?: return@withLock false
             if (group.inheritLegacy && artistId !in local.artists) local.artists[group.legacyId]?.let { database.saveArtist(artistId, it) }
-            database.saveAutomaticArtist(artistId, note).also { updateLocalData() }
+            // Re-read the live switches AFTER waiting for the mutex, not only at request start.
+            val allowed = automaticArtistPolicy()
+            val incoming = note.copy(biography = note.biography.takeIf { allowed.biography }.orEmpty(),
+                source = note.source.takeIf { allowed.biography }.orEmpty(),
+                portrait = note.portrait.takeIf { allowed.portrait }, portraitSource = note.portraitSource.takeIf { allowed.portrait }.orEmpty())
+            if (incoming.biography.isBlank() && incoming.portrait == null) return@withLock false
+            database.saveAutomaticArtist(artistId, incoming).also { updateLocalData() }
         }
     }
     suspend fun saveResolvedArtists(trackId: String, request: ArtistRequest, credits: List<ArtistCredit>): Boolean = withContext(Dispatchers.IO) {
         dataMutex.withLock {
             val local = _data.value
             val track = _library.value.tracks.firstOrNull { it.id == trackId && it.id !in local.hidden } ?: return@withLock false
-            if (track.id in local.catalog.artists || track.credits.isNotEmpty() || request.name != track.artist ||
+            if (track.id in local.catalog.artists || track.credits.isNotEmpty() || request.name != CatalogText.display(track.artist) ||
                 request.context != com.novalisten.app.enrichment.ArtistLocalContext(track.title, track.album, track.durationMs, track.recordingId)) return@withLock false
+            val policy = automaticArtistPolicy()
+            if (!policy.biography && !policy.portrait) return@withLock false
+            val index = catalog.value
+            if (!index.isCurrent(track, local) || artistRequestsForTrack(track, local, index.artistsByTrack[trackId].orEmpty()).none { it == request }) return@withLock false
             database.saveResolvedArtists(track, credits)
             updateLocalData()
             true

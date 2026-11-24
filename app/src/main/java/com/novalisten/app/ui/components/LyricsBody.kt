@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.novalisten.app.data.LyricLine
 import com.novalisten.app.enrichment.AutoLyricState
@@ -46,15 +47,13 @@ internal fun LyricsBody(trackKey: String, text: String, timed: List<LyricLine>, 
     val dragged by list.interactionSource.collectIsDraggedAsState()
     LaunchedEffect(dragged) { if (dragged) follow = false }
     val universe = LocalUniverse.current
-    val typography = MaterialTheme.typography.headlineSmall
+    val typography = MaterialTheme.typography.headlineSmall.copy(textAlign = TextAlign.Center)
     BoxWithConstraints(modifier.fillMaxWidth().testTag("lyrics_viewport")) {
         if (text.isBlank()) {
             Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 val loading = automatic.trackId == trackKey && automatic.status == AutoLyricStatus.LOADING
                 if (loading) { CircularProgressIndicator(Modifier.size(28.dp)); Spacer(Modifier.height(18.dp)) }
-                Text(if (loading) "Chargement des paroles…" else "Vos mots, votre musique", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(12.dp))
-                Text(if (automatic.trackId == trackKey && automatic.note.isNotBlank()) automatic.note else "Les paroles se chargent pendant l’écoute. Les trois points permettent de chercher une autre version, d’importer un texte ou de traduire.", style = MaterialTheme.typography.bodyMedium)
+                Text(if (loading) "Chargement des paroles…" else "Paroles indisponibles", style = MaterialTheme.typography.titleLarge)
             }
         } else {
             val height = maxHeight

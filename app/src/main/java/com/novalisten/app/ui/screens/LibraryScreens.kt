@@ -97,7 +97,7 @@ fun TrackListScreen(
         header()
         item { PlaybackButtons(playQueue.isNotEmpty(), { vm.play(playQueue, sourcePlaylist = sourcePlaylist) }, { vm.play(playQueue, shuffled = true, sourcePlaylist = sourcePlaylist) }) }
         if (filtered.isEmpty()) item {
-            EmptyState(if (query.isNotBlank()) "Aucun résultat" else "Votre collection commence ici", if (query.isNotBlank()) "Essayez un autre titre, artiste ou album." else "Ajoutez des fichiers musicaux sur le téléphone. Ils apparaîtront ici dès leur indexation par Android. Les fichiers de moins d’une minute restent intacts, mais ne sont pas affichés.")
+            EmptyState(if (query.isNotBlank()) "Aucun résultat" else "Votre collection commence ici", if (query.isNotBlank()) "Essayez un autre titre, artiste ou album." else "Ajoutez votre musique sur le téléphone.")
         }
         items(filtered, key = { it.id }) { track ->
             TrackRow(track, track.id in data.favorites, playback.currentId == track.id,

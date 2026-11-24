@@ -18,6 +18,7 @@ import com.novalisten.app.enrichment.AutoLyricState
 import com.novalisten.app.ui.components.*
 import com.novalisten.app.ui.screens.PlayerCoverPage
 import com.novalisten.app.ui.screens.PlayerHeader
+import com.novalisten.app.ui.screens.PlayerActions
 import com.novalisten.app.ui.theme.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -80,10 +81,32 @@ class PlayerLayoutTest {
         assertTrue("Artwork is square", abs(artWidth.value - artHeight.value) <= 2f)
         assertTrue("Artwork must yield to available height", artHeight <= (middle.bottom - middle.top) * .65f + 2.dp)
         val before = compose.onNodeWithTag("player_transport").getUnclippedBoundsInRoot()
-        compose.onNodeWithContentDescription("Modifier les paroles").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("Modifier les paroles").assertIsDisplayed().performClick()
         compose.runOnIdle { assertTrue(edited) }
         assertEquals(before, compose.onNodeWithTag("player_transport").getUnclippedBoundsInRoot())
         assertControlsInside(viewport)
+    }
+
+    @Test fun actionsAreAnchoredImmediatelyAboveTheTimelineOnATallPhone() {
+        compose.setContent { Fixture(Viewport(width = 360, height = 800)) }
+        val actions = compose.onNodeWithTag("player_actions").getUnclippedBoundsInRoot()
+        val timeline = compose.onNodeWithTag("player_transport").getUnclippedBoundsInRoot()
+        assertTrue(actions.bottom <= timeline.top + 1.dp)
+        assertTrue(timeline.top - actions.bottom <= 8.dp)
+        compose.onNodeWithContentDescription("Favori").assertIsDisplayed()
+    }
+    @Test fun immersiveModeDoesNotRepeatTitleArtistOrPermanentInstructions() {
+        val song = playerTestTrack()
+        compose.setContent { NovaTheme(themeCatalog.first(), effects = false) {
+            Column(Modifier.width(320.dp).height(600.dp)) {
+                PlayerHeader(song, false, false, {}, {})
+                PlayerCoverPage(song, false, false, "Ligne de paroles", false, {})
+            }
+        } }
+        compose.onAllNodesWithText(song.title).assertCountEquals(1)
+        compose.onAllNodesWithText(song.artist).assertCountEquals(1)
+        compose.onNodeWithText("Touchez pour afficher les commandes").assertDoesNotExist()
+        compose.onNodeWithText("Ligne de paroles").assertIsDisplayed()
     }
 
     @Test fun immersiveCoverStillLeavesVerticalPreviousNextGesturesToItsParent() {
@@ -94,7 +117,7 @@ class PlayerLayoutTest {
                     change.consume(); dy += amount
                 }
             }) {
-                PlayerCoverPage(playerTestTrack(), false, false, null, false, false, {}, {}, {}, {}, {})
+                PlayerCoverPage(playerTestTrack(), false, false, null, false, {})
             }
         } }
         compose.onNodeWithTag("player_cover_page").performTouchInput { swipeUp() }
@@ -129,11 +152,14 @@ class PlayerLayoutTest {
                     PlayerFrame(insets = WindowInsets(left = viewport.left.dp, top = viewport.top.dp,
                         right = viewport.right.dp, bottom = viewport.bottom.dp),
                         header = { compact -> PlayerHeader(playerTestTrack(), viewport.lyrics, compact, {}, {}) },
-                        footer = { compact -> PlayerTransport(PlaybackUi(currentId = "fixture", duration = 180_000), compact,
-                            onSeek, onToggle, onPrevious, onNext, onRepeat, onQueue) }) { compact ->
+                        footer = { compact -> Column {
+                            if (!viewport.lyrics) PlayerActions(false, {}, {}, {}, onEdit)
+                            PlayerTransport(PlaybackUi(currentId = "fixture", duration = 180_000), compact,
+                                onSeek, onToggle, onPrevious, onNext, onRepeat, onQueue)
+                        } }) { compact ->
                         if (viewport.lyrics) LyricsBody("fixture", "synthetic", rows, 2, 10_000, false, AutoLyricState(), Modifier.fillMaxSize(), {})
-                        else PlayerCoverPage(playerTestTrack(), true, compact, "Une ligne synthétique assez longue pour s’enrouler", false, false,
-                            onReveal = {}, onFavorite = {}, onAdd = {}, onLyrics = {}, onEditLyrics = onEdit)
+                        else PlayerCoverPage(playerTestTrack(), true, compact, "Une ligne synthétique assez longue pour s’enrouler", false,
+                            onReveal = {}, onLyrics = {})
                     }
                 }
             }

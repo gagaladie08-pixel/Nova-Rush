@@ -59,13 +59,22 @@ class LyricsLayoutTest {
         compose.runOnIdle { assertEquals(35000L, sought) }
         centered(7)
     }
+    @Test fun wrappedAndPlainLyricsUseHorizontalCenterAlignment() {
+        compose.setContent { NovaTheme(themeCatalog.first(), effects = false) {
+            LyricsBody("fixture", "synthetic", rows, 5, rows[5].timeMs, false, AutoLyricState(), Modifier.width(280.dp).height(420.dp), {})
+        } }
+        centered(5)
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithTag("lyric_text_5").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(androidx.compose.ui.text.style.TextAlign.Center, layouts.single().layoutInput.style.textAlign)
+    }
     @Test fun nativeWordFillActuallyChangesPixelsAtItsRealStartMiddleAndEnd() {
         val position = mutableLongStateOf(1000)
         val line = LyricTiming.line(1000, "Clarté nouvelle", listOf(TimedToken("Clarté", 1000, 2000), TimedToken("nouvelle", 2500, 3500)))
         val theme = themeCatalog.first()
         compose.setContent { NovaTheme(theme, effects = false) {
             KaraokeLine(line, true, position.longValue, false, theme.text, theme.accent,
-                androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+                androidx.compose.material3.MaterialTheme.typography.headlineSmall.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center),
                 Modifier.width(280.dp).background(theme.background).testTag("native_fill"))
         } }
         fun coloredPixels(): Int {

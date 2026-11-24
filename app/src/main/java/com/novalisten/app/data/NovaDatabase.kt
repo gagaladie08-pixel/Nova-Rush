@@ -104,7 +104,7 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
                     "resolved_artists" -> {
                         val item = JSONObject(raw); val list = item.getJSONArray("credits")
                         resolved[id] = ResolvedArtistCredits(item.getString("artist"), item.getString("title"), item.getString("album"), item.getLong("duration"),
-                            (0 until list.length()).map { index -> list.getJSONObject(index).let { ArtistCredit(it.getString("name"), it.getString("mbid")) } })
+                            (0 until list.length()).map { index -> list.getJSONObject(index).let { ArtistCredit(it.getString("name"), it.getString("mbid")) } }, item.optString("recording"))
                     }
                     "family" -> { val item = JSONObject(raw); val list = item.getJSONArray("editions"); families[id] = AlbumFamily(id, (0 until list.length()).map { list.getString(it) }.toSet(), item.getString("original"), item.getString("representative")) }
                     "kind" -> kinds[id] = runCatching { ReleaseKind.valueOf(raw) }.getOrDefault(ReleaseKind.UNKNOWN)
@@ -198,7 +198,7 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
     }
     fun saveResolvedArtists(track: Track, credits: List<ArtistCredit>) {
         require(credits.size in 2..16 && credits.all { it.name.isNotBlank() && validMusicId(it.mbid) })
-        catalogChoice("resolved_artists", track.id, JSONObject().put("artist", track.artist).put("title", track.title).put("album", track.album).put("duration", track.durationMs)
+        catalogChoice("resolved_artists", track.id, JSONObject().put("artist", track.artist).put("title", track.title).put("album", track.album).put("duration", track.durationMs).put("recording", track.recordingId)
             .put("credits", JSONArray().apply { credits.forEach { put(JSONObject().put("name", it.name).put("mbid", it.mbid)) } }).toString())
     }
     fun saveAlbumFamily(family: AlbumFamily) {

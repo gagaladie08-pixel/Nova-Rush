@@ -75,7 +75,6 @@ fun PlaylistIndex(tracks: List<Track>, data: LocalData, vm: MainViewModel, onOpe
             }
         }
         if (lists.isEmpty()) item(span = { GridItemSpan(2) }) { EmptyState(if (query.isBlank()) "Faites place à vos envies" else "Aucun résultat", "Créez une playlist, ajoutez vos morceaux et retrouvez-la hors ligne. Aucun fichier n’est copié.", Icons.Outlined.PlaylistAdd, action = { Button(onCreate) { Text("Créer une playlist") } }) }
-        item(span = { GridItemSpan(2) }) { Notice("Playlists intelligentes : les 17 modèles restent à développer. Aucune liste automatique ni résultat d’IA n’est simulé.") }
     }
     info?.let { AlertDialog(onDismissRequest = { info = null }, title = { Text("Informations") }, text = { Text(it) }, confirmButton = { TextButton({ info = null }) { Text("Fermer") } }) }
 }

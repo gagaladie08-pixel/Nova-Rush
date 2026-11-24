@@ -150,18 +150,27 @@ class RemoteSources(val transport: RemoteTransport, private val credential: susp
         val candidates = com.novalisten.app.data.ArtistCredits.candidates(request.name).map { it.artistNameKey() }.toSet()
         if (candidates.size !in 2..16 || local.title.isBlank() || local.album.isBlank() || local.durationMs < MIN_ARTIST_CONTEXT_DURATION ||
             listOf(local.title, local.album, request.name).any { it.length > 300 || it.any(Char::isISOControl) }) return emptyList()
-        val root = jsonObject(transport.request(Provider.MUSICBRAINZ, "/ws/2/recording/", mapOf(
-            "query" to "recording:${term(local.title)} AND release:${term(local.album)}", "fmt" to "json", "limit" to "12")))
-        val found = root.objects("recordings")
-        if (root.optInt("count", -1) != found.size || found.size > 12) return emptyList()
+        val native = com.novalisten.app.data.validMusicId(local.recordingId)
+        if (!native && local.album.artistNameKey() in setOf("album inconnu", "unknown album")) return emptyList()
+        val root = jsonObject(if (native) transport.request(Provider.MUSICBRAINZ,
+            "/ws/2/recording/${RemoteSafety.mbid(local.recordingId)}", mapOf("inc" to "artist-credits+releases", "fmt" to "json"))
+            else transport.request(Provider.MUSICBRAINZ, "/ws/2/recording/", mapOf(
+                "query" to "recording:${term(local.title)} AND release:${term(local.album)}", "fmt" to "json", "limit" to "12")))
+        val found = if (native) {
+            if (!root.str("id").equals(local.recordingId, true)) return emptyList()
+            listOf(root)
+        } else root.objects("recordings").also { if (root.optInt("count", -1) != it.size || it.size > 12) return emptyList() }
         val matches = found.filter { recording -> recording.str("title").artistNameKey() == local.title.artistNameKey() &&
             recording.optLong("length", 0) > 0 && kotlin.math.abs(recording.optLong("length", 0) - local.durationMs) <= 2000 &&
-            recording.objects("releases").any { it.str("title").artistNameKey() == local.album.artistNameKey() }
+            (native || recording.objects("releases").any { it.str("title").artistNameKey() == local.album.artistNameKey() })
         }.mapNotNull { recording ->
-            val credits = recording.objects("artist-credit").mapNotNull { item -> item.optJSONObject("artist")?.let { artist ->
-                artist.str("id").takeIf { com.novalisten.app.data.validMusicId(it) }?.let { com.novalisten.app.data.ArtistCredit(artist.str("name"), it) }
+            val rawCredits = recording.objects("artist-credit")
+            val credits = rawCredits.mapNotNull { item -> item.optJSONObject("artist")?.let { artist ->
+                val name = listOf(item.str("name"), artist.str("name")).firstOrNull { it.artistNameKey() in candidates }
+                artist.str("id").takeIf { name != null && com.novalisten.app.data.validMusicId(it) }
+                    ?.let { com.novalisten.app.data.ArtistCredit(name!!, it.lowercase(java.util.Locale.ROOT)) }
             } }
-            credits.takeIf { it.size == candidates.size && it.map { c -> c.name.artistNameKey() }.toSet() == candidates }
+            credits.takeIf { it.size == rawCredits.size && it.size == candidates.size && it.map { c -> c.name.artistNameKey() }.toSet() == candidates }
         }.distinctBy { it.map { credit -> credit.id }.sorted() }
         return matches.singleOrNull().orEmpty()
     }

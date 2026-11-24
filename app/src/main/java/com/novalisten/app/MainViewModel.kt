@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 
 private const val SOURCE_PLAYLIST = "source_playlist"
 
+data class PlaybackProgress(val trackId: String? = null, val position: Long = 0, val duration: Long = 0)
+
 data class PlaybackUi(
     val connected: Boolean = false,
     val currentId: String? = null,
@@ -59,6 +61,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val translation = app.translation
     private val _playback = MutableStateFlow(PlaybackUi())
     val playback = _playback.asStateFlow()
+    private val _progress = MutableStateFlow(PlaybackProgress())
+    val progress = _progress.asStateFlow()
+    fun prioritizeArtists(ids: List<String>) { app.visibleArtists.value = ids }
+
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 5)
     val messages = _messages.asSharedFlow()
     private var controller: MediaController? = null
@@ -72,6 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch { credentials.refresh() }
         repository.refresh()
+        app.startArtistEnrichment()
         controllerFuture.addListener({
             runCatching {
                 controller = controllerFuture.get().also { it.addListener(listener) }
@@ -79,13 +86,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.onFailure { message("Le lecteur n’a pas pu démarrer. Fermez puis rouvrez NovaListen.") }
         }, androidx.core.content.ContextCompat.getMainExecutor(application))
         viewModelScope.launch {
-            while (isActive) { updatePlayer(); delay(250) }
+            while (isActive) { updateProgress(); delay(250) }
         }
     }
     fun message(text: String) { _messages.tryEmit(text) }
+    private fun updateProgress() {
+        val c = controller ?: return
+        _progress.value = PlaybackProgress(c.currentMediaItem?.mediaId, c.currentPosition.coerceAtLeast(0), c.duration.coerceAtLeast(0))
+    }
     private fun updatePlayer() {
         val c = controller ?: return
-        _playback.value = PlaybackUi(true, c.currentMediaItem?.mediaId, c.isPlaying, c.currentPosition.coerceAtLeast(0), c.duration.coerceAtLeast(0), (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }, c.currentMediaItemIndex.coerceAtLeast(0), c.repeatMode, c.currentMediaItem?.mediaMetadata?.extras?.getString(SOURCE_PLAYLIST))
+        _playback.value = PlaybackUi(true, c.currentMediaItem?.mediaId, c.isPlaying, 0, c.duration.coerceAtLeast(0), (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }, c.currentMediaItemIndex.coerceAtLeast(0), c.repeatMode, c.currentMediaItem?.mediaMetadata?.extras?.getString(SOURCE_PLAYLIST))
+        updateProgress()
     }
     private fun item(track: Track, source: String?): MediaItem = MediaItem.Builder().setMediaId(track.id).setUri(track.id)
         .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist).setAlbumTitle(track.album)
@@ -143,7 +155,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearRemotePreviews() { viewModelScope.launch { remoteImages.clearPreviews() } }
     fun artistNoteFor(id: String): ArtistNote {
         val local = repository.data.value
-        val group = artistGroups(playableTracks(repository.library.value.tracks, local.hidden), local.catalog).find { it.id == id }
+        val group = repository.catalog.value.artists.find { it.id == id }
         return group?.let { artistNote(it, local) } ?: local.artists[id] ?: ArtistNote()
     }
     fun saveArtistBiography(id: String, biography: String, source: String) { persist("Biographie choisie sauvegardée hors ligne") {
@@ -154,7 +166,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val seed = artistNoteFor(id)
         repository.mutate { saveArtistPortrait(id, portrait, source, seed) }
     } }
-    fun allowMissingArtistFields(id: String) { persist("Les champs vides de cette fiche peuvent être complétés pendant l’écoute, selon vos réglages") {
+    fun allowMissingArtistFields(id: String) { persist("Les champs vides de cette fiche peuvent être complétés automatiquement, selon vos réglages") {
         val seed = artistNoteFor(id)
         repository.mutate { allowMissingArtistFields(id, seed) }
     } }

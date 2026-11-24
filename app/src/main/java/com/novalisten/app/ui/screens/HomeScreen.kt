@@ -28,7 +28,6 @@ fun HomeScreen(tracks: List<Track>, data: LocalData, vm: MainViewModel, onLibrar
     val favorites = tracks.filter { it.id in data.favorites }
     val byId = remember(tracks) { tracks.associateBy { it.id } }
     val recent = remember(tracks, data.events) { data.events.filter { inLocalDayWindow(it, 3) }.mapNotNull { byId[it.trackId] }.distinctBy { it.id }.take(40) }
-    val counts = remember(data.events) { data.events.groupingBy { it.trackId }.eachCount() }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Column(Modifier.padding(20.dp)) {
@@ -80,10 +79,10 @@ fun HomeScreen(tracks: List<Track>, data: LocalData, vm: MainViewModel, onLibrar
             }
         }
         item { SectionHeader("Écoutes récentes", "Les 3 derniers jours · écoutes validées", "Historique", onHistory) }
-        if (recent.isEmpty()) item { Notice("Une écoute apparaît après une minute réellement jouée. Pas d’historique inventé, pas de suivi en ligne.") }
+        if (recent.isEmpty()) item { Notice("Vos prochaines écoutes apparaîtront ici.") }
         else item { TrackCarousel(recent, vm) }
         item { SectionHeader("Ajoutés récemment", "Votre musique, juste arrivée", "Tout voir", onLibrary) }
-        if (added.isEmpty()) item { EmptyState("Aucun morceau local", "Copiez votre musique sur le téléphone, puis revenez ici. Les fichiers de 60 secondes ou plus sont admis.") }
+        if (added.isEmpty()) item { EmptyState("Aucun morceau local", "Ajoutez votre musique sur le téléphone.") }
         else item { TrackCarousel(added, vm) }
         item { SectionHeader("Éléments épinglés", "Vos playlists à portée de main") }
         val pinned = data.playlists.filter { it.pinnedAt != null }.sortedByDescending { it.pinnedAt }
@@ -93,7 +92,6 @@ fun HomeScreen(tracks: List<Track>, data: LocalData, vm: MainViewModel, onLibrar
                 leadingContent = { NovaIcon(Icons.Outlined.PushPin) }, trailingContent = { Icon(Icons.Outlined.ChevronRight, null) },
                 modifier = Modifier.padding(horizontal = 12.dp).clickable { onPlaylist(list.id) }, colors = ListItemDefaults.colors(containerColor = theme.surface))
         }
-        item { Notice("Accueil essentiel · version de test. Les mixes avancés, bilans et autres modules de la conception seront ajoutés progressivement.") }
         item { Spacer(Modifier.height(22.dp)) }
     }
 }

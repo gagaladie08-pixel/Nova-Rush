@@ -10,7 +10,7 @@ class AutomaticArtistLookup(private val remote: RemoteSources) : ArtistLookup {
     override suspend fun progressively(request: ArtistRequest, biography: Boolean, portrait: Boolean, emit: suspend (ArtistResult) -> Unit) {
         if (biography) {
             val result = resolve(request, true, false)
-            emit(result)
+            emit(result.copy(portraitComplete = !portrait))
             if (!result.identityVerified) return
         }
         if (portrait) emit(resolve(request, false, true))
@@ -20,7 +20,7 @@ class AutomaticArtistLookup(private val remote: RemoteSources) : ArtistLookup {
             return ArtistResult(note = "Artiste non identifié : utilisez la correction locale des crédits.")
         val cached = identities[request]?.takeIf { it.third > System.currentTimeMillis() }
         val mbid = cached?.first ?: if (validMusicId(request.mbid)) request.mbid else remote.artistForCurrentRecording(request)
-            ?: return ArtistResult(note = "Le nom seul ne prouve pas l’identité de l’artiste de ce fichier. Aucun contenu attribué sans identifiant local/choisi ou concordance titre, album, durée et crédits du morceau écouté. Vous pouvez choisir l’association dans Photos en ligne.")
+            ?: return ArtistResult(note = "Le nom seul ne prouve pas l’identité de l’artiste de ce fichier. Aucun contenu attribué sans identifiant local/choisi ou concordance titre, album, durée et crédits d’un morceau local. Vous pouvez choisir l’association dans Photos en ligne.")
         val linked = cached?.second?.qid ?: remote.artistWikidata(mbid) ?: return ArtistResult(note = "Pas de lien d’identité Wikidata vérifiable. Aucun portrait choisi sur le seul nom.")
         val entity = cached?.second ?: remote.verifiedArtistEntity(linked, mbid)
             ?: return ArtistResult(note = "Les identifiants d’artiste ne concordent pas ; choix manuel nécessaire.")
