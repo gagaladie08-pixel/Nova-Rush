@@ -60,17 +60,23 @@ jobs:
           fi
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
             --jq '.assets[] | "::notice title=APK 0.3.1::" + .name + " " + .browser_download_url'
-      - name: Publier aussi deux blobs pour la récupération par API
+      - name: Récupération sans asset : blobs horodatés par nom fixe
+        # gh run download / release assets pass through blocked hosts here; the Git Data API
+        # does not. The file name is deterministic: NovaListen-Next-0.3.1.apk.b64.<n>
         run: |
           python3 - <<'PY'
           import base64, hashlib, json, os, subprocess
           from pathlib import Path
-          for label in ['NovaListen-Next-0.3.1.apk', 'SHA256SUMS.txt']:
-              data = (Path('dist') / label).read_bytes()
-              body = json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode()
+          data = (Path('dist') / 'NovaListen-Next-0.3.1.apk').read_bytes()
+          encoded = base64.b64encode(data)
+          chunk = 24_000_000
+          parts = [encoded[i:i + chunk] for i in range(0, len(encoded), chunk)]
+          for index, part in enumerate(parts):
+              body = json.dumps({'content': part.decode(), 'encoding': 'base64'}).encode()
               out = subprocess.run(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/git/blobs', '--input', '-'],
                                    input=body, stdout=subprocess.PIPE, check=True).stdout
-              info = {'file': label, 'blob': json.loads(out)['sha'], 'bytes': len(data),
-                      'sha256': hashlib.sha256(data).hexdigest(), 'commit': os.environ['GITHUB_SHA']}
-              print('::notice title=NovaListen delivery::' + json.dumps(info), flush=True)
+              print('::notice title=NovaListen blob::' + json.dumps(
+                  {'part': index, 'parts': len(parts), 'blob': json.loads(out)['sha']}), flush=True)
+          print('::notice title=NovaListen sha256::' + hashlib.sha256(data).hexdigest()
+                + ' bytes=' + str(len(data)) + ' parts=' + str(len(parts)), flush=True)
           PY
