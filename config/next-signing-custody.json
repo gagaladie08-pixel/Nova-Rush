@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "application_id": "com.novalisten.app.next",
+  "repository": "gagaladie08-pixel/Nova-Rush",
+  "secret_name": "NOVALISTEN_NEXT_SIGNING_BACKUP_B64",
+  "status": "pending_secret_access",
+  "certificate_sha256": null,
+  "backup_sha256": null,
+  "owner_recovery_copy_confirmed": false
+}

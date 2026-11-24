@@ -1,0 +1,34 @@
+name: NovaListen Next — vérifier la récupération du coffre
+
+on:
+  push:
+    branches: [arena/216bd0ac-nova-rush]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: novalisten-next-vault-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: >-
+      github.repository == 'gagaladie08-pixel/Nova-Rush' &&
+      github.ref == 'refs/heads/arena/216bd0ac-nova-rush' &&
+      (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[next-vault-check]'))
+    name: Restaurer et utiliser la clé Next — aucune génération ni APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Vérifier le secret et nettoyer les fichiers privés temporaires
+        env:
+          NOVALISTEN_NEXT_SIGNING_BACKUP_B64: ${{ secrets.NOVALISTEN_NEXT_SIGNING_BACKUP_B64 }}
+        run: python3 scripts/next_key_vault.py verify

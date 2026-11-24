@@ -13,6 +13,12 @@ Le lot corrige les crédits de collaborations, partage l’index du catalogue ho
 
 **[Périmètre, confidentialité, tests et limites de 0.3.1](docs/developpement/12-huit-corrections-next-0.3.1.md).** Version source `0.3.1 / code 7` ; même identité et politique de clé Next. Aucun nouvel APK signé/publication 0.3.1 dans ce lot : **le lien ci-dessous reste 0.3.0 et ne contient pas ces huit corrections**. Aucune modification de 0.2.3 ni nouvelle clé.
 
+## Continuité de Next — réinstallation autorisée, coffre en préparation
+
+**La clé Next 0.3.0 n’est plus accessible dans l’espace actuel.** L’utilisateur a autorisé une **nouvelle signature pour réinstaller Next uniquement**, après avertissement de la perte des données internes, et choisi les **secrets chiffrés du dépôt + une copie privée indépendante**. Aucun changement pour 0.2.3. **Aucune nouvelle clé générée pour le moment** : l’accès aux secrets est bloqué et le stockage doit d’abord être rendu utilisable.
+
+Le contrôle de restauration du coffre est préparé : **80 tests Python de signature réussis localement**, dont 31 nouveaux tests synthétiques, sans clé réelle générée. Cela ne vaut pas encore preuve de récupération depuis Actions ni nouveau livrable APK. [État précis, procédure et garde-fous](docs/developpement/13-stockage-durable-cle-next.md).
+
 ## APK 0.3.0 — NovaListen Next, installation parallèle
 
 **[Télécharger NovaListen Next 0.3.0 — APK signé (89,8 Mo)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.3.0/NovaListen-Next-0.3.0-debug.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.3.0/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-next-v0.3.0). Exactement le binaire signé et testé, publié sans recompilation ni nouvelle signature.
@@ -51,7 +57,7 @@ Ce sont des essais ciblés d’installation/démarrage, **pas la suite instrumen
 
 Pour l’identifiant historique `com.novalisten.app`, le certificat de **0.2.3 reste obligatoire** : sa chaîne de livraison bloque sans la clé privée originale, toujours non retrouvée. Aucune substitution ou désinstallation n’est effectuée. [Audit et blocage historique](docs/developpement/09-continuite-signature.md).
 
-**Next est une identité distincte**, autorisée ensuite pour l’installation parallèle : clé privée créée une seule fois, sauvegarde récupérable vérifiée et conservée par l’utilisateur, certificat épinglé. Compilation sans clé en CI, signature locale contrôlée ; cette nouvelle clé ne permet pas de mettre à jour 0.2.3. [Procédure et limites Next](docs/developpement/11-installation-parallele-et-cle-next.md).
+**Next est une identité distincte**, autorisée ensuite pour l’installation parallèle. Son historique 0.3.0 (signature locale et sauvegarde vérifiée à la livraison) est décrit dans la [procédure initiale](docs/developpement/11-installation-parallele-et-cle-next.md). Cette clé n’est plus accessible : une réinstallation de Next avec une nouvelle signature et un coffre Actions est désormais autorisée, mais **aucune nouvelle clé n’est encore provisionnée**. [Conservation durable et état réel](docs/developpement/13-stockage-durable-cle-next.md). Aucune clé Next ne permet de mettre à jour 0.2.3.
 
 ## Historique 0.2.2 — swipes et commandes plein écran
 

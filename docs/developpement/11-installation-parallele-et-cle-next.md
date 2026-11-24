@@ -1,5 +1,12 @@
 # NovaListen Next 0.3.0 — installation parallèle et clé conservée
 
+> **Historique 0.3.0.** La clé décrite ici n’est plus accessible dans l’espace de
+> travail actuel et la copie indépendante n’a pas été retrouvée. L’utilisateur a
+> depuis autorisé une réinstallation de **Next uniquement** avec une nouvelle
+> signature, à condition de préparer un stockage durable hors session. Aucune
+> nouvelle clé n’est encore créée et l’APK 0.3.0 reste inchangé. Voir
+> [l’état du coffre et les contrôles requis](13-stockage-durable-cle-next.md).
+
 ## Décision explicite
 
 Après information sur l’impossibilité de mettre à jour 0.2.3 sans sa clé originale,
