@@ -59,13 +59,13 @@ class LyricsLayoutTest {
         compose.runOnIdle { assertEquals(35000L, sought) }
         centered(7)
     }
-    @Test fun wrappedAndPlainLyricsUseHorizontalCenterAlignment() {
+    @Test fun wrappedLyricsUseHorizontalCenterAlignment() {
         compose.setContent { NovaTheme(themeCatalog.first(), effects = false) {
             LyricsBody("fixture", "synthetic", rows, 5, rows[5].timeMs, false, AutoLyricState(), Modifier.width(280.dp).height(420.dp), {})
         } }
         centered(5)
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        compose.onNodeWithTag("lyric_text_5").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        compose.onNodeWithTag("lyric_text_5", useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(androidx.compose.ui.text.style.TextAlign.Center, layouts.single().layoutInput.style.textAlign)
     }
     @Test fun nativeWordFillActuallyChangesPixelsAtItsRealStartMiddleAndEnd() {

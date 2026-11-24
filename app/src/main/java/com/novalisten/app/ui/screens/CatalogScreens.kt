@@ -211,7 +211,7 @@ fun AlbumDetail(group: AlbumGroup, index: CatalogSnapshot, data: LocalData, play
             Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Artwork(group.artwork, group.name, Modifier.fillMaxWidth(.72f).aspectRatio(1f))
                 Spacer(Modifier.height(18.dp)); Text(group.name, style = MaterialTheme.typography.headlineMedium)
-                group.editions.flatMap { edition -> edition.tracks.flatMap { index.artistsByTrack[it.id].orEmpty() } }.distinctBy { it.id }.forEach { artist ->
+                index.artistsByAlbum[group.id].orEmpty().forEach { artist ->
                     TextButton({ onArtist(artist.id) }) { Text(artist.name) }
                 }
                 Text(listOfNotNull(group.year.takeIf { it > 0 }?.toString(), group.kind.label.takeIf { group.kind != ReleaseKind.UNKNOWN }, itemCount(group.tracks.size, "titre"), totalDurationLabel(group.tracks.sumOf { it.durationMs })).joinToString(" · "))
@@ -243,7 +243,7 @@ fun AlbumDetail(group: AlbumGroup, index: CatalogSnapshot, data: LocalData, play
         "info" -> AlertDialog(onDismissRequest = { dialog = "" }, title = { Text("Éditions et sources locales") }, text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { Text(albumInformation(group) + data.covers[group.representative.tracks.first().albumKey]?.let { "\n\n${it.source}" }.orEmpty()) } }, confirmButton = { TextButton({ dialog = "" }) { Text("Fermer") } })
         "representative", "original" -> EditionChoiceDialog(group, dialog == "original", { dialog = "" }) { edition -> vm.chooseEdition(group, edition, dialog == "original"); dialog = "" }
         "kind" -> ReleaseKindDialog(group, { dialog = "" }) { kind -> vm.classifyRelease(group.id, kind); dialog = "" }
-        "artists" -> AlertDialog(onDismissRequest = { dialog = "" }, title = { Text("Artistes de cette sortie") }, text = { Column { group.editions.flatMap { edition -> edition.tracks.flatMap { index.artistsByTrack[it.id].orEmpty() } }.distinctBy { it.id }.forEach { artist -> TextButton({ dialog = ""; onArtist(artist.id) }) { Text(artist.name) } } } }, confirmButton = { TextButton({ dialog = "" }) { Text("Fermer") } })
+        "artists" -> AlertDialog(onDismissRequest = { dialog = "" }, title = { Text("Artistes de cette sortie") }, text = { Column { index.artistsByAlbum[group.id].orEmpty().forEach { artist -> TextButton({ dialog = ""; onArtist(artist.id) }) { Text(artist.name) } } } }, confirmButton = { TextButton({ dialog = "" }) { Text("Fermer") } })
         "separate" -> AlertDialog(onDismissRequest = { dialog = "" }, title = { Text("Séparer les éditions ?") }, text = { Text("Chaque édition retrouve sa carte. Les fichiers, associations d’enregistrements, favoris, paroles et playlists restent intacts. Aucune fusion automatique de ce groupe ne sera réappliquée.") }, confirmButton = { TextButton({ vm.separateEditions(group); dialog = ""; onBack() }) { Text("Séparer") } }, dismissButton = { TextButton({ dialog = "" }) { Text("Annuler") } })
         "recordings" -> RecordingAssociationsDialog(group, data.catalog, vm) { dialog = "" }
     }

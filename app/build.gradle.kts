@@ -50,14 +50,14 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
-    testOptions { animationsDisabled = true }
+    testOptions { animationsDisabled = true; unitTests.isIncludeAndroidResources = true }
     lint { abortOnError = true; checkReleaseBuilds = false }
 }
 
-// Canonical Maven Central endpoint; repo1 intermittently returns HTTP 429
-// for Robolectric's Android framework checksum downloads on fresh runners.
+// Official read-only Maven Central mirror: both repo1 and repo.maven.apache.org
+// have returned HTTP 429 for Robolectric framework downloads on fresh CI runners.
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
-    systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+    systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2/")
 }
 
 dependencies {
@@ -79,6 +79,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("org.json:json:20240303")

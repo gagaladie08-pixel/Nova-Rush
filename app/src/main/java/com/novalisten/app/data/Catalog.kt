@@ -80,8 +80,8 @@ data class AlbumEdition(val id: String, val name: String, val artist: String, va
 }
 data class AlbumGroup(val id: String, val name: String, val artist: String, val tracks: List<Track>,
                       val editions: List<AlbumEdition>, val originalId: String, val representativeId: String,
-                      val kind: ReleaseKind, val familyId: String? = null, val automaticFamily: Boolean = false, val groupingReason: String = "") {
-    val editionCount: Int get() = editions.map { it.fragmentKey }.distinct().size
+                      val kind: ReleaseKind, val familyId: String? = null, val automaticFamily: Boolean = false, val groupingReason: String = "",
+                      val editionCount: Int = editions.map { it.fragmentKey }.distinct().size) {
     val representative: AlbumEdition get() = editions.first { it.id == representativeId }
     val artwork: String? get() = representative.artwork
     fun containsEdition(id: String): Boolean = editions.any { it.id == id }
@@ -107,7 +107,7 @@ fun artistGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()
     val known = buildSet {
         eligible.forEach { track ->
             if (!ArtistCredits.mayBeMultiple(track.artist)) add(track.artist.artistNameKey())
-            (track.credits + track.albumCredits + choices.artists[track.id].orEmpty()).forEach { add(it.name.artistNameKey()) }
+            (track.credits + track.albumCredits + choices.artists[track.id].orEmpty() + choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits.orEmpty()).forEach { add(it.name.artistNameKey()) }
             track.catalogAlbumArtist.takeIf { !ArtistCredits.mayBeMultiple(it) }?.let { add(it.artistNameKey()) }
         }
     }
@@ -155,8 +155,10 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
         val ordered = versions.sortedWith(compareBy<AlbumEdition> { if (AlbumFamilies.isRequestedOriginal(it)) 0 else 1 }
             .thenBy { it.year.takeIf { year -> year > 0 } ?: Int.MAX_VALUE }
             .thenBy { if (AlbumFamilies.baseTitle(it.name) != AlbumFamilies.titleKey(it.name)) 1 else 0 }
-            .thenByDescending { it.tracks.size }.thenBy { it.name.normalized() }.thenBy { it.id })
-        val original = ordered.firstOrNull { it.id == family?.original } ?: ordered.first()
+            .thenBy { it.name.normalized() }.thenBy { it.id })
+        val initial = ordered.first()
+        val original = ordered.firstOrNull { it.id == family?.original }
+            ?: ordered.filter { it.fragmentKey == initial.fragmentKey }.maxByOrNull { it.tracks.size } ?: initial
         val representative = ordered.firstOrNull { it.id == family?.representative } ?: original
         val sourceOrder = listOf(original) + ordered.filterNot { it.id == original.id }
         val unique = mutableListOf<Track>()

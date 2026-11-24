@@ -101,7 +101,22 @@ internal object AlbumFamilies {
         val result = editions.filter { it.id in manual }.groupBy { manual.getValue(it.id).id }.map { (id, versions) ->
             Bucket(id, versions, manual.getValue(versions.first().id), "Regroupement confirmé localement.")
         }.toMutableList()
-        val remaining = editions.filterNot { it.id in manual }
+        // A representative/grouping correction must survive discovering another compatible
+        // fragment later. Only one unambiguous, fully compatible fragment cluster may adopt it.
+        val remaining = editions.filterNot { it.id in manual }.filter { edition ->
+            if (edition.id in choices.separated) true else {
+                val candidates = result.withIndex().filter { (_, bucket) ->
+                    fragmentSets(bucket.editions, choices.separated).any { indices ->
+                        indices.all { fragments(bucket.editions[it], edition) }
+                    }
+                }
+                val chosen = candidates.singleOrNull()
+                if (chosen == null) true else {
+                    result[chosen.index] = chosen.value.copy(editions = chosen.value.editions + edition)
+                    false
+                }
+            }
+        }
         val idsByName = editions.groupBy { it.artist.artistNameKey() }.mapValues { (_, versions) ->
             versions.mapNotNull { edition -> edition.artistCredits.map { it.mbid.lowercase(Locale.ROOT) }.takeIf { ids -> ids.isNotEmpty() && ids.all(::validMusicId) }?.sorted() }.distinct()
         }

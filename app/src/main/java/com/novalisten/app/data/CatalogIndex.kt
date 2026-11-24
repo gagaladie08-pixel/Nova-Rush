@@ -11,6 +11,9 @@ data class CatalogSnapshot(
     val albumByTrack: Map<String, AlbumGroup> = emptyMap(),
     val sourceChoices: CatalogChoices = CatalogChoices(),
     val sourceHidden: Set<String> = emptySet(),
+    val artistsById: Map<String, ArtistGroup> = emptyMap(),
+    val albumsById: Map<String, AlbumGroup> = emptyMap(),
+    val artistsByAlbum: Map<String, List<ArtistGroup>> = emptyMap(),
 ) {
     fun isCurrent(track: Track, local: LocalData): Boolean = ready && tracks[track.id] == track &&
         sourceChoices == local.catalog && sourceHidden == local.hidden
@@ -22,6 +25,8 @@ data class CatalogSnapshot(
             val artistsByTrack = mutableMapOf<String, MutableList<ArtistGroup>>()
             artists.forEach { artist -> artist.tracks.forEach { artistsByTrack.getOrPut(it.id) { mutableListOf() }.add(artist) } }
             val albumByTrack = mutableMapOf<String, AlbumGroup>()
+            val artistsById = artists.associateBy { it.id }
+            val artistsByAlbum = mutableMapOf<String, List<ArtistGroup>>()
             val albumsByArtist = mutableMapOf<String, MutableList<AlbumGroup>>()
             albums.forEach { album ->
                 val participants = linkedSetOf<String>()
@@ -30,8 +35,12 @@ data class CatalogSnapshot(
                     artistsByTrack[track.id].orEmpty().forEach { participants += it.id }
                 } }
                 participants.forEach { albumsByArtist.getOrPut(it) { mutableListOf() }.add(album) }
+                artistsByAlbum[album.id] = participants.mapNotNull { artistsById[it] }
             }
-            return CatalogSnapshot(true, playable.associateBy { it.id }, artists, albums, artistsByTrack, albumsByArtist, albumByTrack, choices, hidden)
+            return CatalogSnapshot(ready = true, tracks = playable.associateBy { it.id }, artists = artists, albums = albums,
+                artistsByTrack = artistsByTrack, albumsByArtist = albumsByArtist, albumByTrack = albumByTrack,
+                sourceChoices = choices, sourceHidden = hidden, artistsById = artistsById,
+                albumsById = albums.associateBy { it.id }, artistsByAlbum = artistsByAlbum)
         }
     }
 }

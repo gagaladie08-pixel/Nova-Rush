@@ -73,4 +73,52 @@ class LibraryArtistsTest {
         auto.onLibrary(listOf(work("one")), ArtistAutomation(), emptyMap(), false); advanceUntilIdle()
         assertEquals(0, calls)
     }
+    @Test fun biographyPhaseNeverStartsPortraitFallbackBeforeTheLinkedPhotoWasChecked() = runTest {
+        var cascade = 0; var photoPhase = false
+        val saved = mutableListOf<ArtistNote>()
+        val lookup = object : ArtistLookup {
+            override suspend fun resolve(request: ArtistRequest, biography: Boolean, portrait: Boolean): ArtistResult = error("Progressive")
+            override suspend fun progressively(request: ArtistRequest, biography: Boolean, portrait: Boolean, emit: suspend (ArtistResult) -> Unit) {
+                emit(ArtistResult(biography = bio, identityVerified = true, verifiedMbid = "11111111-1111-1111-1111-111111111111", portraitComplete = false))
+                assertEquals(0, cascade); assertEquals(bio.text, saved.single().biography)
+                photoPhase = true
+                emit(ArtistResult(identityVerified = true, verifiedMbid = "11111111-1111-1111-1111-111111111111"))
+            }
+        }
+        val auto = AutomaticArtists(this, lookup, { emptyList() }, { error("No image") }, {}, { _, _, note -> saved += note; false },
+            discoverPortraits = { _, _ -> assertTrue(photoPhase); cascade++; null })
+        auto.onLibrary(listOf(work("one")), ArtistAutomation(), emptyMap(), true); advanceUntilIdle()
+        assertEquals(1, cascade); assertEquals(1, saved.size)
+    }
+    @Test fun aPlayingOrVisibleArtistPreemptsAnUnfinishedBackgroundSearch() = runTest {
+        for (playing in listOf(true, false)) {
+            val started = mutableListOf<String>(); val saved = mutableListOf<Pair<String, ArtistNote>>()
+            val lookup = object : ArtistLookup { override suspend fun resolve(request: ArtistRequest, biography: Boolean, portrait: Boolean): ArtistResult {
+                started += request.id
+                if (request.id == "background") delay(10_000)
+                return ArtistResult(biography = bio, identityVerified = true)
+            } }
+            val auto = loader(this, lookup, saved)
+            val background = work("background"); val priority = work("priority")
+            auto.onLibrary(listOf(background, priority), ArtistAutomation(), emptyMap(), true)
+            advanceTimeBy(1000); runCurrent(); assertEquals(listOf("background"), started)
+            auto.onLibrary(listOf(priority, background), ArtistAutomation(), emptyMap(), true,
+                priorityPlaying = if (playing) setOf("priority") else emptySet(), priorityVisible = if (playing) emptySet() else setOf("priority"))
+            advanceTimeBy(1000); runCurrent()
+            assertEquals("priority", saved.first().first)
+            auto.stop(); advanceUntilIdle()
+        }
+    }
+    @Test fun aManualClearingDuringARequestMasksBothFieldsBeforeAnyImageDownload() = runTest {
+        var prepared = 0; val saved = mutableListOf<ArtistNote>()
+        val lookup = object : ArtistLookup { override suspend fun resolve(request: ArtistRequest, biography: Boolean, portrait: Boolean): ArtistResult {
+            delay(1000); return ArtistResult(biography = bio, identityVerified = true)
+        } }
+        val auto = AutomaticArtists(this, lookup, { prepared++; emptyList() }, { error("No image") }, {}, { _, _, note -> saved += note; false })
+        auto.onLibrary(listOf(work("one")), ArtistAutomation(), emptyMap(), true); advanceTimeBy(1000)
+        auto.onLibrary(listOf(work("one")), ArtistAutomation(), mapOf("one" to ArtistNote(biographyLocked = true, portraitLocked = true)), true)
+        advanceUntilIdle()
+        assertTrue(saved.isEmpty()); assertEquals(0, prepared)
+    }
+
 }

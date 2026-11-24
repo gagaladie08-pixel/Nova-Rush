@@ -102,6 +102,7 @@ fun FullPlayer(track: Track, playbackState: PlaybackUi, data: LocalData, tracks:
                onDismiss: () -> Unit, onMenu: () -> Unit, onAdd: () -> Unit, onEditLyrics: () -> Unit, onLyricsInfo: () -> Unit, blocked: Boolean) {
     val progress by vm.progress.collectAsStateWithLifecycle()
     val playback = if (progress.trackId == track.id) playbackState.copy(position = progress.position, duration = progress.duration) else playbackState
+    val byId = remember(tracks) { tracks.associateBy { it.id } }
     var lyricsPage by rememberSaveable { mutableStateOf(false) }
     var controls by remember { mutableStateOf(true) }
     var lastTouch by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -188,7 +189,7 @@ fun FullPlayer(track: Track, playbackState: PlaybackUi, data: LocalData, tracks:
             Text("File d’attente · ${playback.queue.size}", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
             LazyColumn(Modifier.fillMaxHeight(.7f)) {
                 itemsIndexed(playback.queue) { index, id ->
-                    tracks.find { it.id == id }?.let { song -> ListItem(headlineContent = { Text(song.title, maxLines = 1) }, supportingContent = { Text(song.artist) }, leadingContent = { Text(if (index == playback.index) "▶" else "${index + 1}") }, modifier = Modifier.clickable { vm.jumpTo(index); queue = false }) }
+                    byId[id]?.let { song -> ListItem(headlineContent = { Text(song.title, maxLines = 1) }, supportingContent = { Text(song.artist) }, leadingContent = { Text(if (index == playback.index) "▶" else "${index + 1}") }, modifier = Modifier.clickable { vm.jumpTo(index); queue = false }) }
                 }
             }
         }

@@ -67,4 +67,52 @@ class CatalogCorrectionsTest {
         assertEquals("Artist 0", index.artistsByTrack.getValue("1").single().name)
         assertFalse(index.albumByTrack.containsKey("0")); assertFalse(index.artistsByTrack.containsKey("unknown"))
     }
+    @Test fun unknownMetadataCannotTransitivelyBridgeConflictingYearsOrReleaseIdentities() {
+        val one = song("one", 1, 1)
+        val unknown = song("bridge", 2, 2).copy(year = 0)
+        val other = song("other", 3, 3).copy(year = 2026)
+        for (input in listOf(listOf(one, unknown, other), listOf(other, unknown, one))) {
+            val groups = albumGroups(input)
+            assertEquals(2, groups.size)
+            assertTrue(groups.none { it.containsTrack(one.id) && it.containsTrack(other.id) })
+            assertEquals(groups.size, groups.map { it.id }.toSet().size)
+        }
+        val id1 = "11111111-1111-1111-1111-111111111111"
+        val id2 = "22222222-2222-2222-2222-222222222222"
+        val groups = albumGroups(listOf(one.copy(releaseId = id1), unknown, other.copy(year = one.year, releaseId = id2)))
+        assertEquals(2, groups.size)
+        assertTrue(groups.none { it.containsTrack(one.id) && it.containsTrack(other.id) })
+    }
+    @Test fun aMatchingTitleYearAndCoverWithoutSlotsOrIdentityIsNotEnough() {
+        val one = song("one").copy(number = 0, displayCover = "file:///same.jpg")
+        val two = song("two", 2).copy(number = 0, displayCover = one.displayCover)
+        assertEquals(2, albumGroups(listOf(one, two)).size)
+    }
+    @Test fun numberedFragmentsUseOneGlobalDiscAndTrackOrderEvenWhenASmallerIdContainsTheLastSong() {
+        val first = song("last", 1, 3)
+        val rest = listOf(song("one", 2, 1), song("two", 2, 2))
+        val group = albumGroups(listOf(first) + rest).single()
+        assertEquals(listOf("one", "two", "last"), group.tracks.map { it.id })
+        assertEquals(rest.first().editionKey, group.originalId)
+        assertEquals(1, group.editionCount)
+    }
+    @Test fun aSavedSourceChoiceCanAdoptANewCompatibleFragmentWithoutResettingTheChoice() {
+        val songs = listOf(song("one", 1, 1), song("two", 2, 2))
+        val old = albumGroups(songs).single()
+        val family = AlbumFamily(old.id, songs.map { it.editionKey }.toSet(), songs.first().editionKey, songs.last().editionKey)
+        val third = song("three", 3, 3)
+        val after = albumGroups(songs + third, CatalogChoices(families = mapOf(family.id to family))).single()
+        assertEquals(old.id, after.id); assertEquals(songs.last().editionKey, after.representativeId)
+        assertEquals(3, after.editions.size); assertEquals(1, after.editionCount)
+        assertEquals(2, albumGroups(songs + third, CatalogChoices(families = mapOf(family.id to family), separated = setOf(third.editionKey))).size)
+    }
+    @Test fun staleCreditOrHiddenSnapshotsCannotValidateAnAutomaticCommit() {
+        val track = song("one")
+        val index = CatalogSnapshot.build(listOf(track), emptySet(), CatalogChoices())
+        assertTrue(index.isCurrent(track, LocalData()))
+        assertFalse(index.isCurrent(track, LocalData(hidden = setOf("one"))))
+        assertFalse(index.isCurrent(track, LocalData(catalog = CatalogChoices(artists = mapOf(track.id to listOf(ArtistCredit("Chosen")))))))
+        assertFalse(index.isCurrent(track.copy(title = "Changed"), LocalData()))
+    }
+
 }

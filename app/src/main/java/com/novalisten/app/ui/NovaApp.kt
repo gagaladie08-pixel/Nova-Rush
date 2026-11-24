@@ -128,7 +128,12 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                     LazyRow(Modifier.fillMaxWidth().testTag("navigation"), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         itemsIndexed(mainTabs) { index, item ->
                             Column(Modifier.widthIn(min = 76.dp).selectable(selected = tab == index && route.isEmpty(), role = Role.Tab, onClick = {
-                                tab = index; route = ""; routeParent = ""; artistId = null; artistLibrary = false; albumId = null; playlistId = null
+                                if (tab == index && route.isEmpty()) when (index) {
+                                    2 -> { artistId = null; artistLibrary = false }
+                                    3 -> albumId = null
+                                    4 -> playlistId = null
+                                }
+                                tab = index; route = ""; routeParent = ""
                             }).testTag("tab_$index").padding(horizontal = 10.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 NovaIcon(item.icon, tint = if (tab == index && route.isEmpty()) LocalUniverse.current.accent else LocalUniverse.current.text.copy(alpha = .6f))
                                 Spacer(Modifier.height(4.dp)); Text(item.name, style = MaterialTheme.typography.labelSmall, color = if (tab == index && route.isEmpty()) LocalUniverse.current.accent else LocalUniverse.current.text.copy(alpha = .8f))
@@ -163,7 +168,13 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                     else -> fadeIn(if (t.transitionMs != null) tween(t.transitionMs) else spring()) togetherWith fadeOut(if (t.transitionMs != null) tween(t.transitionMs) else spring())
                                 }
                             }) { activeTab ->
-                                tabStates.SaveableStateProvider(activeTab) {
+                                val destination = when (activeTab) {
+                                    2 -> "artist:${artistId ?: "index"}:$artistLibrary"
+                                    3 -> "album:${albumId ?: "index"}"
+                                    4 -> "playlist:${playlistId ?: "index"}"
+                                    else -> "root"
+                                }
+                                tabStates.SaveableStateProvider("$activeTab/$destination") {
                                 if (!library.permission && activeTab < 5) {
                                     EmptyState("Votre musique vous attend", "Autorisez l’accès à vos fichiers audio.", Icons.Outlined.Headphones, Modifier.fillMaxSize(), action = {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -180,13 +191,13 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                     0 -> HomeScreen(playable, data, vm, onLibrary = { tab = 1 }, onFavorites = { routeParent = ""; route = "favorites" }, onHistory = { routeParent = ""; route = "history" }, onPlaylist = ::openPlaylist)
                                     1 -> TrackListScreen("Bibliothèque", visible, data, playback, vm, actions)
                                     2 -> {
-                                        val artist = artists.find { it.id == artistId }
+                                        val artist = catalog.artistsById[artistId]
                                         if (artist != null && artistLibrary) TrackListScreen(artist.name, artist.tracks, data, playback, vm, actions, onBack = { artistLibrary = false })
                                         else if (artist != null) ArtistDetail(artist, data, playback, vm, actions, onBack = { artistId = null }, onAlbum = ::openAlbum, onLibrary = { artistLibrary = true }, onPortrait = { onChooseImage("artist", artist.id) }, onBiography = { enrichment = EnrichmentRequest(EnrichmentMode.BIOGRAPHY, artistId = artist.id, name = artist.name) }, onPhotos = { enrichment = EnrichmentRequest(EnrichmentMode.PHOTOS, artistId = artist.id, name = artist.name) }, allAlbums = catalog.albumsByArtist[artist.id].orEmpty())
                                         else CatalogScreen(true, catalog, data, vm, ::openArtist, ::openAlbum, { addTracks = it }, active = activeTab == tab)
                                     }
                                     3 -> {
-                                        val album = albums.find { it.id == albumId }
+                                        val album = catalog.albumsById[albumId]
                                         if (album != null) AlbumDetail(album, catalog, data, playback, vm, actions, { albumId = null }, ::openArtist, onCovers = { enrichment = EnrichmentRequest(EnrichmentMode.COVERS, album.representative.tracks.first(), name = album.name, albumKey = album.representative.tracks.first().albumKey) })
                                         else CatalogScreen(false, catalog, data, vm, ::openArtist, ::openAlbum, { addTracks = it })
                                     }
