@@ -162,6 +162,27 @@ class NextVaultSigningTest(unittest.TestCase):
                 with self.assertRaises(vault.VaultError): vault.verify_from_environment()
         self.runner.assert_not_called()
 
+    def test_ascii_clipboard_line_breaks_and_spaces_preserve_the_exact_pinned_archive(self):
+        encoded = os.environ[vault.SECRET_NAME]
+        os.environ[vault.SECRET_NAME] = ' \t\r\n' + '\r\n  '.join(encoded[i:i+76] for i in range(0, len(encoded), 76)) + '\n'
+        receipt = vault.verify_from_environment()
+        self.assertEqual(self.custody['backup_sha256'], receipt['backup_sha256'])
+        self.assertTrue(receipt['private_key_and_recovered_copy_verified'])
+        self.assertNotIn(vault.SECRET_NAME, os.environ)
+
+    def test_invalid_non_ascii_clipboard_characters_are_not_silently_removed(self):
+        encoded = os.environ[vault.SECRET_NAME]
+        for marker in ['\u200b', '\ufeff', '`', ':']:
+            os.environ[vault.SECRET_NAME] = marker + encoded
+            with self.subTest(marker=repr(marker)):
+                with self.assertRaises(vault.VaultError): vault.verify_from_environment()
+        self.runner.assert_not_called()
+
+    def test_excessive_raw_clipboard_whitespace_is_bounded_before_decoding(self):
+        os.environ[vault.SECRET_NAME] = ' ' * (vault.MAX_SECRET_CHARS + 8193)
+        with self.assertRaises(vault.VaultError): vault.verify_from_environment()
+        self.runner.assert_not_called()
+
     def test_empty_decoded_archive_is_rejected(self):
         os.environ[vault.SECRET_NAME] = '===='
         with self.assertRaises(vault.VaultError): vault.verify_from_environment()

@@ -66,12 +66,16 @@ def load_configuration():
 def decode_secret(value):
     if not isinstance(value, str) or not value:
         raise VaultError('Secret de récupération Next absent : aucune génération de remplacement.')
-    # Bound the input before stripping or decoding it. Never include its value in an error.
-    if len(value) > MAX_SECRET_CHARS + 2:
+    # Clipboard viewers may wrap a long line. Accept only ASCII layout whitespace,
+    # then keep strict base64 decoding and the exact pinned archive SHA-256 below.
+    # Bound both representations; never silently discard other invalid characters.
+    if len(value) > MAX_SECRET_CHARS + 8192:
         raise VaultError('Secret de récupération Next trop volumineux.')
-    value = value.strip()
+    value = value.translate(str.maketrans('', '', ' \t\r\n'))
     if not value:
         raise VaultError('Secret de récupération Next absent : aucune génération de remplacement.')
+    if len(value) > MAX_SECRET_CHARS:
+        raise VaultError('Secret de récupération Next trop volumineux.')
     try:
         data = base64.b64decode(value, validate=True)
     except (binascii.Error, ValueError):
