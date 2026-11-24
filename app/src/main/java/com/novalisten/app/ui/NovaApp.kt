@@ -76,7 +76,6 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     var pickPlaylist by remember { mutableStateOf<String?>(null) }
     var removeTrack by remember { mutableStateOf<Pair<String, String>?>(null) }
     val artists = catalog.artists
-    val albums = catalog.albums
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     LaunchedEffect(tab, route, artistId) {

@@ -111,7 +111,7 @@ fun RecordingAssociationsDialog(group: AlbumGroup, choices: CatalogChoices, vm: 
 fun LegacyArtistProfilesDialog(group: ArtistGroup, ids: List<String>, data: LocalData, vm: MainViewModel, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Anciens profils conservés") }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            Text("Ces données étaient rattachées au crédit collectif. Vérifiez leur sujet avant de les attribuer à ${group.name}. Les originaux ne seront pas supprimés.")
+            Text("Ces anciens profils sont conservés sous leur crédit d’origine. Vérifiez leur sujet avant de les attribuer à ${group.name}. Les originaux ne seront pas supprimés.")
             ids.forEach { id -> data.artists[id]?.let { note ->
                 Text(id, style = MaterialTheme.typography.titleSmall)
                 note.portrait?.let { uri -> Artwork(uri, id, Modifier.size(100.dp)); TextButton({ vm.saveArtistPortrait(group.id, uri, note.portraitSource); onDismiss() }) { Text("Attribuer ce portrait à ${group.name}") } }

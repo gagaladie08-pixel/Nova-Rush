@@ -116,7 +116,7 @@ fun CatalogScreen(artists: Boolean, index: CatalogSnapshot, data: LocalData, vm:
     if (grouping) GroupEditionsDialog(selectedAlbums, { grouping = false }) { original ->
         vm.groupEditions(selectedAlbums.flatMap { it.editions }.map { it.id }.toSet(), original) { id -> grouping = false; selected = emptySet(); onAlbum(id) }
     }
-    info?.let { value -> AlertDialog(onDismissRequest = { info = null }, title = { Text("Informations locales") }, text = { Text(value) }, confirmButton = { TextButton({ info = null }) { Text("Fermer") } }) }
+    info?.let { value -> AlertDialog(onDismissRequest = { info = null }, title = { Text("Informations locales") }, text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { Text(value) } }, confirmButton = { TextButton({ info = null }) { Text("Fermer") } }) }
 }
 
 @Composable
@@ -129,8 +129,12 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
     var sourcesOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
-    var bio by remember(note) { mutableStateOf(note.biography) }
-    var source by remember(note) { mutableStateOf(note.source) }
+    var bio by remember(group.id) { mutableStateOf(note.biography) }
+    var source by remember(group.id) { mutableStateOf(note.source) }
+    var albumInfo by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(note, editing) {
+        if (!editing) { bio = note.biography; source = note.source }
+    }
     val albums = allAlbums
     val counts = remember(data.events) { data.events.groupingBy { it.trackId }.eachCount() }
     val top = group.tracks.filter { counts.getOrDefault(it.id, 0) > 0 }.sortedByDescending { counts[it.id] }.take(10)
@@ -156,7 +160,7 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
             item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(releases, key = { it.id }) { album -> Box(Modifier.width(160.dp)) {
-                        EntityCard(album.name, "${album.tracks.size} titres locaux", album.artwork, onClick = { onAlbum(album.id) }, onNext = { vm.next(album.tracks) }, onInfo = { vm.message(albumInformation(album)) }, onPlay = { vm.play(album.tracks) })
+                        EntityCard(album.name, "${album.tracks.size} titres locaux", album.artwork, onClick = { onAlbum(album.id) }, onNext = { vm.next(album.tracks) }, onInfo = { albumInfo = albumInformation(album) }, onPlay = { vm.play(album.tracks) })
                     } }
                 }
             }
@@ -172,7 +176,7 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
                         DropdownMenuItem({ Text("Rechercher des photos en ligne") }, { menu = false; onPhotos() })
                         DropdownMenuItem({ Text("Rechercher une biographie en ligne") }, { menu = false; onBiography() })
                         DropdownMenuItem({ Text("Choisir une photo locale") }, { menu = false; onPortrait() })
-                        DropdownMenuItem({ Text("Modifier la biographie") }, { menu = false; editing = true })
+                        DropdownMenuItem({ Text("Modifier la biographie") }, { menu = false; bio = note.biography; source = note.source; editing = true })
                         DropdownMenuItem({ Text("Informations et sources") }, { menu = false; sourcesOpen = true })
                         if (oldProfiles.isNotEmpty()) DropdownMenuItem({ Text("Anciens profils") }, { menu = false; legacyOpen = true })
                         if ((note.biographyLocked && note.biography.isBlank()) || (note.portraitLocked && note.portrait == null)) {
@@ -188,6 +192,9 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
         item { OutlinedButton(onLibrary, Modifier.fillMaxWidth().padding(20.dp)) { Icon(Icons.Outlined.LibraryMusic, null); Spacer(Modifier.width(8.dp)); Text("Bibliothèque de l’artiste") } }
         item { Spacer(Modifier.height(16.dp)) }
     }
+    albumInfo?.let { value -> AlertDialog(onDismissRequest = { albumInfo = null }, title = { Text("Informations sur l’album") },
+        text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { Text(value) } },
+        confirmButton = { TextButton({ albumInfo = null }) { Text("Fermer") } }) }
     if (sourcesOpen) AlertDialog(onDismissRequest = { sourcesOpen = false }, title = { Text("Crédits et sources") }, text = {
         Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
             if (note.source.isNotBlank()) SavedAttribution(note.source)
