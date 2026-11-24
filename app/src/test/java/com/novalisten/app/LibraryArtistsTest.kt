@@ -121,4 +121,11 @@ class LibraryArtistsTest {
         assertTrue(saved.isEmpty()); assertEquals(0, prepared)
     }
 
+    @Test fun neverPlayedArtistsPreferUsableRecordingContextOverAnUnknownAlbum() {
+        val incomplete = Track("bad", "Song", "Singer", "Album inconnu", 1, "Singer", 65000, 0, 2020, 1, "bad.mp3", 100, "audio/mpeg")
+        val useful = incomplete.copy(id = "good", album = "Known album", albumId = 2)
+        val index = CatalogSnapshot.build(listOf(incomplete, useful), emptySet(), CatalogChoices())
+        assertEquals("good", artistLibraryWorks(index, LocalData(), null, emptyList()).single().trackId)
+    }
+
 }

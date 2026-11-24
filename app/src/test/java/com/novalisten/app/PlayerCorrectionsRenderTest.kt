@@ -1,14 +1,17 @@
 package com.novalisten.app
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.foundation.background
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -123,17 +126,31 @@ class PlayerCorrectionsRenderTest {
         val position = mutableLongStateOf(1000)
         val line = LyricTiming.line(1000, "Clarté nouvelle", listOf(TimedToken("Clarté", 1000, 2000), TimedToken("nouvelle", 2500, 3500)))
         val theme = themeCatalog.first()
+        var owner: View? = null
         compose.setContent { NovaTheme(theme, effects = false) {
+            val view = LocalView.current
+            SideEffect { owner = view }
             KaraokeLine(line, true, position.longValue, false, theme.text, theme.accent,
                 androidx.compose.material3.MaterialTheme.typography.headlineSmall.copy(textAlign = TextAlign.Center),
                 Modifier.width(280.dp).background(theme.background).testTag("native_fill"))
         } }
         fun coloredPixels(): Int {
-            val bitmap = compose.onNodeWithTag("native_fill").captureToImage().asAndroidBitmap()
+            compose.waitForIdle()
+            val bounds = compose.onNodeWithTag("native_fill").fetchSemanticsNode().boundsInRoot
+            val bitmap = Bitmap.createBitmap(kotlin.math.ceil((bounds.right - bounds.left).toDouble()).toInt().coerceAtLeast(1),
+                kotlin.math.ceil((bounds.bottom - bounds.top).toDouble()).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+            // Robolectric has no real Window surface for PixelCopy. Draw the measured Compose
+            // owner into a native software Canvas instead; the instrumented test keeps PixelCopy.
+            compose.runOnIdle {
+                val canvas = Canvas(bitmap)
+                canvas.translate(-bounds.left, -bounds.top)
+                owner!!.draw(canvas)
+            }
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
             val accent = theme.accent.toArgb()
-            return pixels.count { pixel -> listOf(0, 8, 16).all { shift -> abs((pixel ushr shift and 255) - (accent ushr shift and 255)) < 35 } }
+            return pixels.count { pixel -> abs((pixel ushr 16 and 255) - (accent ushr 16 and 255)) < 35 &&
+                abs((pixel ushr 8 and 255) - (accent ushr 8 and 255)) < 35 && abs((pixel and 255) - (accent and 255)) < 35 }
         }
         val start = coloredPixels()
         compose.runOnIdle { position.longValue = 1500 }

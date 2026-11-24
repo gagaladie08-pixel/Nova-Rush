@@ -26,7 +26,10 @@ fun artistLibraryWorks(index: CatalogSnapshot, local: LocalData, playing: String
         .thenBy { ranks[it.id] ?: Int.MAX_VALUE }.thenBy { it.name.artistNameKey() }).mapNotNull { group ->
         val track = group.tracks.firstOrNull { it.id == playing } ?: group.tracks.firstOrNull { song ->
             ArtistCredits.forTrack(song, local.catalog).any { validMusicId(it.mbid) && (it.name.artistNameKey() == group.name.artistNameKey() || it.mbid.equals(group.mbid, true)) }
-        } ?: group.tracks.firstOrNull() ?: return@mapNotNull null
+        } ?: group.tracks.firstOrNull { validMusicId(it.recordingId) }
+            ?: group.tracks.firstOrNull { song -> song.title.isNotBlank() && song.title.length <= 300 && song.album.isNotBlank() && song.album.length <= 300 &&
+                song.album.artistNameKey() !in setOf("album inconnu", "unknown album") }
+            ?: group.tracks.firstOrNull() ?: return@mapNotNull null
         artistRequestsForTrack(track, local, listOf(group)).singleOrNull()?.let { ArtistWork(track.id, it) }
     }
 }

@@ -6,7 +6,7 @@ import java.nio.charset.CodingErrorAction
 
 /** Display/index aliases only. Never writes metadata back to the music files. */
 object CatalogText {
-    private val legacy = listOf("windows-1252", "ISO-8859-1", "windows-1250").map(Charset::forName)
+    private val legacy = listOf("windows-1252", "ISO-8859-1", "windows-1250").mapNotNull { runCatching { Charset.forName(it) }.getOrNull() }
     private fun damage(value: String): Int = value.count { it in "ÃÂĂÄÅâð\uFFFD" || (it.isISOControl() && !it.isWhitespace()) }
     fun display(raw: String): String {
         var value = raw.trim()

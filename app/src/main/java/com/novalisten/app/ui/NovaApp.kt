@@ -169,9 +169,9 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                                 }
                             }) { activeTab ->
                                 val destination = when (activeTab) {
-                                    2 -> "artist:${artistId ?: "index"}:$artistLibrary"
-                                    3 -> "album:${albumId ?: "index"}"
-                                    4 -> "playlist:${playlistId ?: "index"}"
+                                    2 -> artistId?.let { "artist/detail/$it/$artistLibrary" } ?: "artist/index"
+                                    3 -> albumId?.let { "album/detail/$it" } ?: "album/index"
+                                    4 -> playlistId?.let { "playlist/detail/$it" } ?: "playlist/index"
                                     else -> "root"
                                 }
                                 tabStates.SaveableStateProvider("$activeTab/$destination") {

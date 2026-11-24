@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   sources:
-    name: Kotlin, tests unitaires et lint — aucune signature ni APK
+    name: Sources Next, tests JVM/rendu et lint — aucune signature ni APK
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -48,7 +48,7 @@ jobs:
           -- env -u GITHUB_ACTIONS -u NOVALISTEN_KEYSTORE_PATH -u NOVALISTEN_VERIFY_SOURCES
           ./gradlew --no-daemon --console=plain assembleDebug
       - name: Compiler les sources et les tests Android, tester le domaine, analyser lint
-        run: scripts/gradle-ci.sh testDebugUnitTest compileDebugAndroidTestKotlin lintDebug
+        run: scripts/gradle-ci.sh -PnovalistenParallel=true testDebugUnitTest compileDebugAndroidTestKotlin lintDebug
       - name: Confirmer l’absence de binaire installable
         if: always()
         run: |
