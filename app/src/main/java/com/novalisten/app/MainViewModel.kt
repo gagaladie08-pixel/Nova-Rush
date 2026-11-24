@@ -137,6 +137,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun forward() { controller?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }; updatePlayer() }
     fun seek(ms: Long) { controller?.seekTo(ms.coerceAtLeast(0)); updatePlayer() }
     fun jumpTo(index: Int) { controller?.let { if (index in 0 until it.mediaItemCount) { it.seekTo(index, 0); it.play() } }; updatePlayer() }
+    /** Réordonne la file réellement jouée. Le morceau en cours reste le même. */
+    fun moveInQueue(from: Int, to: Int) {
+        val c = controller ?: return
+        if (from == to || from !in 0 until c.mediaItemCount || to !in 0 until c.mediaItemCount) return
+        c.moveMediaItem(from, to)
+        updatePlayer()
+    }
     fun cycleRepeat() { controller?.let { it.repeatMode = when (it.repeatMode) { Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL; Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF } }; updatePlayer() }
     fun stop() { controller?.let { it.stop(); it.clearMediaItems() }; _playerOpenRequests.value = PlayerOpenRequest(); updatePlayer() }
     fun favorite(track: Track) { viewModelScope.launch { repository.mutate { setFlag(track.id, "favorite", track.id !in repository.data.value.favorites) } } }

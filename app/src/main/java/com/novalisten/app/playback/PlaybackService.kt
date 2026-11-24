@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.combine
 class PlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private var session: MediaSession? = null
+    private var notification: UniverseNotification? = null
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val counter = PassageCounter()
@@ -97,6 +98,8 @@ class PlaybackService : MediaSessionService() {
                 else MediaSession.ConnectionResult.reject()
             }
         }).build()
+        // Une seule instance : setMediaNotificationProvider refuse un second appel.
+        if (notification == null) notification = UniverseNotification(this).also { setMediaNotificationProvider(it) }
         handler.post(ticker)
         scope.launch {
             combine(lyricPlayback, repository.data, repository.localDataReady, app.lyricPreferences.automatic) { playback, local, ready, enabled ->

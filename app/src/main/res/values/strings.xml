@@ -1,2 +1,2 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources><string name="app_name">NovaListen</string></resources>
+<resources><string name="app_name">NovaListen</string><string name="notification_channel_playback">Lecture NovaListen</string></resources>

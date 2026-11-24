@@ -30,6 +30,16 @@ object ArtistCredits {
             }.map { ArtistCredit(it) }
         }.distinctBy { it.id }.take(16)
     }
+    /** Premier artiste d'un champ « album artist » : « Katy Perry, Doechii » -> « Katy Perry ». */
+    fun albumHead(raw: String): String {
+        val value = CatalogText.display(raw).take(1000)
+        if (value.isBlank() || value.artistNameKey() in protected) return value
+        val beforeFeature = value.replace(featuring, ";").substringBefore(';').trim()
+        val named = beforeFeature.split(Regex("\\s*[,;]\\s*|\\s+/\\s*")).map(String::trim).filter(String::isNotBlank)
+        if (named.size < 2 || named.size > 8) return beforeFeature
+        return named.first().takeIf { it.length > 1 } ?: beforeFeature
+    }
+
     fun mayBeMultiple(raw: String): Boolean = raw.artistNameKey() !in protected &&
         (featuring.containsMatchIn(raw) || raw.any { it == ';' || it == '\u0000' || it == '/' || it == ',' } || Regex("\\s+&\\s+").containsMatchIn(raw))
     /** Candidates are not assignments: unknown punctuation credits need recording evidence. */
@@ -165,7 +175,15 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
     val eligible = tracks.filter { it.playable }.distinctBy { it.id }
     fun nativeAlbumArtists(track: Track): String? = track.albumCredits.map { it.mbid.lowercase(Locale.ROOT) }
         .takeIf { ids -> ids.isNotEmpty() && ids.all(::validMusicId) }?.sorted()?.joinToString("+")
-    val sources = eligible.groupBy { it.editionKey }.flatMap { (id, songs) ->
+    // Réparation A : le featuring ne crée pas un second album. « Katy Perry, Doechii »
+    // et « Katy Perry » désignent le même disque ; les invités restent visibles sur les pistes.
+    // L'identité est construite dès le départ plutôt que par remplacement de chaîne : un nom
+    // court présent dans un nom long ne peut pas produire une clé erronée.
+    fun albumIdentity(track: Track): String {
+        val raw = track.albumArtist.ifBlank { track.artist }
+        return "${track.albumId}:${ArtistCredits.albumHead(raw).normalized()}"
+    }
+    val sources = eligible.groupBy { it.editionKey to albumIdentity(it) }.flatMap { (_, songs) ->
         val identities = songs.mapNotNull(::nativeAlbumArtists).distinct()
         if (identities.size <= 1) listOf(id to songs)
         else songs.groupBy { nativeAlbumArtists(it) ?: "unidentified:${it.id}" }.map { (artist, files) -> "$id:album-artists:$artist" to files }
