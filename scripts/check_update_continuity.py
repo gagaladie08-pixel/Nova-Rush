@@ -21,10 +21,22 @@ class ContinuityError(Exception):
 
 
 def latest_delivery(root=ROOT):
-    manifests = sorted((root / 'apk-livraison').glob('*/manifeste.json'))
+    """La livraison la plus récente est celle qui a le plus grand versionCode.
+
+    Le dossier porte le SHA-256 du fichier : son ordre alphabétique ne dit rien de
+    l'ordre des versions. Trier par dossier choisirait un jour une ancienne version.
+    """
+    manifests = list((root / 'apk-livraison').glob('*/manifeste.json'))
     if not manifests:
         raise ContinuityError('Aucune livraison enregistrée ; installer une première version.')
-    return json.loads(manifests[-1].read_text()), manifests[-1]
+    def rank(path):
+        try:
+            data = json.loads(path.read_text())
+        except ValueError:
+            return (-1, 0)
+        return (int(data.get('version_code') or 0), path.stat().st_mtime)
+    latest = max(manifests, key=rank)
+    return json.loads(latest.read_text()), latest
 
 
 def gradle_identity(path=GRADLE):
