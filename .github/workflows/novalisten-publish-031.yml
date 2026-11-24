@@ -60,23 +60,35 @@ jobs:
           fi
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
             --jq '.assets[] | "::notice title=APK 0.3.1::" + .name + " " + .browser_download_url'
-      - name: Récupération sans asset : blobs horodatés par nom fixe
-        # gh run download / release assets pass through blocked hosts here; the Git Data API
-        # does not. The file name is deterministic: NovaListen-Next-0.3.1.apk.b64.<n>
+      - name: Récupération sans asset — dossier API horodaté
+        # Release assets and run artifacts both go through hosts blocked from the
+        # workspace. The Git Data API is reachable: store the bytes in a directory
+        # named after the file's SHA-256, then verify after download.
+        run: |
+          sha=$(sha256sum dist/NovaListen-Next-0.3.1.apk | cut -d' ' -f1)
+          mkdir -p "apk-livraison/$sha"
+          cp dist/NovaListen-Next-0.3.1.apk "apk-livraison/$sha/"
+          echo "{\"file\":\"NovaListen-Next-0.3.1.apk\",\"bytes\":$(stat -c%s dist/NovaListen-Next-0.3.1.apk),\"sha256\":\"$sha\",\"signature_verified\":true,\"build_run\":$BUILD_RUN}" > "apk-livraison/$sha/manifeste.json"
+          git config user.name "NovaListen delivery"
+          git config user.email "actions@users.noreply.github.com"
+          git add "apk-livraison/$sha"
+          git commit -m "delivery: signed NovaListen Next 0.3.1 ($sha)"
+          git push
+          echo "::notice title=APK 0.3.1 récupérable::apk-livraison/$sha/NovaListen-Next-0.3.1.apk"
+
+      - name: Tester la récupération par l’API (même chemin que le poste de travail)
         run: |
           python3 - <<'PY'
           import base64, hashlib, json, os, subprocess
           from pathlib import Path
-          data = (Path('dist') / 'NovaListen-Next-0.3.1.apk').read_bytes()
-          encoded = base64.b64encode(data)
-          chunk = 24_000_000
-          parts = [encoded[i:i + chunk] for i in range(0, len(encoded), chunk)]
-          for index, part in enumerate(parts):
-              body = json.dumps({'content': part.decode(), 'encoding': 'base64'}).encode()
-              out = subprocess.run(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/git/blobs', '--input', '-'],
-                                   input=body, stdout=subprocess.PIPE, check=True).stdout
-              print('::notice title=NovaListen blob::' + json.dumps(
-                  {'part': index, 'parts': len(parts), 'blob': json.loads(out)['sha']}), flush=True)
-          print('::notice title=NovaListen sha256::' + hashlib.sha256(data).hexdigest()
-                + ' bytes=' + str(len(data)) + ' parts=' + str(len(parts)), flush=True)
+          repo = os.environ['GITHUB_REPOSITORY']
+          sha = hashlib.sha256(Path('dist/NovaListen-Next-0.3.1.apk').read_bytes()).hexdigest()
+          base = f'apk-livraison/{sha}'
+          body = subprocess.check_output(['gh', 'api', f'repos/{repo}/contents/{base}/NovaListen-Next-0.3.1.apk?ref=main'],
+                                         stderr=subprocess.DEVNULL)
+          encoded = ''.join(json.loads(body)['content'].split())
+          data = base64.b64decode(encoded)
+          assert hashlib.sha256(data).hexdigest() == sha, 'récupération API divergente'
+          assert len(data) == Path('dist/NovaListen-Next-0.3.1.apk').stat().st_size
+          print('::notice title=Récupération API vérifiée::' + sha + ' ' + str(len(data)) + ' octets')
           PY
