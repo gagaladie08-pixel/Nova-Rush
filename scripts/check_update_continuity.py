@@ -64,7 +64,11 @@ def check(root=ROOT):
         problems.append('applicationId modifié : nouvelle application, pas une mise à jour.')
     if delivered.get('certificate_sha256') and delivered['certificate_sha256'] != policy['certificate_sha256']:
         problems.append('Certificat différent de la version déjà livrée.')
-    delivered_code = delivered.get('version_code', 0)
+    # Un manifeste ancien peut porter le code en texte : Android compare des entiers.
+    try:
+        delivered_code = int(delivered.get('version_code') or 0)
+    except (TypeError, ValueError):
+        delivered_code = 0
     if identity['version_code'] < delivered_code:
         problems.append('versionCode inférieur à la version livrée : Android refuserait la mise à jour.')
     elif identity['version_code'] == delivered_code:

@@ -79,18 +79,23 @@ jobs:
           echo "::notice title=APK 0.4.0 récupérable::apk-livraison/$sha/NovaListen-Next-0.4.0.apk"
 
       - name: Tester la récupération par l’API (même chemin que le poste de travail)
+        # L'API contents renvoie un contenu vide au-delà de 1 Mo : on passe par
+        # git/trees + git/blobs, qui servent le fichier complet en base64.
         run: |
           python3 - <<'PY'
           import base64, hashlib, json, os, subprocess
           from pathlib import Path
           repo = os.environ['GITHUB_REPOSITORY']
-          sha = hashlib.sha256(Path('dist/NovaListen-Next-0.4.0.apk').read_bytes()).hexdigest()
+          name = 'NovaListen-Next-0.4.0.apk'
+          local = Path('dist') / name
+          sha = hashlib.sha256(local.read_bytes()).hexdigest()
           base = f'apk-livraison/{sha}'
-          body = subprocess.check_output(['gh', 'api', f'repos/{repo}/contents/{base}/NovaListen-Next-0.4.0.apk?ref=${{ github.ref_name }}'],
-                                         stderr=subprocess.DEVNULL)
-          encoded = ''.join(json.loads(body)['content'].split())
-          data = base64.b64decode(encoded)
+          tree = json.loads(subprocess.check_output(
+              ['gh', 'api', f'repos/{repo}/git/trees/{base}?recursive=1']))
+          blob = next(e['sha'] for e in tree['tree'] if e['path'] == name)
+          body = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/git/blobs/{blob}']))
+          data = base64.b64decode(''.join(body['content'].split()))
           assert hashlib.sha256(data).hexdigest() == sha, 'récupération API divergente'
-          assert len(data) == Path('dist/NovaListen-Next-0.4.0.apk').stat().st_size
+          assert len(data) == local.stat().st_size, 'taille divergente'
           print('::notice title=Récupération API vérifiée::' + sha + ' ' + str(len(data)) + ' octets')
           PY
