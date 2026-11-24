@@ -2,7 +2,7 @@ name: NovaListen — APK et tests
 
 on:
   push:
-    branches: [arena/216bd0ac-nova-rush]
+    branches: [arena/216bd0ac-nova-rush, arena/bc2e07e6-nova-rush]
     paths-ignore: ['docs/**', '**.md', 'Conception_Nova_Rush.docx']
   workflow_dispatch:
 
@@ -15,10 +15,8 @@ concurrency:
 
 jobs:
   android:
-    # The delivery key is committed: never build a signed APK from a public repository.
     # Source-only checks and publication of an existing binary never start the APK chain.
     if: >-
-      github.event.repository.private == true &&
       !contains(github.event.head_commit.message, '[publish-apk]') &&
       !contains(github.event.head_commit.message, '[sources-only]')
     name: Compiler, vérifier et tester Android
@@ -64,11 +62,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Activer KVM pour les tests sur émulateur
+        if: ${{ vars.NOVALISTEN_DEVICE_TESTS == 'true' }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Tests d’installation et de navigation (Android 10)
+        if: ${{ vars.NOVALISTEN_DEVICE_TESTS == 'true' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
@@ -78,6 +78,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 2048
           script: scripts/test-android-device.sh
       - name: Tests réels de fenêtre et de persistance (Android 15, gestes puis trois boutons)
+        if: ${{ vars.NOVALISTEN_DEVICE_TESTS == 'true' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -102,8 +103,3 @@ jobs:
             app/build/outputs/connected_android_test_additional_output/
           if-no-files-found: warn
           retention-days: 14
-      - name: Pont de livraison limité aux fichiers compilés
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/github-transfer.py

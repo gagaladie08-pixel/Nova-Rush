@@ -2,7 +2,7 @@ name: NovaListen — Vérification des sources sans APK
 
 on:
   push:
-    branches: [arena/216bd0ac-nova-rush]
+    branches: [arena/216bd0ac-nova-rush, arena/bc2e07e6-nova-rush]
     paths: ['app/**', 'scripts/**', 'config/**', '*.kts', 'gradle/**', '.github/workflows/novalisten-source-checks.yml']
   workflow_dispatch:
 
