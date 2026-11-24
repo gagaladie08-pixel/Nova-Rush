@@ -1,0 +1,76 @@
+name: NovaListen Next — publier l’APK 0.3.1
+
+on:
+  push:
+    branches: [arena/bc2e07e6-nova-rush]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: novalisten-publish-031
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish-031]') }}
+    name: Récupérer l’APK compilé/signé, vérifier, publier
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN: '45456867918'
+      TAG: novalisten-next-v0.3.1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: build-tools;35.0.0
+      - name: Récupérer l’artefact du run de compilation (aucune recompilation)
+        run: |
+          gh run download "$BUILD_RUN" --name NovaListen-Next-0.3.1 --dir dist
+          ls -l dist
+      - name: Vérifier la clé, la signature réelle et la somme du fichier
+        run: |
+          python3 scripts/signing_policy.py verify-keystore
+          python3 scripts/signing_policy.py verify-apk dist/NovaListen-Next-0.3.1.apk
+          cd dist && sha256sum NovaListen-Next-0.3.1.apk | tee SHA256SUMS.txt
+      - name: Publier la version GitHub (lien direct pour le téléphone)
+        run: |
+          notes=$(printf '%s\n' \
+            'Premier APK **0.3.1** compilé et publié avec la clé de livraison unique.' \
+            '' \
+            '- Contient les huit corrections de 0.3.1.' \
+            '- Signé avec `c38a837ee566ad95000af71cb13497e3d330ebcde5c6c8fcc4880265a77c68ad`.' \
+            '- **Réinstallation nécessaire** depuis 0.2.3 / Next 0.3.0 : désinstaller `com.novalisten.app.next`, pas `com.novalisten.app`.' \
+            '- Les fichiers audio ne sont pas touchés ; favoris, playlists, paroles enregistrées et réglages de Next sont perdus à la désinstallation.' \
+            '- Les versions suivantes s’installeront par-dessus celle-ci.')
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/NovaListen-Next-0.3.1.apk dist/SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" dist/NovaListen-Next-0.3.1.apk dist/SHA256SUMS.txt \
+              --title "NovaListen Next 0.3.1 — clé unique, mise à jour rétablie" \
+              --notes "$notes" --prerelease
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq '.assets[] | "::notice title=APK 0.3.1::" + .name + " " + .browser_download_url'
+      - name: Publier aussi deux blobs pour la récupération par API
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, subprocess
+          from pathlib import Path
+          for label in ['NovaListen-Next-0.3.1.apk', 'SHA256SUMS.txt']:
+              data = (Path('dist') / label).read_bytes()
+              body = json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode()
+              out = subprocess.run(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/git/blobs', '--input', '-'],
+                                   input=body, stdout=subprocess.PIPE, check=True).stdout
+              info = {'file': label, 'blob': json.loads(out)['sha'], 'bytes': len(data),
+                      'sha256': hashlib.sha256(data).hexdigest(), 'commit': os.environ['GITHUB_SHA']}
+              print('::notice title=NovaListen delivery::' + json.dumps(info), flush=True)
+          PY
