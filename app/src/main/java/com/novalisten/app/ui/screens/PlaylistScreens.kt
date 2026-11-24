@@ -47,10 +47,10 @@ fun PlaylistIndex(tracks: List<Track>, data: LocalData, vm: MainViewModel, onOpe
         item(span = { GridItemSpan(2) }) {
             Column {
                 PageTitle("Playlists", "${lists.size} listes classiques · locales") {
-                    IconButton(onCreate) { Icon(Icons.Outlined.Add, "Créer une playlist") }
-                    IconButton({ searching = !searching }) { Icon(Icons.Outlined.Search, "Rechercher") }
+                    IconButton(onCreate) { NovaIcon(Icons.Outlined.Add, "Créer une playlist") }
+                    IconButton({ searching = !searching }) { NovaIcon(Icons.Outlined.Search, "Rechercher") }
                     Box {
-                        IconButton({ sortOpen = true }) { Icon(Icons.Outlined.Sort, "Trier les playlists") }
+                        IconButton({ sortOpen = true }) { NovaIcon(Icons.Outlined.Sort, "Trier les playlists") }
                         DropdownMenu(sortOpen, { sortOpen = false }) {
                             listOf("Nom", "Date de création", "Nombre de titres", "Durée").forEachIndexed { index, name -> DropdownMenuItem({ Text((if (sort == index) "✓ " else "") + name) }, { sort = index; prefs.edit().putInt("playlist_sort", index).apply(); sortOpen = false }) }
                             DropdownMenuItem({ Text(if (reverse) "Décroissant ↓" else "Croissant ↑") }, { reverse = !reverse; prefs.edit().putBoolean("playlist_reverse", reverse).apply(); sortOpen = false })
@@ -91,7 +91,7 @@ fun PlaylistDetail(playlist: LocalPlaylist, tracks: List<Track>, data: LocalData
     TrackListScreen("Playlist", available, data, playback, vm, actions, onBack = onBack, sourcePlaylist = playlist.id, fixedOrder = true,
         extraActions = {
             Box {
-                IconButton({ menu = true }) { Icon(Icons.Outlined.MoreVert, "Actions de la playlist") }
+                IconButton({ menu = true }) { NovaIcon(Icons.Outlined.MoreVert, "Actions de la playlist") }
                 DropdownMenu(menu, { menu = false }) {
                     DropdownMenuItem({ Text("Renommer") }, { menu = false; rename = true })
                     DropdownMenuItem({ Text("Réorganiser les morceaux") }, { menu = false; reorder = true })
@@ -142,8 +142,8 @@ private fun ReorderSheet(playlist: LocalPlaylist, tracks: List<Track>, onDismiss
                             }
                         })
                         Text(titles[id] ?: "Référence non affichée", Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        IconButton({ move(id, -1) }, enabled = index > 0) { Icon(Icons.Outlined.ArrowUpward, "Monter") }
-                        IconButton({ move(id, 1) }, enabled = index < ids.lastIndex) { Icon(Icons.Outlined.ArrowDownward, "Descendre") }
+                        IconButton({ move(id, -1) }, enabled = index > 0) { NovaIcon(Icons.Outlined.ArrowUpward, "Monter") }
+                        IconButton({ move(id, 1) }, enabled = index < ids.lastIndex) { NovaIcon(Icons.Outlined.ArrowDownward, "Descendre") }
                     }
                 }
             }

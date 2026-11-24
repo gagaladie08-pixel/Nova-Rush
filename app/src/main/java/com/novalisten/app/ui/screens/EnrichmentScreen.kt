@@ -58,9 +58,9 @@ fun EnrichmentDialog(request: EnrichmentRequest, vm: MainViewModel, onDismiss: (
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().testTag("enrichment_screen")) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onDismiss) { Icon(Icons.Outlined.ArrowBack, "Fermer la recherche") }
+                    IconButton(onDismiss) { NovaIcon(Icons.Outlined.ArrowBack, "Fermer la recherche") }
                     Text(request.mode.label, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                    IconButton(onKeys) { Icon(Icons.Outlined.Key, "Configurer mes clés API") }
+                    IconButton(onKeys) { NovaIcon(Icons.Outlined.Key, "Configurer mes clés API") }
                 }
                 HorizontalDivider()
                 when (request.mode) {

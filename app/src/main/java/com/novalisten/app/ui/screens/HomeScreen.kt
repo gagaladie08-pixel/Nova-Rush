@@ -89,7 +89,7 @@ fun HomeScreen(tracks: List<Track>, data: LocalData, vm: MainViewModel, onLibrar
         if (pinned.isEmpty()) item { Notice("Épinglez une playlist depuis son menu pour la retrouver sur l’Accueil.") }
         else items(pinned, key = { it.id }) { list ->
             ListItem(headlineContent = { Text(list.name) }, supportingContent = { Text("${list.trackIds.count { it in byId }} morceaux disponibles") },
-                leadingContent = { NovaIcon(Icons.Outlined.PushPin) }, trailingContent = { Icon(Icons.Outlined.ChevronRight, null) },
+                leadingContent = { NovaIcon(Icons.Outlined.PushPin) }, trailingContent = { NovaIcon(Icons.Outlined.ChevronRight, null) },
                 modifier = Modifier.padding(horizontal = 12.dp).clickable { onPlaylist(list.id) }, colors = ListItemDefaults.colors(containerColor = theme.surface))
         }
         item { Spacer(Modifier.height(22.dp)) }

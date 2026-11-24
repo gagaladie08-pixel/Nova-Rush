@@ -44,7 +44,7 @@ fun ApiSettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     var feedback by remember { mutableStateOf("") }
     val uri = LocalUriHandler.current
     LazyColumn(Modifier.fillMaxSize().testTag("api_settings"), contentPadding = PaddingValues(bottom = 28.dp)) {
-        item { PageTitle("API et clés", "Recherches et confidentialité") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("API et clés", "Recherches et confidentialité") { IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") } } }
         item { Notice("La musique reste locale. Le chargement automatique des paroles transmet seulement titre, artiste, album et durée du morceau réellement écouté aux sources admissibles du noyau. Aucun audio, historique ou envoi de la collection. Vos paroles sauvegardées ont priorité et ne sont jamais remplacées automatiquement. Pas de recherche au simple lancement ni à la saisie d’une clé, pas de traduction automatique.") }
         item { ListItem(headlineContent = { Text("Charger les paroles pendant l’écoute") }, supportingContent = { Text("Seulement le morceau en cours. Les paroles retenues, leur source et leur synchronisation sont conservées sur cet appareil pour la réouverture hors ligne, sans nouvelle recherche. Rechercher une autre version et Traduire restent dans les trois points.") }, trailingContent = { Switch(automaticLyrics, { vm.lyricPreferences.automatic(it) }, Modifier.testTag("automatic_lyrics")) }) }
         item { Notice("Les artistes sont complétés progressivement dans la bibliothèque, même sans écoute : priorité à la lecture et aux cartes visibles, puis aux autres. Selon les options ci-dessous, leurs noms/identifiants et si nécessaire titre, album et durée d’un morceau de contexte sont transmis aux sources admissibles. Ces informations peuvent donc décrire progressivement une partie de votre collection. Aucun audio, fichier, URI locale ou historique envoyé. Désactivez ces options pour arrêter ces recherches ; les contenus déjà sauvegardés restent locaux.") }
@@ -118,7 +118,7 @@ private fun CredentialEditor(slot: SecretSlot, vm: MainViewModel, onDismiss: () 
                     label = { Text("Nouvelle valeur · jamais affichée ensuite") }, enabled = !busy,
                     visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
-                    trailingIcon = { IconButton({ visible = !visible }) { Icon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, if (visible) "Masquer la saisie" else "Voir la saisie") } })
+                    trailingIcon = { IconButton({ visible = !visible }) { NovaIcon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, if (visible) "Masquer la saisie" else "Voir la saisie") } })
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 Text("Aucun appel de vérification. Aucun mot de passe de compte à saisir ici.", style = MaterialTheme.typography.bodySmall)
             }

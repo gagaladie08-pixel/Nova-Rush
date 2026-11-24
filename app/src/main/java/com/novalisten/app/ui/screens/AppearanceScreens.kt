@@ -22,7 +22,7 @@ import com.novalisten.app.ui.theme.*
 @Composable
 fun AppearanceScreen(settings: ThemeSettings, preferences: ThemePreferences, onBack: () -> Unit, onCustom: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().testTag("theme_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { PageTitle("Votre univers", "15 thèmes complets + votre création") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("Votre univers", "15 thèmes complets + votre création") { IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") } } }
         item {
             NovaCard(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -83,7 +83,7 @@ fun CustomThemeScreen(settings: ThemeSettings, preferences: ThemePreferences, on
     val roles = listOf("Principale", "Secondaire", "Halo", "Fond", "Surface", "Texte", "Texte secondaire", "Accent")
     val allValid = hex.all { Regex("[A-Fa-f0-9]{6}").matches(it) }
     LazyColumn(Modifier.fillMaxSize().testTag("custom_editor"), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { PageTitle("Mon univers", "Six catégories, une identité à vous") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("Mon univers", "Six catégories, une identité à vous") { IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") } } }
         item {
             NovaTheme(draft, effects = false) {
                 NovaCard(Modifier.padding(horizontal = 20.dp)) {

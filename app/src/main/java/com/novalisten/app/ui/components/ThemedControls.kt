@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -122,7 +123,8 @@ internal fun UniverseSlider(
     val spec = LocalUniverse.current
     val effects = LocalEffects.current
     val interaction = remember { MutableInteractionSource() }
-    val dragged by interaction.collectIsDraggedAsState()
+    val draggedState = interaction.collectIsDraggedAsState()
+    val dragged = draggedState.value
     val transition = if (effects) rememberInfiniteTransition(label = "courbe ${spec.name}") else null
     val phase = transition?.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Restart), label = "phase")?.value ?: 0f
     val fraction = ((value - range.start) / (range.endInclusive - range.start).coerceAtLeast(.001f)).coerceIn(0f, 1f)

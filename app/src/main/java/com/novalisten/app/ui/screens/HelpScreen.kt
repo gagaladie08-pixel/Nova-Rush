@@ -12,12 +12,13 @@ import androidx.compose.ui.unit.dp
 import com.novalisten.app.ui.components.Notice
 import com.novalisten.app.ui.components.PageTitle
 import com.novalisten.app.ui.components.SectionHeader
+import com.novalisten.app.ui.components.NovaIcon
 
 /** Explanations live here, rather than between the user's music and its controls. */
 @Composable
 fun HelpScreen(onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().testTag("help_screen"), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { PageTitle("Informations et aide", "NovaListen") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("Informations et aide", "NovaListen") { IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") } } }
         item { SectionHeader("Votre bibliothèque") }
         item { Notice("Seuls les fichiers locaux alimentent les titres, compteurs et discographies. Les durées connues de moins d’une minute ne sont pas affichées ; une durée inconnue n’entre pas dans une file jouable. Masquer un morceau le retire de toutes les vues. Rien de cela ne supprime les fichiers.") }
         item { Notice("Les crédits structurés des fichiers et vos corrections locales priment. Les collaborations ambiguës demandent une concordance avec le morceau ; un signe & ou une virgule ne suffit pas à découper un groupe. Les anciens profils collectifs restent accessibles dans le menu de l’artiste, sans être attribués arbitrairement à ses participants.") }

@@ -62,12 +62,12 @@ fun TrackListScreen(
     LazyColumn(Modifier.fillMaxSize().testTag("track_list")) {
         item {
             PageTitle(if (selected.isEmpty()) title else "${chosen.size} sélectionné(s)", "${playable.size} morceaux · ${totalDurationLabel(playable.sumOf { it.durationMs })}") {
-                if (onBack != null && selected.isEmpty()) IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") }
-                if (selected.isNotEmpty()) IconButton({ selected = emptySet() }) { Icon(Icons.Outlined.Close, "Quitter la sélection") }
+                if (onBack != null && selected.isEmpty()) IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") }
+                if (selected.isNotEmpty()) IconButton({ selected = emptySet() }) { NovaIcon(Icons.Outlined.Close, "Quitter la sélection") }
                 else {
-                    IconButton({ searching = !searching }) { Icon(Icons.Outlined.Search, "Rechercher") }
+                    IconButton({ searching = !searching }) { NovaIcon(Icons.Outlined.Search, "Rechercher") }
                     if (!fixedOrder) Box {
-                        IconButton({ sortOpen = true }) { Icon(Icons.Outlined.Sort, "Trier") }
+                        IconButton({ sortOpen = true }) { NovaIcon(Icons.Outlined.Sort, "Trier") }
                         DropdownMenu(sortOpen, { sortOpen = false }) {
                             TrackSort.entries.forEach { value -> DropdownMenuItem(text = { Text((if (sort == value) "✓ " else "") + value.label) }, onClick = {
                                 sort = value; prefs.edit().putString("${key}_sort", value.name).apply(); sortOpen = false
@@ -87,10 +87,10 @@ fun TrackListScreen(
             Column(Modifier.padding(horizontal = 16.dp)) {
                 TextButton({ selected = playable.map { it.id }.toSet() }) { Text("Tout sélectionner") }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    IconButton({ actions.add(chosen); selected = emptySet() }) { Icon(Icons.Outlined.PlaylistAdd, "Ajouter la sélection à une playlist") }
-                    IconButton({ vm.next(chosen); selected = emptySet() }) { Icon(Icons.Outlined.QueueMusic, "Lire la sélection ensuite") }
-                    IconButton({ vm.hide(chosen); selected = emptySet() }) { Icon(Icons.Outlined.VisibilityOff, "Cacher la sélection") }
-                    IconButton({ actions.delete(chosen); selected = emptySet() }) { Icon(Icons.Outlined.DeleteOutline, "Effacer les fichiers sélectionnés") }
+                    IconButton({ actions.add(chosen); selected = emptySet() }) { NovaIcon(Icons.Outlined.PlaylistAdd, "Ajouter la sélection à une playlist") }
+                    IconButton({ vm.next(chosen); selected = emptySet() }) { NovaIcon(Icons.Outlined.QueueMusic, "Lire la sélection ensuite") }
+                    IconButton({ vm.hide(chosen); selected = emptySet() }) { NovaIcon(Icons.Outlined.VisibilityOff, "Cacher la sélection") }
+                    IconButton({ actions.delete(chosen); selected = emptySet() }) { NovaIcon(Icons.Outlined.DeleteOutline, "Effacer les fichiers sélectionnés") }
                 }
             }
         }

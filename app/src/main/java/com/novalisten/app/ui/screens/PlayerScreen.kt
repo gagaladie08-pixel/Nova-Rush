@@ -67,8 +67,8 @@ fun MiniPlayer(track: Track, playback: PlaybackUi, vm: MainViewModel, onOpen: ()
                         Text(track.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                IconButton(vm::toggle, Modifier.size(48.dp)) { Icon(if (playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playback.playing) "Pause" else "Lecture") }
-                IconButton(vm::forward, Modifier.size(48.dp)) { Icon(Icons.Outlined.SkipNext, "Morceau suivant") }
+                IconButton(vm::toggle, Modifier.size(48.dp)) { NovaIcon(if (playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playback.playing) "Pause" else "Lecture") }
+                IconButton(vm::forward, Modifier.size(48.dp)) { NovaIcon(Icons.Outlined.SkipNext, "Morceau suivant") }
             }
             MiniProgress(playback, vm)
         }
@@ -217,10 +217,10 @@ internal fun PlayerHeader(track: Track, lyricsPage: Boolean, compact: Boolean, o
 internal fun PlayerActions(favorite: Boolean, onFavorite: () -> Unit, onAdd: () -> Unit, onLyrics: () -> Unit, onEditLyrics: () -> Unit) {
     val t = LocalUniverse.current
     Row(Modifier.fillMaxWidth().testTag("player_actions"), horizontalArrangement = Arrangement.SpaceEvenly) {
-        IconButton(onFavorite, Modifier.size(48.dp)) { Icon(if (favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, "Favori", tint = if (favorite) t.primary else t.text) }
-        IconButton(onAdd, Modifier.size(48.dp)) { Icon(Icons.Outlined.PlaylistAdd, "Ajouter à une playlist") }
-        IconButton(onLyrics, Modifier.size(48.dp)) { Icon(Icons.Outlined.Lyrics, "Afficher les paroles") }
-        IconButton(onEditLyrics, Modifier.size(48.dp)) { Icon(Icons.Outlined.EditNote, "Modifier les paroles") }
+        IconButton(onFavorite, Modifier.size(48.dp)) { NovaIcon(if (favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, "Favori", tint = if (favorite) t.primary else t.text) }
+        IconButton(onAdd, Modifier.size(48.dp)) { NovaIcon(Icons.Outlined.PlaylistAdd, "Ajouter à une playlist") }
+        IconButton(onLyrics, Modifier.size(48.dp)) { NovaIcon(Icons.Outlined.Lyrics, "Afficher les paroles") }
+        IconButton(onEditLyrics, Modifier.size(48.dp)) { NovaIcon(Icons.Outlined.EditNote, "Modifier les paroles") }
     }
 }
 

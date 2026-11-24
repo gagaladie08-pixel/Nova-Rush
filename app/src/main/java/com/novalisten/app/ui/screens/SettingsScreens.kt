@@ -24,7 +24,7 @@ fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onApp
     var licenceDirectory by remember { mutableStateOf<String?>(null) }
     var licenceText by remember { mutableStateOf<String?>(null) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { PageTitle("Réglages", "NovaListen ${BuildConfig.VERSION_NAME} · version de test") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("Réglages", "NovaListen ${BuildConfig.VERSION_NAME} · version de test") { IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") } } }
         item { SettingRow("API et clés", "Paroles · artistes automatiques · identifiants chiffrés", Icons.Outlined.Key, onApi) }
         item { SettingRow("Votre univers", LocalUniverse.current.name, Icons.Outlined.Palette, onAppearance) }
         item { SettingRow("Morceaux masqués", "${data.hidden.size} référence(s) · fichiers conservés", Icons.Outlined.VisibilityOff, onHidden) }
@@ -44,16 +44,16 @@ fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onApp
 
 @Composable
 private fun SettingRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    ListItem(headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) }, supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) }, leadingContent = { NovaIcon(icon, tint = LocalUniverse.current.accent) }, trailingContent = { Icon(Icons.Outlined.ChevronRight, null) }, modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 8.dp), colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent))
+    ListItem(headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) }, supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) }, leadingContent = { NovaIcon(icon, tint = LocalUniverse.current.accent) }, trailingContent = { NovaIcon(Icons.Outlined.ChevronRight, null) }, modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 8.dp), colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent))
 }
 
 @Composable
 fun HiddenScreen(allTracks: List<Track>, data: LocalData, vm: MainViewModel, onBack: () -> Unit) {
     val hidden = allTracks.filter { it.id in data.hidden }
     LazyColumn(Modifier.fillMaxSize()) {
-        item { PageTitle("Morceaux masqués", "Réafficher ne modifie aucun fichier") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("Morceaux masqués", "Réafficher ne modifie aucun fichier") { IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") } } }
         if (hidden.isEmpty()) item { EmptyState("Rien à réafficher", "Les morceaux cachés apparaîtront ici lorsqu’ils seront accessibles.", Icons.Outlined.VisibilityOff) }
-        items(hidden, key = { it.id }) { track -> ListItem(headlineContent = { Text(track.title) }, supportingContent = { Text(track.artist) }, leadingContent = { Artwork(track.artwork, track.title, Modifier.size(46.dp)) }, trailingContent = { IconButton({ vm.unhide(track) }) { Icon(Icons.Outlined.Visibility, "Réafficher ${track.title}") } }) }
+        items(hidden, key = { it.id }) { track -> ListItem(headlineContent = { Text(track.title) }, supportingContent = { Text(track.artist) }, leadingContent = { Artwork(track.artwork, track.title, Modifier.size(46.dp)) }, trailingContent = { IconButton({ vm.unhide(track) }) { NovaIcon(Icons.Outlined.Visibility, "Réafficher ${track.title}") } }) }
     }
 }
 
@@ -63,7 +63,7 @@ fun HistoryScreen(tracks: List<Track>, data: LocalData, onBack: () -> Unit, onPl
     val displayed = data.events.filter { it.trackId in byId }
     val unavailable = data.events.count { it.trackId !in byId && it.trackId !in data.hidden }
     LazyColumn(Modifier.fillMaxSize()) {
-        item { PageTitle("Historique", "Uniquement les écoutes validées · conservées localement") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("Historique", "Uniquement les écoutes validées · conservées localement") { IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") } } }
         if (unavailable > 0) item { Notice("$unavailable événement(s) de fichiers non affichables conservé(s). Leurs lignes ne sont pas proposées à la lecture ; les événements ne sont pas effacés.") }
         if (displayed.isEmpty()) item { EmptyState("L’histoire reste à écrire", "Écoutez un morceau pendant une minute réelle. Les pauses et déplacements du curseur n’ajoutent pas de temps.", Icons.Outlined.History) }
         items(displayed, key = { it.id }) { event ->

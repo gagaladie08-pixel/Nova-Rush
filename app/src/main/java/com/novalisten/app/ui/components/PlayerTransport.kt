@@ -16,7 +16,6 @@ import androidx.media3.common.Player
 import com.novalisten.app.PlaybackUi
 import com.novalisten.app.data.durationLabel
 import com.novalisten.app.ui.theme.LocalUniverse
-import com.novalisten.app.ui.components.NovaIcon
 
 /** Playback controls keep their touch targets; optional content yields space, never these buttons. */
 @Composable
@@ -58,13 +57,13 @@ internal fun PlayerTransport(playback: PlaybackUi, compactHeight: Boolean = fals
             Row(Modifier.fillMaxWidth().padding(top = if (compact) 4.dp else 8.dp).testTag("player_controls"),
                 horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 if (!separateExtras) RepeatControl(playback, onRepeat)
-                IconButton(onPrevious, Modifier.size(skipSize).testTag("player_previous")) { Icon(Icons.Outlined.SkipPrevious, "Précédent", Modifier.size(32.dp)) }
+                IconButton(onPrevious, Modifier.size(skipSize).testTag("player_previous")) { NovaIcon(Icons.Outlined.SkipPrevious, "Précédent", Modifier.size(32.dp)) }
                 FilledIconButton(onToggle, Modifier.size(playSize).testTag("player_toggle"),
                     shape = com.novalisten.app.ui.theme.buttonShape(LocalUniverse.current), colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = LocalUniverse.current.primary, contentColor = com.novalisten.app.ui.theme.onColor(LocalUniverse.current.primary))) {
                     NovaIcon(if (playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playback.playing) "Pause" else "Lecture", Modifier.size(36.dp))
                 }
-                IconButton(onNext, Modifier.size(skipSize).testTag("player_next")) { Icon(Icons.Outlined.SkipNext, "Suivant", Modifier.size(32.dp)) }
+                IconButton(onNext, Modifier.size(skipSize).testTag("player_next")) { NovaIcon(Icons.Outlined.SkipNext, "Suivant", Modifier.size(32.dp)) }
                 if (!separateExtras) QueueControl(onQueue)
             }
         }
@@ -82,5 +81,5 @@ private fun RepeatControl(playback: PlaybackUi, onRepeat: () -> Unit) {
 
 @Composable
 private fun QueueControl(onQueue: () -> Unit) {
-    IconButton(onQueue, Modifier.size(48.dp).testTag("player_queue")) { Icon(Icons.Outlined.QueueMusic, "File d’attente") }
+    IconButton(onQueue, Modifier.size(48.dp).testTag("player_queue")) { NovaIcon(Icons.Outlined.QueueMusic, "File d’attente") }
 }

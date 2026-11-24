@@ -68,11 +68,11 @@ fun CatalogScreen(artists: Boolean, index: CatalogSnapshot, data: LocalData, vm:
         item(span = { GridItemSpan(2) }) {
             Column {
                 PageTitle(if (selected.isEmpty()) if (artists) "Artistes" else "Albums" else "${selected.size} sélectionné(s)", "${if (artists) artistResults.size else albumResults.size} ${if (artists) "artistes" else "sorties locales"}") {
-                    if (selected.isNotEmpty()) IconButton({ selected = emptySet() }) { Icon(Icons.Outlined.Close, "Quitter la sélection") }
+                    if (selected.isNotEmpty()) IconButton({ selected = emptySet() }) { NovaIcon(Icons.Outlined.Close, "Quitter la sélection") }
                     else {
-                        IconButton({ searching = !searching }) { Icon(Icons.Outlined.Search, "Rechercher") }
+                        IconButton({ searching = !searching }) { NovaIcon(Icons.Outlined.Search, "Rechercher") }
                         Box {
-                            IconButton({ sortOpen = true }, Modifier.testTag("catalog_sort")) { Icon(Icons.Outlined.Sort, "Trier par nom ou nombre de titres") }
+                            IconButton({ sortOpen = true }, Modifier.testTag("catalog_sort")) { NovaIcon(Icons.Outlined.Sort, "Trier par nom ou nombre de titres") }
                             DropdownMenu(sortOpen, { sortOpen = false }) {
                                 CatalogSort.entries.forEach { value -> DropdownMenuItem({ Text((if (sort == value) "✓ " else "") + value.label) }, {
                                     sortName = value.name; preferences.edit().putString(preferenceKey, value.name).apply(); sortOpen = false
@@ -80,7 +80,7 @@ fun CatalogScreen(artists: Boolean, index: CatalogSnapshot, data: LocalData, vm:
                             }
                         }
                         if (!artists) Box {
-                            IconButton({ kindOpen = true }) { Icon(Icons.Outlined.FilterList, "Filtrer les types de sorties") }
+                            IconButton({ kindOpen = true }) { NovaIcon(Icons.Outlined.FilterList, "Filtrer les types de sorties") }
                             DropdownMenu(kindOpen, { kindOpen = false }) {
                                 DropdownMenuItem({ Text("Tous les types de cet index") }, { kindName = "ALL"; kindOpen = false; selected = emptySet() })
                                 listOf(ReleaseKind.ALBUM, ReleaseKind.EP, ReleaseKind.MIXTAPE, ReleaseKind.UNKNOWN).forEach { value -> DropdownMenuItem({ Text(value.label) }, { kindName = value.name; kindOpen = false; selected = emptySet() }) }
@@ -139,7 +139,7 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
     val counts = remember(data.events) { data.events.groupingBy { it.trackId }.eachCount() }
     val top = group.tracks.filter { counts.getOrDefault(it.id, 0) > 0 }.sortedByDescending { counts[it.id] }.take(10)
     LazyColumn(Modifier.fillMaxSize()) {
-        item { PageTitle("Artiste", "Collection locale") { IconButton(onBack) { Icon(Icons.Outlined.ArrowBack, "Retour") } } }
+        item { PageTitle("Artiste", "Collection locale") { IconButton(onBack) { NovaIcon(Icons.Outlined.ArrowBack, "Retour") } } }
         item {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Artwork(note.portrait, group.name, Modifier.size(180.dp), round = true, artist = true)
@@ -169,7 +169,7 @@ fun ArtistDetail(group: ArtistGroup, data: LocalData, playback: PlaybackUi, vm: 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { PlaybackButtons(group.tracks.isNotEmpty(), { vm.play(group.tracks) }, { vm.play(group.tracks, shuffled = true) }) }
                 Box {
-                    IconButton({ menu = true }) { Icon(Icons.Outlined.MoreVert, "Actions de l’artiste") }
+                    IconButton({ menu = true }) { NovaIcon(Icons.Outlined.MoreVert, "Actions de l’artiste") }
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem({ Text("Lire ensuite") }, { menu = false; vm.next(group.tracks) })
                         DropdownMenuItem({ Text("Ajouter à une playlist") }, { menu = false; actions.add(group.tracks) })
@@ -226,7 +226,7 @@ fun AlbumDetail(group: AlbumGroup, index: CatalogSnapshot, data: LocalData, play
                 Row {
                     TextButton(onCovers) { NovaIcon(Icons.Outlined.ImageSearch, null); Text("Pochette") }
                     Box {
-                        IconButton({ menu = true }) { Icon(Icons.Outlined.MoreVert, "Actions de l’album") }
+                        IconButton({ menu = true }) { NovaIcon(Icons.Outlined.MoreVert, "Actions de l’album") }
                         DropdownMenu(menu, { menu = false }) {
                             DropdownMenuItem({ Text("Lire ensuite") }, { menu = false; vm.next(group.tracks) })
                             DropdownMenuItem({ Text("Ajouter à une playlist") }, { menu = false; actions.add(group.tracks) })

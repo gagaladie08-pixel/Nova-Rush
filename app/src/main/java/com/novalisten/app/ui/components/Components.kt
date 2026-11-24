@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -37,35 +38,6 @@ import com.novalisten.app.ui.theme.*
 import com.novalisten.app.ui.gestures.LibrarySwipeAction
 import com.novalisten.app.ui.gestures.librarySwipeAction
 import kotlin.math.abs
-
-@Composable
-fun NovaIcon(image: ImageVector, description: String? = null, modifier: Modifier = Modifier, tint: Color = LocalUniverse.current.text) {
-    val spec = LocalUniverse.current
-    Box(modifier.size(26.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.matchParentSize()) {
-            val c = spec.accent.copy(alpha = .45f)
-            when (spec.icons) {
-                IconStyle.HUD, IconStyle.FRAME -> {
-                    val d = size.width * .2f
-                    listOf(Offset.Zero, Offset(size.width, 0f), Offset(0f, size.height), Offset(size.width, size.height)).forEach { p ->
-                        val sx = if (p.x == 0f) 1 else -1
-                        val sy = if (p.y == 0f) 1 else -1
-                        drawLine(c, p, p + Offset(sx * d, 0f), 1.dp.toPx())
-                        drawLine(c, p, p + Offset(0f, sy * d), 1.dp.toPx())
-                    }
-                }
-                IconStyle.ROUND, IconStyle.BUBBLE, IconStyle.HALO -> drawCircle(c.copy(alpha = .22f), style = Stroke(1.dp.toPx()))
-                IconStyle.GEOMETRIC, IconStyle.PRISM, IconStyle.CRYSTAL -> {
-                    val p = Path().apply { moveTo(size.width / 2, 0f); lineTo(size.width, size.height / 2); lineTo(size.width / 2, size.height); lineTo(0f, size.height / 2); close() }
-                    drawPath(p, c.copy(alpha = .3f), style = Stroke(1.dp.toPx()))
-                }
-                IconStyle.ROYAL, IconStyle.SOLAR, IconStyle.STAGE -> drawCircle(c, 1.5.dp.toPx(), Offset(size.width / 2, 0f))
-                IconStyle.METAL, IconStyle.SHARP -> drawLine(c, Offset(0f, size.height), Offset(size.width * .3f, size.height), 2.dp.toPx())
-            }
-        }
-        NovaIcon(image, description, tint = tint, modifier = Modifier.fillMaxSize().padding(3.dp))
-    }
-}
 
 @Composable
 fun NovaCard(modifier: Modifier = Modifier, selected: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
@@ -173,7 +145,7 @@ fun PageTitle(title: String, subtitle: String, modifier: Modifier = Modifier, ac
 fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: String = "Titre, artiste, album, fichier") {
     OutlinedTextField(query, onQuery, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp).testTag("search_field"), singleLine = true,
         placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyMedium) }, leadingIcon = { NovaIcon(Icons.Outlined.Search, null) },
-        trailingIcon = { IconButton(onClick = { onQuery("") }) { Icon(Icons.Outlined.Close, "Effacer la recherche") } })
+        trailingIcon = { IconButton(onClick = { onQuery("") }) { NovaIcon(Icons.Outlined.Close, "Effacer la recherche") } })
 }
 
 @Composable
@@ -267,7 +239,7 @@ fun TrackRow(track: Track, favorite: Boolean, current: Boolean, onPlay: () -> Un
                     NovaIcon(if (favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, if (favorite) "Retirer des favoris" else "Ajouter aux favoris", Modifier.size(21.dp), tint = if (favorite) LocalUniverse.current.primary else LocalUniverse.current.text.copy(alpha = .75f))
                 }
             }
-            IconButton(onMenu, Modifier.size(44.dp)) { Icon(Icons.Outlined.MoreVert, "Actions de ${track.title}", Modifier.size(22.dp)) }
+            IconButton(onMenu, Modifier.size(44.dp)) { NovaIcon(Icons.Outlined.MoreVert, "Actions de ${track.title}", Modifier.size(22.dp)) }
         }
     }
 }
@@ -279,7 +251,7 @@ fun EntityCard(title: String, subtitle: String, art: String?, modifier: Modifier
             Box(Modifier.padding(if (artist) 12.dp else 8.dp)) {
                 Artwork(art, title, Modifier.fillMaxWidth().aspectRatio(1f), round = artist, artist = artist)
                 if (badge != null) Surface(Modifier.align(Alignment.TopEnd).padding(6.dp), color = LocalUniverse.current.background.copy(alpha = .9f), shape = MaterialTheme.shapes.small) { Text(badge, Modifier.padding(horizontal = 7.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall) }
-                if (onPlay != null) FilledIconButton(onPlay, Modifier.align(Alignment.BottomEnd).padding(6.dp).size(42.dp)) { Icon(Icons.Outlined.PlayArrow, "Lire $title") }
+                if (onPlay != null) FilledIconButton(onPlay, Modifier.align(Alignment.BottomEnd).padding(6.dp).size(42.dp)) { NovaIcon(Icons.Outlined.PlayArrow, "Lire $title") }
                 if (selected) NovaIcon(Icons.Outlined.CheckCircle, "Sélectionné", Modifier.align(Alignment.TopStart).padding(6.dp), tint = LocalUniverse.current.accent)
             }
             Text(title, Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
