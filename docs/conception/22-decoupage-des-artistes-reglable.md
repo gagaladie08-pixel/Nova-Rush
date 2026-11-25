@@ -1,6 +1,6 @@
 # Découpage des artistes : réglable, vérifiable, réversible
 
-**Version 0.5.0.** Le code ne devine plus où finit un nom d’artiste. Il applique deux listes que l’utilisateur voit et modifie dans **Paramètres → Découpage des artistes**.
+**Version 0.5.1.** (La 0.5.0 contenait le moteur mais pas le câblage de navigation : l’écran ne s’ouvrait pas. Voir la [note 0.5.1](../developpement/16-route-split-corrigee-0.5.1.md).) Le code ne devine plus où finit un nom d’artiste. Il applique deux listes que l’utilisateur voit et modifie dans **Paramètres → Découpage des artistes**.
 
 ## Le problème, en une phrase
 
