@@ -204,24 +204,26 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
      * Un ensemble qui en contient un autre est le même disque avec un invité ajouté :
      * « Rihanna » et « Rihanna + JAY-Z » ne font pas deux albums.
      */
-    val sources = eligible.groupBy { it.editionKey to albumIdentity(it) }.map { (identity, songs) ->
-        val sets = songs.mapNotNull(::nativeAlbumArtists).distinct().map { it.split('+') }
-        if (sets.size <= 1) return@map identity.first to songs
-        val parent = songs.indices.toMutableList()
-        fun root(i: Int): Int { var at = i; while (parent[at] != at) at = parent[at]; return at }
-        val keys = songs.map { nativeAlbumArtists(it) }
-        for (a in songs.indices) for (b in a + 1 until songs.size) {
-            val one = keys[a].orEmpty().split('+').filter(String::isNotEmpty).toSet()
-            val two = keys[b].orEmpty().split('+').filter(String::isNotEmpty).toSet()
-            val compatible = one.isEmpty() || two.isEmpty() || one.containsAll(two) || two.containsAll(one)
-            if (compatible && root(a) != root(b)) parent[root(b)] = root(a)
+    val sources: List<Pair<String, List<Track>>> = eligible.groupBy { it.editionKey to albumIdentity(it) }
+        .map { (identity, songs) -> identity.first to songs }
+        .flatMap { (id, songs) ->
+            val keys = songs.map { track ->
+                track.albumCredits.map { it.mbid.lowercase(Locale.ROOT) }
+                    .takeIf { ids -> ids.isNotEmpty() && ids.all(::validMusicId) }?.toSet().orEmpty()
+            }
+            if (keys.map { it }.distinct().size <= 1) return@flatMap listOf(id to songs)
+            val parent = songs.indices.toMutableList()
+            fun root(i: Int): Int { var at = i; while (parent[at] != at) at = parent[at]; return at }
+            for (a in songs.indices) for (b in a + 1 until songs.size) {
+                val one = keys[a]; val two = keys[b]
+                val compatible = one.isEmpty() || two.isEmpty() || one.containsAll(two) || two.containsAll(one)
+                if (compatible && root(a) != root(b)) parent[root(b)] = root(a)
+            }
+            songs.indices.groupBy(::root).values.map { indices ->
+                val key = id + (if (indices.size > 1) ":invites:" + indices.first() else "")
+                key to indices.map { songs[it] }
+            }
         }
-        songs.indices.groupBy(::root).values.map { indices ->
-            val files = indices.map { songs[it] }
-            val key = identity.first + (if (indices.size > 1) ":invites:" + indices.first() else "")
-            key to files
-        }
-    }.flatten()
     val editions = sources.map { (id, songs) ->
         val tagged = songs.map { it.releaseKind }.filter { it != ReleaseKind.UNKNOWN }.distinct().singleOrNull() ?: ReleaseKind.UNKNOWN
         // L'artiste affiché est celui du disque, pas la liste des invités d'une piste.
