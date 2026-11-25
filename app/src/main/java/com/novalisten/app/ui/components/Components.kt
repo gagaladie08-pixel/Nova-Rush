@@ -34,7 +34,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import coil.size.Size
 import com.novalisten.app.data.Track
 import com.novalisten.app.data.durationLabel
 import com.novalisten.app.ui.theme.*
@@ -76,7 +75,10 @@ fun Artwork(uri: String?, title: String, modifier: Modifier = Modifier, round: B
         // Coil de réduire au moment du décodage, jamais après : la mémoire n'est jamais occupée
         // par l'image entière.
         val density = LocalDensity.current
-        val requested = remember(density) { Size(with(density) { 320.dp.roundToPx() }.toFloat(), with(density) { 320.dp.roundToPx() }.toFloat()) }
+        val requested = remember(density) {
+            val side = with(density) { 320.dp.roundToPx() }.toFloat()
+            coil.size.Size(side, side)
+        }
         source?.let { model ->
             AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(model)
                     // Coil réduit pendant le décodage : la pleine résolution n'occupe jamais la mémoire.
