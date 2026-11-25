@@ -20,7 +20,7 @@ import com.novalisten.app.ui.theme.LocalUniverse
 import com.novalisten.app.ui.theme.NovaIcon
 
 @Composable
-fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onAppearance: () -> Unit, onHidden: () -> Unit, onHistory: () -> Unit, onSystem: () -> Unit, onNotifications: () -> Unit, onApi: () -> Unit, onHelp: () -> Unit, onSplit: () -> Unit) {
+fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onAppearance: () -> Unit, onHidden: () -> Unit, onHistory: () -> Unit, onSystem: () -> Unit, onNotifications: () -> Unit, onApi: () -> Unit, onHelp: () -> Unit, onSplit: () -> Unit, onJournal: () -> Unit, onHealth: () -> Unit) {
     val context = LocalContext.current
     var licenceDirectory by remember { mutableStateOf<String?>(null) }
     var licenceText by remember { mutableStateOf<String?>(null) }
@@ -34,6 +34,8 @@ fun SettingsScreen(data: LocalData, vm: MainViewModel, onBack: () -> Unit, onApp
         item { SettingRow("Relire la bibliothèque", "Réindexer l’affichage, sans toucher aux fichiers", Icons.Outlined.Refresh) { vm.repository.refresh(); vm.message("Actualisation de la bibliothèque demandée") } }
         item { SettingRow("Autorisation de notification", "Commandes de lecture et écran verrouillé", Icons.Outlined.NotificationsNone, onNotifications) }
         item { SettingRow("Autorisations Android", "Gérer l’accès à votre musique", Icons.Outlined.Security, onSystem) }
+        item { SettingRow("Suivi de l’application", "Journal des erreurs et des arrêts · rien ne quitte l’appareil", Icons.Outlined.BugReport, onJournal) }
+        item { SettingRow("Santé", "Catalogue, bibliothèque, cache des tags et état du jour", Icons.Outlined.MonitorHeart, onHealth) }
         item { SettingRow("Informations et aide", "Gestes, catalogue, sources et confidentialité", Icons.Outlined.Info, onHelp) }
         item { SettingRow("Licences des polices", "25 familles embarquées · OFL / Ubuntu Font Licence", Icons.Outlined.Description) { licenceDirectory = "font-licenses" } }
         item { SettingRow("Licences des bibliothèques principales", "AndroidX, Media3, Kotlin, Coil et Guava", Icons.Outlined.Description) { licenceDirectory = "third-party" } }

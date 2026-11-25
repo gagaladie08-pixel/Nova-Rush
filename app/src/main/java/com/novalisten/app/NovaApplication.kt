@@ -2,6 +2,7 @@ package com.novalisten.app
 
 import android.app.Application
 import com.novalisten.app.data.MusicRepository
+import com.novalisten.app.diagnostics.NovaLog
 import com.novalisten.app.enrichment.*
 import com.novalisten.app.ui.theme.ThemePreferences
 import kotlinx.coroutines.CoroutineScope
@@ -13,6 +14,13 @@ import com.novalisten.app.data.artistNote
 import com.novalisten.app.data.ArtistCredits
 
 class NovaApplication : Application() {
+    /** Installé en premier : un plantage survenu avant cette ligne ne serait pas journalisé. */
+    override fun onCreate() {
+        super.onCreate()
+        NovaLog.install(this)
+        NovaLog.info("démarrage", "NovaListen ${com.novalisten.app.BuildConfig.VERSION_NAME} (${com.novalisten.app.BuildConfig.VERSION_CODE})")
+    }
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val repository by lazy { MusicRepository(this, applicationScope) {
         if (artistForeground.value || artistPlaying.value != null) artistPreferences.state.value else ArtistAutomation(false, false)

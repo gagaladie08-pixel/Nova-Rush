@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
+import com.novalisten.app.diagnostics.NovaLog
 import com.novalisten.app.enrichment.ArtistAutomation
 import com.novalisten.app.enrichment.ArtistRequest
 import com.novalisten.app.enrichment.artistRequestsForTrack
@@ -38,6 +39,8 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     // pas rouverts. Clé = taille + date de modification, seules données qui survivent à un
     // redémarrage du téléphone (le numéro MediaStore, lui, change).
     private val tagCache = TagCache(context)
+    /** Nombre de fichiers dont les tags sont déjà mémorisés — affiché dans Santé. */
+    fun tagCacheSize(): Int = tagCache.size()
     private var refreshJob: Job? = null
     private var observerRegistered = false
     private val dataMutex = Mutex()
@@ -80,15 +83,19 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
             }
             _library.value = _library.value.copy(permission = true, loading = true, error = null)
             try {
+                val started = System.currentTimeMillis()
                 val tracks = withContext(Dispatchers.IO) {
                     try { scan() } finally { tagCache.flush() }
                 }
+                NovaLog.info("bibliothèque", "${tracks.size} morceaux lus en ${(System.currentTimeMillis() - started) / 1000} s")
                 _library.value = LibraryState(permission = true, tracks = decorate(tracks))
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
-            } catch (_: SecurityException) {
+            } catch (denied: SecurityException) {
+                NovaLog.error("bibliothèque", "Accès à la musique retiré", denied)
                 _library.value = LibraryState(permission = false, error = "L’accès à la musique a été retiré. Accordez-le dans les paramètres Android.")
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
+                NovaLog.error("bibliothèque", "Lecture impossible", failure)
                 _library.value = _library.value.copy(loading = false, error = "La bibliothèque n’a pas pu être lue. Réessayez sans modifier vos fichiers.")
             }
         }

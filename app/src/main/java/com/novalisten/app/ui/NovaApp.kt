@@ -162,8 +162,11 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                             onAppearance = { routeParent = "settings"; route = "themes" }, onHidden = { routeParent = "settings"; route = "hidden" },
                             onHistory = { routeParent = "settings"; route = "history" }, onSystem = onSystemSettings, onNotifications = onRequestNotifications,
                             onApi = { routeParent = "settings"; route = "api" }, onHelp = { routeParent = "settings"; route = "help" },
-                            onSplit = { routeParent = "settings"; route = "split" })
+                            onSplit = { routeParent = "settings"; route = "split" },
+                            onJournal = { routeParent = "settings"; route = "journal" }, onHealth = { routeParent = "settings"; route = "health" })
                         "split" -> SplitSettingsScreen(library.tracks, data.catalog, vm, ::goBack)
+                        "journal" -> JournalScreen(::goBack)
+                        "health" -> HealthScreen(catalog, library, data.catalog.split, vm.repository.tagCacheSize(), ::goBack)
                         "api" -> ApiSettingsScreen(vm, ::goBack)
                         "help" -> HelpScreen(::goBack)
                         "hidden" -> HiddenScreen(library.tracks, data, vm, ::goBack)
