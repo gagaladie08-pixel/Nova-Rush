@@ -11,8 +11,11 @@ data class SplitRules(
     val protectedNames: List<String> = DEFAULT_PROTECTED,
     val separators: List<String> = DEFAULT_SEPARATORS,
 ) {
-    /** Séparateurs actifs, du plus fort au plus faible. « & » est désactivé par défaut. */
-    val active: List<String> get() = separators.map { it.trim() }.filter { it in AVAILABLE }
+    /**
+     * Séparateurs réellement appliqués. Les séparateurs connus doivent être cochés, mais un
+     * séparateur saisi librement dans les Paramètres doit agir : sinon « Ajouter » ne ferait rien.
+     */
+    val active: List<String> get() = separators.map { it.trim() }.filter { it.isNotEmpty() }
 
     fun isProtected(name: String): Boolean = protectedNames.any { it.artistNameKey() == name.artistNameKey() }
 
@@ -20,11 +23,11 @@ data class SplitRules(
         /** Doivent valoir au plus 2 caractères. */
         val AVAILABLE = listOf(";", "feat.", "featuring", "ft.", "/", ",", "&")
         /**
-         * Par défaut, seuls les séparateurs qui ne peuvent pas appartenir à un nom.
-         * « , », « / » et « & » restent des choix explicites : sans cela, « Earth, Wind & Fire »
-         * ou « AC/DC » seraient cassés par une prudence qui n'appartient pas au code.
+         * Séparateurs actifs au départ. « & » reste volontairement absent : c'est celui qui
+         * ressemble le plus à un vrai nom de groupe. Les noms sensibles sont, eux, dans
+         * [DEFAULT_PROTECTED] — c'est la liste de l'utilisateur qui fait foi, pas le code.
          */
-        val DEFAULT_SEPARATORS = listOf(";", "feat.", "featuring", "ft.")
+        val DEFAULT_SEPARATORS = listOf(";", "feat.", "featuring", "ft.", "/", ",")
         val DEFAULT_PROTECTED = listOf(
             "AC/DC", "+/-", "Earth, Wind & Fire", "Tyler, the Creator", "and/or", "Simon & Garfunkel",
             "Kool & the Gang", "Florence & the Machine", "of Monsters and Men", "Angus & Julia Stone",
@@ -54,7 +57,7 @@ object ArtistSplitter {
                 "ft." -> Regex("(?i)\\s+ft\\.?\\s+")
                 "/" -> Regex("\\s*/\\s*")
                 "," -> Regex("\\s*,\\s*")
-                "&" -> Regex("\\s+&\\s+")
+                "&" -> Regex("(?i)\\s+&\\s+")
                 // Séparateur libre saisi par l'utilisateur : échappé, jamais interprété.
                 else -> Regex("\\s*" + Regex.escape(separator) + "\\s*")
             }
