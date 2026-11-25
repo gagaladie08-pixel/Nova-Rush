@@ -217,8 +217,9 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
             if (compatible && root(a) != root(b)) parent[root(b)] = root(a)
         }
         songs.indices.groupBy(::root).values.map { indices ->
-            val files = indices.map(songs::get)
-            identity.first + (if (indices.size > 1) ":invites:" + indices.first() else "") to files
+            val files = indices.map { songs[it] }
+            val key = identity.first + (if (indices.size > 1) ":invites:" + indices.first() else "")
+            key to files
         }
     }.flatten()
     val editions = sources.map { (id, songs) ->
