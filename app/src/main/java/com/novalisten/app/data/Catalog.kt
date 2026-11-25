@@ -64,13 +64,18 @@ object ArtistCredits {
     fun forTrack(track: Track, choices: CatalogChoices = CatalogChoices(), knownNames: Set<String> = emptySet()): List<ArtistCredit> {
         // 1. Choix manuel : toujours prioritaire.
         choices.artists[track.id]?.let { return it }
-        // 2. Règles de l'utilisateur sur le texte affiché. C'est ici que « Rihanna, Drake »
-        //    devient deux artistes, alors que les crédits natifs ne le disaient pas.
-        val parts = ArtistSplitter.split(track.artist, choices.split)
+        // 2. Crédits structurés qui contiennent déjà plusieurs artistes : ils font foi.
+        val native = track.credits.takeIf { it.isNotEmpty() }
+        val resolved = choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits
+        native?.takeIf { it.size > 1 }?.let { return it }
+        resolved?.takeIf { it.size > 1 }?.let { return it }
+        // 3. Un crédit unique n'est qu'un texte de plus : ce sont vos règles qui décident.
+        //    C'est exactement le cas de « Rihanna, Drake » écrit dans un seul tag.
+        val single = native?.firstOrNull()?.name ?: resolved?.firstOrNull()?.name ?: track.artist
+        val parts = ArtistSplitter.split(single, choices.split)
         if (parts.size > 1) return parts.map { ArtistCredit(CatalogText.display(it)) }
-        // 3. Crédits natifs tels quels, 4. crédits résolus automatiquement, 5. découpage historique.
-        return track.credits.takeIf { it.isNotEmpty() }
-            ?: choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits ?: parse(track.artist, knownNames)
+        // 4. Sinon on conserve le crédit d'origine, identifiant MusicBrainz compris.
+        return native ?: resolved ?: parse(track.artist, knownNames)
     }
 }
 

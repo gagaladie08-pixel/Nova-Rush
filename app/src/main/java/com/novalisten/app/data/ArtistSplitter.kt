@@ -19,7 +19,12 @@ data class SplitRules(
     companion object {
         /** Doivent valoir au plus 2 caractères. */
         val AVAILABLE = listOf(";", "feat.", "featuring", "ft.", "/", ",", "&")
-        val DEFAULT_SEPARATORS = listOf(";", "feat.", "featuring", "ft.", "/", ",")
+        /**
+         * Par défaut, seuls les séparateurs qui ne peuvent pas appartenir à un nom.
+         * « , », « / » et « & » restent des choix explicites : sans cela, « Earth, Wind & Fire »
+         * ou « AC/DC » seraient cassés par une prudence qui n'appartient pas au code.
+         */
+        val DEFAULT_SEPARATORS = listOf(";", "feat.", "featuring", "ft.")
         val DEFAULT_PROTECTED = listOf(
             "AC/DC", "+/-", "Earth, Wind & Fire", "Tyler, the Creator", "and/or", "Simon & Garfunkel",
             "Kool & the Gang", "Florence & the Machine", "of Monsters and Men", "Angus & Julia Stone",
