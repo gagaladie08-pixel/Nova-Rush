@@ -41,6 +41,23 @@ class AlbumIdentityConsistencyTest {
         assertEquals("Earth, Wind & Fire", albumGroups(listOf(ewf)).single().artist)
     }
 
+    @Test fun aMissingWordInTheAlbumTitleIsNotASuffixAndStaysASeparateAlbum() {
+        // Cas réel : l'album de base s'appelle « Destinée », l'édition « Destinée Supremacy (Deluxe) ».
+        // Retirer « Deluxe » donne « Destinée Supremacy », qui n'est pas le même titre de base.
+        // Aucune règle de suffixe ne peut réunir ces deux-là : c'est le regroupement manuel qui décide.
+        val base = song("base", 1, albumId = 20, album = "Destinée")
+        val deluxe = song("deluxe", 1, albumId = 21, album = "Destinée Supremacy (Deluxe)")
+        assertEquals(2, albumGroups(listOf(base, deluxe)).size)
+    }
+
+    @Test fun aDeluxeEditionOfTheSameTitleIsReunited() {
+        val normal = song("n", 1, albumId = 22, album = "Destinée Supremacy")
+        val deluxe = song("d", 2, albumId = 23, album = "Destinée Supremacy (Deluxe)")
+        val group = albumGroups(listOf(normal, deluxe)).single()
+        assertEquals("Destinée Supremacy", group.name)
+        assertEquals(2, group.tracks.size)
+    }
+
     @Test fun disablingTheSeparatorRestoresTheWholeAlbumArtist() {
         val duet = song("duet", 1, albumArtist = "Rihanna/ Drake", artist = "Rihanna/ Drake")
         val noSlash = CatalogChoices(split = SplitRules(separators = listOf(";")))

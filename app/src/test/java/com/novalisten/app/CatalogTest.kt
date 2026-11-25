@@ -65,9 +65,14 @@ class CatalogTest {
         assertEquals(ReleaseKind.EP, albumGroups(listOf(track("1").copy(releaseKind = ReleaseKind.EP))).single().kind)
         assertEquals(ReleaseKind.MIXTAPE, ReleaseKind.fromTag("album;mixtape/street"))
     }
-    @Test fun albumNamesAndDeluxeSuffixesAloneNeverCauseAnUnrequestedMerge() {
-        assertEquals(2, albumGroups(listOf(track("1"), track("2", album = "Édition originale (Deluxe)", albumId = 2))).size)
-        assertEquals(2, albumGroups(listOf(track("1"), track("2", albumId = 2))).size)
+    @Test fun aDeluxeSuffixDoesNotSeparateAnAlbumFromItselfAnyMore() {
+        // Décision explicite : même titre de base et même artiste = même album. Le suffixe
+        // d'édition est retiré pour comparer, donc une édition Deluxe ne fait plus une 2e carte.
+        val group = albumGroups(listOf(track("1"), track("2", album = "Édition originale (Deluxe)", albumId = 2))).single()
+        assertEquals("Édition originale", group.name)
+        assertEquals(2, group.tracks.size)
+        // Deux albums réellement différents (titres sans rapport) restent séparés.
+        assertEquals(2, albumGroups(listOf(track("1"), track("2", album = "Un autre disque", albumId = 2))).size)
     }
     @Test fun nativeReleaseGroupIdsIdentifyEditionsWithoutNetworkAndManualSeparationIsRespected() {
         val songs = listOf(track("1").copy(releaseGroupId = mb1), track("2", albumId = 2).copy(releaseGroupId = mb1))
@@ -158,12 +163,16 @@ class CatalogTest {
         val two = one.copy(id = "2", albumId = 2, albumArtist = "Second")
         assertEquals(2, albumGroups(listOf(one, two)).size)
     }
-    @Test fun genericEditionMarkersNeedSharedRecordingEvidenceAndDoNotStripLiveOrRemixAlbumNames() {
+    @Test fun editionMarkersReuniteButLiveAndRemixTitlesStayDistinct() {
         val one = track("1").copy(recordingId = mb1)
         val copy = one.copy(id = "2", albumId = 2, album = "${one.album} (Deluxe Edition)")
         val group = albumGroups(listOf(copy, one)).single()
-        assertEquals(one.album, group.name); assertEquals(1, group.tracks.size)
-        assertEquals(2, albumGroups(listOf(one, copy.copy(recordingId = ""))).size)
+        assertEquals(one.album, group.name)
+        assertEquals(1, group.tracks.size)
+        // Le marqueur d'édition n'exige plus une preuve d'enregistrement : c'est la règle retenue.
+        assertEquals(1, albumGroups(listOf(one, copy.copy(recordingId = ""))).size)
+        // En revanche « Live » et « Remixes » ne sont pas des marqueurs d'édition : ce sont
+        // d'autres disques, et les confondre effacerait de vraies variantes.
         assertEquals(2, albumGroups(listOf(one, copy.copy(album = "${one.album} (Live)"))).size)
         assertEquals(2, albumGroups(listOf(one, copy.copy(album = "${one.album} (Remixes)"))).size)
     }
