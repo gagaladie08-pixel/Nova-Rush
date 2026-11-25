@@ -256,9 +256,15 @@ fun AlbumDetail(group: AlbumGroup, index: CatalogSnapshot, data: LocalData, play
             Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Artwork(group.artwork, group.name, Modifier.fillMaxWidth(.72f).aspectRatio(1f))
                 Spacer(Modifier.height(18.dp)); Text(group.name, style = MaterialTheme.typography.headlineMedium)
-                index.artistsByAlbum[group.id].orEmpty().forEach { artist ->
-                    TextButton({ onArtist(artist.id) }) { Text(artist.name) }
-                }
+                // Un invité chante SUR un morceau, il n'est pas l'artiste du disque. L'ancienne
+                // version listait tous les participants de toutes les pistes : la page de
+                // « The Fame Monster » affichait donc six noms, dont Beyoncé et Flo Rida.
+                // Les invités restent visibles sur leur piste, et la liste complète reste
+                // accessible par le menu « Artistes de cette sortie ».
+                val head = index.artistsByAlbum[group.id].orEmpty()
+                    .firstOrNull { it.name.artistNameKey() == group.artist.artistNameKey() }
+                if (head != null) TextButton({ onArtist(head.id) }) { Text(head.name) }
+                else if (group.artist.isNotBlank()) Text(group.artist)
                 Text(listOfNotNull(group.year.takeIf { it > 0 }?.toString(), group.kind.label.takeIf { group.kind != ReleaseKind.UNKNOWN }, itemCount(group.tracks.size, "titre"), totalDurationLabel(group.tracks.sumOf { it.durationMs })).joinToString(" · "))
                 if (group.editionCount > 1) Text(itemCount(group.editionCount, "édition"), style = MaterialTheme.typography.bodySmall)
                 Row {
