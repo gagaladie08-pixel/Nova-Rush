@@ -12,7 +12,9 @@ Lecteur musical Android local, utilisable hors ligne. **Nouveau : le découpage 
 
 
 
-[Fiche de conception](docs/conception/22-decoupage-des-artistes-reglable.md) · [note de version](docs/developpement/15-decoupage-artistes-0.5.0.md).
+**[Télécharger NovaListen Next 0.5.1 — APK signé (89 969 406 octets)](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.5.1/NovaListen-Next-0.5.1.apk)** · [empreinte SHA-256](https://github.com/gagaladie08-pixel/Nova-Rush/releases/download/novalisten-next-v0.5.1/SHA256SUMS.txt) · [page de version](https://github.com/gagaladie08-pixel/Nova-Rush/releases/tag/novalisten-next-v0.5.1). S’installe **par-dessus la 0.4.2 / 0.5.0** : même certificat `c38a837e…`, même identifiant, `versionCode` 12.
+
+[Fiche de conception](docs/conception/22-decoupage-des-artistes-reglable.md) · [note 0.5.0](docs/developpement/15-decoupage-artistes-0.5.0.md) · [correctif 0.5.1](docs/developpement/16-route-split-corrigee-0.5.1.md).
 
 ## Clé de livraison unique — plus de réinstallation
 
