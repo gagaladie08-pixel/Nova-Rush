@@ -69,12 +69,13 @@ jobs:
           TAG: novalisten-next-v${{ steps.v.outputs.version }}
         run: |
           notes=$(printf '%s\n' \
-            "**${{ steps.v.outputs.version }} — quinze univers, player immersif, file d’attente.**" \
+            "**${{ steps.v.outputs.version }} — découpage des artistes réglable.**" \
             '' \
-            '- Player plein écran : fond de pochette lisible (480 px, un seul flou), trois lignes en mode immersif.' \
-            '- Mini-player et notification : verre teinté, pochette du morceau en cours visible.' \
-            '- File d’attente : pochettes, morceau en cours marqué, réordonnancement par appui long.' \
-            '- Albums : un featuring ne crée plus un second album (cas « 143 »).' \
+            '- Paramètres → Découpage des artistes : noms protégés et séparateurs modifiables.' \
+            '- Aperçu appliqué à la bibliothèque réelle ; « Garder entier » protège un nom, réversiblement.' \
+            '- Ordre de décision : choix manuel, crédits MusicBrainz, puis vos listes sur un crédit unique.' \
+            '- Aucun tag ni fichier audio réécrit : seuls l’affichage et le regroupement changent.' \
+            '- Cette version corrige le câblage de navigation : l’écran s’ouvre réellement (0.5.0 non).' \
             '- Même clé et même `com.novalisten.app.next` : installation par-dessus la version précédente.')
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "dist/NovaListen-Next-${{ steps.v.outputs.version }}.apk" dist/SHA256SUMS.txt --clobber
