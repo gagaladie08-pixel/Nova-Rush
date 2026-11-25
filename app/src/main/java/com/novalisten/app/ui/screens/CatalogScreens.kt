@@ -54,6 +54,11 @@ fun CatalogScreen(artists: Boolean, index: CatalogSnapshot, data: LocalData, vm:
     var selected by remember(artists) { mutableStateOf(emptySet<String>()) }
     var info by remember { mutableStateOf<String?>(null) }
     var grouping by remember { mutableStateOf(false) }
+    var issues by remember { mutableStateOf<List<ArtistKeyIssue>?>(null) }
+    // Diagnostic des noms en double : ne dépend que de l'index, jamais de la recherche.
+    val duplicates = remember(index) {
+        if (artists) splitArtistIdentities(index.sourceTracks, index.sourceChoices, index.albumsByArtist) else emptyList()
+    }
     val artistResults = remember(artistList, query, sort, artists) {
         val key = query.normalized()
         if (artists) sortCatalog(artistList.filter { key in it.name.normalized() }, sort, { it.name }, { it.tracks.size }) else emptyList()
@@ -99,6 +104,14 @@ fun CatalogScreen(artists: Boolean, index: CatalogSnapshot, data: LocalData, vm:
                 }
             }
         }
+        if (artists && duplicates.isNotEmpty()) item(span = { GridItemSpan(2) }) {
+            // Un doublon parfait du nom vient d'une clé différente. Le diagnostic est factuel :
+            // il montre la clé de chaque carte au lieu de supposer laquelle est la bonne.
+            Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("${duplicates.size} nom(s) en double", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                TextButton({ issues = duplicates }, Modifier.testTag("artist_duplicates")) { Text("Voir pourquoi") }
+            }
+        }
         if (artists) itemsIndexed(artistResults, key = { _, group -> group.id }) { position, group ->
             Box(Modifier.padding(start = if (position % 2 == 0) 20.dp else 0.dp, end = if (position % 2 != 0) 20.dp else 0.dp)) {
                 val note = artistNote(group, data)
@@ -121,6 +134,26 @@ fun CatalogScreen(artists: Boolean, index: CatalogSnapshot, data: LocalData, vm:
     if (grouping) GroupEditionsDialog(selectedAlbums, { grouping = false }) { original ->
         vm.groupEditions(selectedAlbums.flatMap { it.editions }.map { it.id }.toSet(), original) { id -> grouping = false; selected = emptySet(); onAlbum(id) }
     }
+    issues?.let { list -> AlertDialog(
+        onDismissRequest = { issues = null },
+        modifier = Modifier.testTag("artist_duplicate_details"),
+        title = { Text("Même nom, deux identités") },
+        text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            Text("Une carte est identifiée par un identifiant MusicBrainz, l'autre par son nom seul, ou par un identifiant différent. Tant que deux identités existent pour un même nom, rien n'est fusionné : deux artistes homonymes ne doivent jamais être confondus. Aucun tag n'est modifié.", style = MaterialTheme.typography.bodySmall)
+            list.sortedByDescending { it.cards.size }.forEach { issue ->
+                Spacer(Modifier.height(14.dp))
+                Text(issue.name, style = MaterialTheme.typography.titleSmall)
+                issue.cards.forEach { card ->
+                    Spacer(Modifier.height(6.dp))
+                    Text("• ${card.origin}", style = MaterialTheme.typography.bodySmall)
+                    Text("  ${card.tracks} morceau(x) · ${card.albums} sortie(s)", style = MaterialTheme.typography.bodySmall)
+                    Text("  clé : ${card.key}", style = MaterialTheme.typography.bodySmall)
+                    if (card.sample.isNotEmpty()) Text("  ex. : ${card.sample.joinToString(" / ")}", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        } },
+        confirmButton = { TextButton({ issues = null }) { Text("Fermer") } },
+    ) }
     info?.let { value -> AlertDialog(onDismissRequest = { info = null }, title = { Text("Informations locales") }, text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { Text(value) } }, confirmButton = { TextButton({ info = null }) { Text("Fermer") } }) }
 }
 

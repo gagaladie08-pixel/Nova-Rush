@@ -43,14 +43,32 @@ object ArtistCredits {
             }.map { ArtistCredit(it) }
         }.distinctBy { it.id }.take(16)
     }
-    /** Premier artiste d'un champ « album artist » : « Katy Perry, Doechii » -> « Katy Perry ». */
-    fun albumHead(raw: String): String {
+    /**
+     * Premier artiste d'un champ « album artist » : « Katy Perry, Doechii » -> « Katy Perry ».
+     *
+     * Quand c'est possible, préférer [ArtistSplitter.split], qui applique exactement les mêmes
+     * règles que la fiche artiste. Cette fonction reste le filet de sécurité pour les appelants
+     * qui n'ont pas de règles sous la main.
+     */
+    fun albumHead(raw: String): String = albumHead(raw, SplitRules())
+
+    /**
+     * Identité d'album alignée sur la fiche artiste.
+     *
+     * L'ancienne découpe ne coupait « / » que s'il était entouré d'espaces : « Rihanna/ Drake »
+     * restait donc entier, l'album recevait un troisième nom inexistant, et « ANTI » se séparait
+     * de « ANTI (Deluxe) ». Une seule règle pour les deux vues supprime cette contradiction.
+     */
+    fun albumHead(raw: String, rules: SplitRules): String {
         val value = CatalogText.display(raw).take(1000)
-        if (value.isBlank() || value.artistNameKey() in protected) return value
+        if (value.isBlank()) return value
+        val parts = ArtistSplitter.split(value, rules)
+        if (parts.size > 1) return parts.first()
+        // Protégé, collectif ou non découpable : c'est le nom entier qui identifie l'album.
+        // Reste le featuring, que les séparateurs de l'utilisateur ne couvrent pas toujours.
+        if (value.artistNameKey() in protected) return value
         val beforeFeature = value.replace(featuring, ";").substringBefore(';').trim()
-        val named = beforeFeature.split(Regex("\\s*[,;]\\s*|\\s+/\\s*")).map(String::trim).filter(String::isNotBlank)
-        if (named.size < 2 || named.size > 8) return beforeFeature
-        return named.first().takeIf { it.length > 1 } ?: beforeFeature
+        return beforeFeature.ifBlank { value }
     }
 
     fun mayBeMultiple(raw: String): Boolean = raw.artistNameKey() !in protected &&
@@ -213,8 +231,7 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
         // « Katy Perry feat. Doechii » reste l'album de Katy Perry, sans second disque.
         // Les règles de l'utilisateur décident. Sans découpage possible (nom protégé, groupe),
         // c'est le nom entier qui identifie l'album ; sinon c'est son premier participant.
-        val parts = ArtistSplitter.split(raw, rules)
-        val identity = if (parts.size == 1) parts.firstOrNull() ?: raw else ArtistCredits.albumHead(raw)
+        val identity = ArtistCredits.albumHead(raw, rules)
         // Même logique que editionKey, mais sur l'artiste d'album nettoyé : c'est cette clé qui
         // décide de l'édition, pas la chaîne brute qui contenait l'invité.
         val album = if (!validMusicId(track.releaseId) && (track.albumId <= 0 || track.album.normalized() in setOf("", "album inconnu", "unknown album"))) "unidentified-album:${track.id}"
@@ -264,7 +281,7 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
         }
     val editions = sources.map { (id, songs) ->
         val tagged = songs.map { it.releaseKind }.filter { it != ReleaseKind.UNKNOWN }.distinct().singleOrNull() ?: ReleaseKind.UNKNOWN
-        val artist = ArtistCredits.albumHead(songs.first().catalogAlbumArtist)
+        val artist = ArtistCredits.albumHead(songs.first().catalogAlbumArtist, choices.split)
         val nativeCredits = songs.map { it.albumCredits }.filter { it.isNotEmpty() }.distinct().singleOrNull()
         AlbumEdition(id, CatalogText.display(songs.first().album), CatalogText.display(artist),
             songs.sortedWith(compareBy<Track> { it.discNumber }.thenBy { it.number }.thenBy { it.title.normalized() }.thenBy { it.id }),

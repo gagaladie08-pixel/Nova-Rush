@@ -14,6 +14,8 @@ data class CatalogSnapshot(
     val artistsById: Map<String, ArtistGroup> = emptyMap(),
     val albumsById: Map<String, AlbumGroup> = emptyMap(),
     val artistsByAlbum: Map<String, List<ArtistGroup>> = emptyMap(),
+    /** Morceaux réellement indexés : sert au diagnostic des noms en double, sans relire la base. */
+    val sourceTracks: List<Track> = emptyList(),
 ) {
     fun isCurrent(track: Track, local: LocalData): Boolean = ready && tracks[track.id] == track &&
         sourceChoices == local.catalog && sourceHidden == local.hidden
@@ -40,7 +42,8 @@ data class CatalogSnapshot(
             return CatalogSnapshot(ready = true, tracks = playable.associateBy { it.id }, artists = artists, albums = albums,
                 artistsByTrack = artistsByTrack, albumsByArtist = albumsByArtist, albumByTrack = albumByTrack,
                 sourceChoices = choices, sourceHidden = hidden, artistsById = artistsById,
-                albumsById = albums.associateBy { it.id }, artistsByAlbum = artistsByAlbum)
+                albumsById = albums.associateBy { it.id }, artistsByAlbum = artistsByAlbum,
+                sourceTracks = playable)
         }
     }
 }
