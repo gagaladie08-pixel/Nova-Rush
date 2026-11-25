@@ -2,7 +2,7 @@
 
 Lecteur musical Android local, utilisable hors ligne. **Nouveau : le découpage des artistes devient réglable** — deux listes visibles dans les Paramètres, un aperçu appliqué à ta vraie bibliothèque, et rien qui touche aux fichiers audio.
 
-## Fusion, retour, démarrage, journal — 0.6.0
+## Artistes d’album, rapidité, mémoire — 0.6.1
 
 - **Noms protégés** et **séparateurs** se modifient dans **Paramètres → Découpage des artistes**. Les 12 noms protégés d’origine sont conservés ; `&` est le seul séparateur **éteint** au départ.
 - L’écran applique tes règles à la **bibliothèque réelle** et liste les noms qui seraient coupés. **Garder entier** ajoute le nom à la liste protégée, réversiblement.
@@ -11,6 +11,7 @@ Lecteur musical Android local, utilisable hors ligne. **Nouveau : le découpage 
 - Un séparateur saisi librement est échappé ; une coupure qui laisserait un morceau d’un caractère est annulée ; `Artistes divers` et `Various Artists` ne sont jamais découpés ni fusionnés.
 - **0.5.2 :** une seule règle décide où finit un nom, donc un album n’hérite plus d’un nom inexistant (`Rihanna/ Drake` → `Rihanna`). Et une ligne « N nom(s) en double — Voir pourquoi » explique chaque carte dédoublée : origine, clé réelle, compteurs, exemples.
 - **0.6.0 :** une édition Deluxe rejoint son album sur le titre de base et l’artiste, sans exiger de preuve de piste. Le retour depuis une fiche artiste refonctionne, quel que soit l’ordre de restauration. Les tags déjà lus sont mémorisés sur disque, donc le démarrage ne rouvre plus chaque fichier. Et deux pages de diagnostic : **Suivi de l’application** (journal persistant, arrêts brutaux, rapport copiable) et **Santé**.
+- **0.6.1 :** la page d’album n’affiche plus les invités comme artistes du disque (Beyoncé, Flo Rida sur *The Fame Monster*). L’onglet Artistes ne relance plus tout son calcul à chaque défilement, et les pochettes sont décodées à la taille affichée au lieu de la pleine résolution — cause la plus probable du plantage mémoire.
 
 
 
