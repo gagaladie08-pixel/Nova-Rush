@@ -29,8 +29,13 @@ class CatalogCorrectionsTest {
         val one = song("one")
         // Un autre artiste d'album reste un autre album : c'est la condition « même artiste ».
         assertEquals(2, albumGroups(listOf(one, song("other", 2, 2).copy(albumArtist = "Another artist"))).size)
-        // Deux identifiants de sortie natifs contradictoires restent deux disques.
-        assertEquals(2, albumGroups(listOf(one.copy(releaseId = "11111111-1111-1111-1111-111111111111"), song("other", 2, 2).copy(releaseId = "22222222-2222-2222-2222-222222222222"))).size)
+        // Deux identifiants de sortie natifs distincts ne séparent plus à eux seuls : une édition
+        // Deluxe porte elle aussi son propre identifiant. C'est « Séparer les éditions » qui décide,
+        // et cette séparation est mémorisée.
+        val oneId = one.copy(releaseId = "11111111-1111-1111-1111-111111111111")
+        val twoId = song("other", 2, 2).copy(releaseId = "22222222-2222-2222-2222-222222222222")
+        assertEquals(1, albumGroups(listOf(oneId, twoId)).size)
+        assertEquals(2, albumGroups(listOf(oneId, twoId), CatalogChoices(separated = setOf(oneId.albumKey, twoId.albumKey))).size)
         // En revanche, un contenu ou une année différents ne suffisent plus à séparer deux
         // versions du même titre : la réunion se fait sur le titre de base et l'artiste.
         assertEquals(1, albumGroups(listOf(one, one.copy(id = "different", albumId = 2, title = "Different song"))).size)
@@ -85,13 +90,14 @@ class CatalogCorrectionsTest {
         assertEquals(3, merged.single().tracks.size)
         // L'ordre d'entrée ne doit pas changer l'identifiant de la carte produite.
         assertEquals(merged.single().id, albumGroups(listOf(other, unknown, one)).single().id)
-        // Deux sorties natives incompatibles restent deux disques, même reliées par un morceau
-        // sans métadonnées : aucune transitivité ne les fusionne.
+        // Des identifiants natifs distincts ne bloquent plus la réunion par le titre de base.
+        // Le seul moyen de les séparer est explicite, et il reste respecté.
         val id1 = "11111111-1111-1111-1111-111111111111"
         val id2 = "22222222-2222-2222-2222-222222222222"
-        val groups = albumGroups(listOf(one.copy(releaseId = id1), unknown, other.copy(year = one.year, releaseId = id2)))
-        assertEquals(2, groups.size)
-        assertTrue(groups.none { it.containsTrack(one.id) && it.containsTrack(other.id) })
+        val native = listOf(one.copy(releaseId = id1), unknown, other.copy(year = one.year, releaseId = id2))
+        assertEquals(1, albumGroups(native).size)
+        val separated = CatalogChoices(separated = native.map { it.albumKey }.toSet())
+        assertEquals(3, albumGroups(native, separated).size)
     }
     @Test fun aMatchingTitleIsEnoughOnceTheSuffixIsGone() {
         // Garde-fou conservé sous une autre forme : le titre de base doit réellement correspondre.
