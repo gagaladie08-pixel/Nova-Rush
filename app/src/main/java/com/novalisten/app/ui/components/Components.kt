@@ -26,12 +26,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Size
 import com.novalisten.app.data.Track
 import com.novalisten.app.data.durationLabel
 import com.novalisten.app.ui.theme.*
@@ -67,8 +70,18 @@ fun Artwork(uri: String?, title: String, modifier: Modifier = Modifier, round: B
                 style = MaterialTheme.typography.headlineMedium, color = t.text)
             else NovaIcon(Icons.Outlined.MusicNote, null, Modifier.size(28.dp), tint = t.text.copy(alpha = .62f))
         }
+        // Les pochettes peuvent être des images de plusieurs milliers de pixels. Les décoder en
+        // pleine résolution pour une vignette de carte multipliait la mémoire par centaines et
+        // suffisait à faire tomber l'application dans une grille d'artistes. On demande donc à
+        // Coil de réduire au moment du décodage, jamais après : la mémoire n'est jamais occupée
+        // par l'image entière.
+        val density = LocalDensity.current
+        val requested = remember(density) { Size(with(density) { 320.dp.roundToPx() }.toFloat(), with(density) { 320.dp.roundToPx() }.toFloat()) }
         source?.let { model ->
-            AsyncImage(model = model, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+            AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(model)
+                    // Coil réduit pendant le décodage : la pleine résolution n'occupe jamais la mémoire.
+                    .size(requested).crossfade(true).build(),
+                contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
                 onState = { state ->
                     if (state is coil.compose.AsyncImagePainter.State.Error) {
                         val next = fallback?.takeIf { it != model }
