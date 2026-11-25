@@ -96,7 +96,8 @@ class CatalogCorrectionsTest {
         val id2 = "22222222-2222-2222-2222-222222222222"
         val native = listOf(one.copy(releaseId = id1), unknown, other.copy(year = one.year, releaseId = id2))
         assertEquals(1, albumGroups(native).size)
-        val separated = CatalogChoices(separated = native.map { it.albumKey }.toSet())
+        // La séparation porte sur chaque édition réellement présente, pas sur une clé d'album.
+        val separated = CatalogChoices(separated = albumGroups(native).single().editions.map { it.id }.toSet())
         assertEquals(3, albumGroups(native, separated).size)
     }
     @Test fun aMatchingTitleIsEnoughOnceTheSuffixIsGone() {
