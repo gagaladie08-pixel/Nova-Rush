@@ -43,8 +43,11 @@ class CatalogCorrectionsTest {
         // et cette séparation est mémorisée.
         val oneId = one.copy(releaseId = "11111111-1111-1111-1111-111111111111")
         val twoId = song("other", 2, 2).copy(releaseId = "22222222-2222-2222-2222-222222222222")
-        assertEquals(1, albumGroups(listOf(oneId, twoId)).size)
-        assertEquals(2, albumGroups(listOf(oneId, twoId), CatalogChoices(separated = setOf(oneId.albumKey, twoId.albumKey))).size)
+        val together = albumGroups(listOf(oneId, twoId))
+        assertEquals(1, together.size)
+        // La séparation s'exprime sur l'identifiant d'édition réellement produit.
+        val separated = CatalogChoices(separated = together.single().editions.map { it.id }.toSet())
+        assertEquals(2, albumGroups(listOf(oneId, twoId), separated).size)
         // En revanche, un contenu ou une année différents ne suffisent plus à séparer deux
         // versions du même titre : la réunion se fait sur le titre de base et l'artiste.
         assertEquals(1, albumGroups(listOf(one, one.copy(id = "different", albumId = 2, title = "Different song"))).size)
