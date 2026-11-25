@@ -64,7 +64,7 @@ class NovaApplication : Application() {
                 combine(artistForeground, artistPlaying, visibleArtists) { foreground, playing, visible -> Triple(foreground, playing, visible) }) { index, local, settings, priority ->
                 val current = index.ready && index.sourceChoices == local.catalog && index.sourceHidden == local.hidden
                 val (works, notes) = kotlinx.coroutines.withContext(Dispatchers.Default) {
-                    artistLibraryWorks(index, local, priority.second, priority.third) to index.artists.associate { it.id to artistNote(it, local) }
+                    artistLibraryWorks(index, local, priority.second, priority.third, settings) to index.artists.associate { it.id to artistNote(it, local) }
                 }
                 automaticArtists.onLibrary(works, settings, notes,
                     current && (priority.first || priority.second != null), index.artistsByTrack[priority.second].orEmpty().map { it.id }.toSet(), priority.third.toSet())
