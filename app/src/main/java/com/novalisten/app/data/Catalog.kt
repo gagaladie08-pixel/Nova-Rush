@@ -24,18 +24,21 @@ object ArtistCredits {
         val value = CatalogText.display(raw).take(1000)
         if (value.isBlank()) return emptyList()
         if (value.artistNameKey() in protected) return listOf(ArtistCredit(value))
-        // Sans aucun nom connu, on ne découpe pas : « A & B » reste un nom de groupe possible.
-        fun evidenced(names: List<String>) = knownNames.isNotEmpty() && names.all { it.artistNameKey() in knownNames }
+        // Deux niveaux de preuve. « / » est un séparateur fort : un seul participant connu suffit.
+        // « & » et « , » peuvent appartenir à un nom de groupe : il faut que tous soient connus,
+        // sinon « Simon & Garfunkel » ou « Anyma & LISA » seraient cassés sans preuve.
+        fun anyKnown(names: List<String>) = knownNames.isNotEmpty() && names.any { it.artistNameKey() in knownNames }
+        fun allKnown(names: List<String>) = knownNames.isNotEmpty() && names.all { it.artistNameKey() in knownNames }
         val explicit = value.replace(featuring, ";").split(';', '\u0000').map { it.trim() }.filter { it.isNotBlank() }
         return explicit.flatMap { part ->
             val slash = part.split('/').map(String::trim)
             val splitSlash = slash.size in 2..8 && slash.all { it.length > 1 } &&
-                (part.contains(" / ") || evidenced(slash)) &&
+                (part.contains(" / ") || anyKnown(slash)) &&
                 part.artistNameKey() !in protected
             val amp = part.split(Regex("\\s+&\\s+|,\\s+")).map(String::trim)
             when {
                 splitSlash -> slash
-                amp.size in 2..8 && amp.all { it.isNotBlank() && it.length > 1 } && evidenced(amp) && part.artistNameKey() !in protected -> amp
+                amp.size in 2..8 && amp.all { it.isNotBlank() } && allKnown(amp) && part.artistNameKey() !in protected -> amp
                 else -> listOf(part)
             }.map { ArtistCredit(it) }
         }.distinctBy { it.id }.take(16)
@@ -195,7 +198,12 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
         // « Katy Perry feat. Doechii » reste l'album de Katy Perry, sans second disque.
         val feat = Regex("(?i)\\s+(?:feat\\.?|ft\\.?|featuring)\\s+")
         val identity = if (feat.containsMatchIn(raw)) ArtistCredits.albumHead(raw) else raw
-        return "${track.albumId}:${identity.normalized()}"
+        // Même logique que editionKey, mais sur l'artiste d'album nettoyé : c'est cette clé qui
+        // décide de l'édition, pas la chaîne brute qui contenait l'invité.
+        val album = if (!validMusicId(track.releaseId) && (track.albumId <= 0 || track.album.normalized() in setOf("", "album inconnu", "unknown album"))) "unidentified-album:${track.id}"
+            else track.albumId.toString()
+        val release = if (validMusicId(track.releaseId)) ":release:" + track.releaseId.lowercase(Locale.ROOT) else ""
+        return "$album:${identity.normalized()}$release"
     }
     fun nativeAlbumArtists(track: Track): String? = track.albumCredits.map { it.mbid.lowercase(Locale.ROOT) }
         .takeIf { ids -> ids.isNotEmpty() && ids.all(::validMusicId) }?.sorted()?.joinToString("+")
@@ -204,8 +212,8 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
      * Un ensemble qui en contient un autre est le même disque avec un invité ajouté :
      * « Rihanna » et « Rihanna + JAY-Z » ne font pas deux albums.
      */
-    val sources: List<Pair<String, List<Track>>> = eligible.groupBy { it.editionKey to albumIdentity(it) }
-        .map { (identity, songs) -> identity.first to songs }
+    val sources: List<Pair<String, List<Track>>> = eligible.groupBy { albumIdentity(it) }
+        .map { (identity, songs) -> identity to songs }
         .flatMap { (id, songs) ->
             val keys = songs.map { track ->
                 track.albumCredits.map { it.mbid.lowercase(Locale.ROOT) }
@@ -230,8 +238,10 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
                 val merged = kept.map { if (it === biggest) it + unkeyed.flatten() else it }
                 groups = merged
             }
-            groups.map { indices ->
-                val key = id + (if (indices.size > 1) ":invites:" + indices.first() else "")
+            groups.mapIndexed { position, indices ->
+                // Sans suffixe, deux sous-groupes porteraient le même identifiant et seraient
+                // refusionnés plus loin : le suffixe dépend du nombre de sous-groupes, pas de leur taille.
+                val key = if (groups.size > 1) "$id:invites:$position" else id
                 key to indices.map { songs[it] }
             }
         }
