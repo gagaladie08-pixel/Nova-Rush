@@ -17,7 +17,11 @@ data class SplitRules(
      */
     val active: List<String> get() = separators.map { it.trim() }.filter { it.isNotEmpty() }
 
-    fun isProtected(name: String): Boolean = protectedNames.any { it.artistNameKey() == name.artistNameKey() }
+    // Un nom est comparé à toute la liste protégée pour chaque morceau du catalogue : mémoriser
+    // les clés normalisées évite de recalculer la même normalisation des dizaines de milliers de fois.
+    private val protectedKeys: Set<String> by lazy { protectedNames.map { it.artistNameKey() }.toSet() }
+
+    fun isProtected(name: String): Boolean = name.artistNameKey() in protectedKeys
 
     companion object {
         /** Doivent valoir au plus 2 caractères. */
@@ -39,6 +43,31 @@ data class SplitRules(
 }
 
 object ArtistSplitter {
+    /**
+     * Expressions figées une fois pour toutes.
+     *
+     * Cette fonction est appelée pour chaque morceau, pour chaque artiste, à chaque recalcul du
+     * catalogue. Construire un objet Regex à chaque appel représentait des dizaines de milliers
+     * de constructions inutiles sur une grande bibliothèque — l'une des raisons de la lenteur
+     * de l'onglet Artistes. Un séparateur libre reste construit à la demande, mais il est rare.
+     */
+    private val patterns = mapOf(
+        ";" to Regex("\\s*;\\s*"),
+        "feat." to Regex("(?i)\\s+feat\\.?\\s+"),
+        "featuring" to Regex("(?i)\\s+featuring\\s+"),
+        "ft." to Regex("(?i)\\s+ft\\.?\\s+"),
+        "/" to Regex("\\s*/\\s*"),
+        "," to Regex("\\s*,\\s*"),
+        "&" to Regex("(?i)\\s+&\\s+"),
+    )
+    private val customPatterns = java.util.concurrent.ConcurrentHashMap<String, Regex>()
+
+    private fun patternFor(separator: String): Regex =
+        patterns[separator] ?: customPatterns.getOrPut(separator) {
+            // Séparateur libre saisi par l'utilisateur : échappé, jamais interprété.
+            Regex("\\s*" + Regex.escape(separator) + "\\s*")
+        }
+
     // Un séparateur est du texte saisi par l'utilisateur : il doit être échappé, jamais interprété
     // comme une expression régulière (sinon « . » devient « n'importe quel caractère »).
     /** Découpe une chaîne selon les règles actives ; retourne la chaîne d'origine telle quelle si protégée. */
@@ -50,18 +79,7 @@ object ArtistSplitter {
         // Chaque séparateur garde l'ordre de la chaîne : on collecte les coupures puis on tranche.
         val cuts = mutableListOf<IntRange>()
         rules.active.forEach { separator ->
-            val pattern = when (separator) {
-                ";" -> Regex("\\s*;\\s*")
-                "feat." -> Regex("(?i)\\s+feat\\.?\\s+")
-                "featuring" -> Regex("(?i)\\s+featuring\\s+")
-                "ft." -> Regex("(?i)\\s+ft\\.?\\s+")
-                "/" -> Regex("\\s*/\\s*")
-                "," -> Regex("\\s*,\\s*")
-                "&" -> Regex("(?i)\\s+&\\s+")
-                // Séparateur libre saisi par l'utilisateur : échappé, jamais interprété.
-                else -> Regex("\\s*" + Regex.escape(separator) + "\\s*")
-            }
-            pattern.findAll(value).forEach { cuts += it.range }
+            patternFor(separator).findAll(value).forEach { cuts += it.range }
         }
         if (cuts.isEmpty()) return listOf(value)
         val ordered = cuts.sortedBy { it.first }
