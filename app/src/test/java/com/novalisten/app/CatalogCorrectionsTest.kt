@@ -25,6 +25,15 @@ class CatalogCorrectionsTest {
         assertEquals("DestinÃ©e Supremacy", broken.first().album)
         assertEquals(4, albumGroups(all, CatalogChoices(separated = all.map { it.editionKey }.toSet())).size)
     }
+    @Test fun theAlbumArtistIsTheSecondHalfOfTheRule() {
+        // Le test d'origine passait un artiste différent avec un numéro de piste différent :
+        // le morceau se retrouvait donc seul dans son édition, et la séparation observée venait
+        // du numéro de piste, pas de l'artiste. On isole vraiment la variable.
+        val one = song("one")
+        val other = song("other", 2, 1).copy(albumArtist = "Another artist")
+        assertEquals(2, albumGroups(listOf(one, other)).size)
+    }
+
     @Test fun differentArtistsAndContradictoryNativeReleasesStillSeparateAlbums() {
         val one = song("one")
         // Un autre artiste d'album reste un autre album : c'est la condition « même artiste ».
