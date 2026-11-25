@@ -1,6 +1,16 @@
 # NovaListen
 
-Lecteur musical Android local, utilisable hors ligne. **Nouveau : une seule clé de livraison versionnée** — méthode Nova Rush — pour que chaque version s’installe par-dessus la précédente, sans désinstallation.
+Lecteur musical Android local, utilisable hors ligne. **Nouveau : le découpage des artistes devient réglable** — deux listes visibles dans les Paramètres, un aperçu appliqué à ta vraie bibliothèque, et rien qui touche aux fichiers audio.
+
+## Découpage des artistes réglable — 0.5.0
+
+- **Noms protégés** et **séparateurs** se modifient dans **Paramètres → Découpage des artistes**. Les 12 noms protégés d’origine sont conservés ; `&` est le seul séparateur **éteint** au départ.
+- L’écran applique tes règles à la **bibliothèque réelle** et liste les noms qui seraient coupés. **Garder entier** ajoute le nom à la liste protégée, réversiblement.
+- Ordre de décision : choix manuel → crédits MusicBrainz multiples → tes listes sur un crédit unique → crédit d’origine conservé.
+- **Aucun tag, aucun fichier audio n’est réécrit.** Seuls l’affichage, les cartes d’artistes et le regroupement des albums changent — immédiatement, sans redémarrage.
+- Un séparateur saisi librement est échappé ; une coupure qui laisserait un morceau d’un caractère est annulée ; `Artistes divers` et `Various Artists` ne sont jamais découpés ni fusionnés.
+
+[Fiche de conception](docs/conception/22-decoupage-des-artistes-reglable.md) · [note de version](docs/developpement/15-decoupage-artistes-0.5.0.md).
 
 ## Clé de livraison unique — plus de réinstallation
 
