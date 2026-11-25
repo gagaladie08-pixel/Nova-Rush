@@ -41,6 +41,8 @@ internal object AlbumFamilies {
     /** Presentation evidence, deliberately separate from recording/file deduplication. */
     fun fragments(one: AlbumEdition, two: AlbumEdition): Boolean {
         if (titleKey(one.name) != titleKey(two.name) || titleKey(one.name) in setOf("", "album inconnu", "unknown album")) return false
+        // L'artiste d'album a déjà été normalisé par les règles de l'utilisateur : deux écritures
+        // du même nom (accents, casse, espaces) ne doivent pas séparer un disque de lui-même.
         if (one.artist.artistNameKey() != two.artist.artistNameKey()) return false
         fun artistIds(edition: AlbumEdition) = edition.artistCredits.map { it.mbid.lowercase(Locale.ROOT) }.filter(::validMusicId).toSet()
         val artistsOne = artistIds(one); val artistsTwo = artistIds(two)

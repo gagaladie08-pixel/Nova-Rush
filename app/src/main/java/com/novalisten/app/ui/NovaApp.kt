@@ -147,7 +147,8 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
                         "settings" -> SettingsScreen(data, vm, ::goBack,
                             onAppearance = { routeParent = "settings"; route = "themes" }, onHidden = { routeParent = "settings"; route = "hidden" },
                             onHistory = { routeParent = "settings"; route = "history" }, onSystem = onSystemSettings, onNotifications = onRequestNotifications,
-                            onApi = { routeParent = "settings"; route = "api" }, onHelp = { routeParent = "settings"; route = "help" })
+                            onApi = { routeParent = "settings"; route = "api" }, onHelp = { routeParent = "settings"; route = "help" },
+                            onSplit = { routeParent = "settings"; route = "split" })
                         "api" -> ApiSettingsScreen(vm, ::goBack)
                         "help" -> HelpScreen(::goBack)
                         "hidden" -> HiddenScreen(library.tracks, data, vm, ::goBack)

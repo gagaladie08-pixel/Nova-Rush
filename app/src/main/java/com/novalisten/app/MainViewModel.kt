@@ -156,6 +156,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             catch (_: Exception) { message("La sauvegarde locale a échoué. Vos fichiers musicaux sont intacts ; vérifiez l’espace disponible et réessayez.") }
         }
     }
+    /** Enregistre les règles de découpage : le catalogue se recalcule immédiatement. */
+    fun saveSplitRules(rules: SplitRules) { persist("Découpage mis à jour : ${rules.protectedNames.size} noms protégés, ${rules.separators.size} séparateurs") {
+        repository.mutate { saveSplitRules(rules) }
+    } }
     fun saveLyrics(id: String, lyrics: SavedLyrics) { persist("Paroles sauvegardées dans NovaListen, hors ligne") { repository.mutate { saveLyrics(id, lyrics) } } }
     fun saveCover(id: String, cover: SavedCover?) { persist(if (cover == null) "Pochette du fichier rétablie dans l’affichage" else "Pochette d’affichage sauvegardée dans NovaListen, pas dans le fichier audio") { repository.mutate { saveCover(id, cover) } } }
     fun saveIdentity(id: String, mbid: String?) { persist("") { repository.mutate { saveIdentity(id, mbid) } } }

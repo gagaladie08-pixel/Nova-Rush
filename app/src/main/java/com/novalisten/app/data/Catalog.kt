@@ -61,9 +61,17 @@ object ArtistCredits {
         return CatalogText.display(raw).replace(featuring, ";").split(Regex(";|\\u0000|\\s+&\\s+|,\\s+|\\s+/\\s+"))
             .map(String::trim).filter(String::isNotBlank).distinct().take(16)
     }
-    fun forTrack(track: Track, choices: CatalogChoices = CatalogChoices(), knownNames: Set<String> = emptySet()): List<ArtistCredit> =
-        choices.artists[track.id] ?: track.credits.takeIf { it.isNotEmpty() }
-        ?: choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits ?: parse(track.artist, knownNames)
+    fun forTrack(track: Track, choices: CatalogChoices = CatalogChoices(), knownNames: Set<String> = emptySet()): List<ArtistCredit> {
+        // 1. Choix manuel : toujours prioritaire.
+        choices.artists[track.id]?.let { return it }
+        // 2. Règles de l'utilisateur sur le texte affiché. C'est ici que « Rihanna, Drake »
+        //    devient deux artistes, alors que les crédits natifs ne le disaient pas.
+        val parts = ArtistSplitter.split(track.artist, choices.split)
+        if (parts.size > 1) return parts.map { ArtistCredit(CatalogText.display(it)) }
+        // 3. Crédits natifs tels quels, 4. crédits résolus automatiquement, 5. découpage historique.
+        return track.credits.takeIf { it.isNotEmpty() }
+            ?: choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits ?: parse(track.artist, knownNames)
+    }
 }
 
 enum class ReleaseKind(val label: String) {
@@ -94,6 +102,8 @@ data class CatalogChoices(
     val recordings: Map<String, String> = emptyMap(),
     val separated: Set<String> = emptySet(),
     val resolvedArtists: Map<String, ResolvedArtistCredits> = emptyMap(),
+    /** Règles de découpage choisies dans les Paramètres ; elles font partie de l'identité de l'index. */
+    val split: SplitRules = SplitRules(),
 )
 data class ArtistGroup(val id: String, val name: String, val tracks: List<Track>, val mbid: String = "", val legacyId: String = name.artistNameKey(), val inheritLegacy: Boolean = true,
                        val legacyIds: Set<String> = setOf(legacyId))
@@ -192,12 +202,14 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
     // est celle de l'artiste principal, et l'invité reste visible sur la piste.
     // L'identité est construite dès le départ plutôt que par remplacement de chaîne : un nom
     // court présent dans un nom long ne peut pas produire une clé erronée.
-    fun albumIdentity(track: Track): String {
+    fun albumIdentity(track: Track, rules: SplitRules = SplitRules()): String {
         val raw = track.albumArtist.ifBlank { track.artist }
         // Un featuring explicite dans l'artiste d'album est un crédit d'invité, pas une identité :
         // « Katy Perry feat. Doechii » reste l'album de Katy Perry, sans second disque.
-        // « feat. », « ft. », la virgule et la barre oblique désignent toutes un invité.
-        val identity = ArtistCredits.albumHead(raw)
+        // Les règles de l'utilisateur décident. Sans découpage possible (nom protégé, groupe),
+        // c'est le nom entier qui identifie l'album ; sinon c'est son premier participant.
+        val parts = ArtistSplitter.split(raw, rules)
+        val identity = if (parts.size == 1) parts.firstOrNull() ?: raw else ArtistCredits.albumHead(raw)
         // Même logique que editionKey, mais sur l'artiste d'album nettoyé : c'est cette clé qui
         // décide de l'édition, pas la chaîne brute qui contenait l'invité.
         val album = if (!validMusicId(track.releaseId) && (track.albumId <= 0 || track.album.normalized() in setOf("", "album inconnu", "unknown album"))) "unidentified-album:${track.id}"
@@ -212,7 +224,7 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
      * Un ensemble qui en contient un autre est le même disque avec un invité ajouté :
      * « Rihanna » et « Rihanna + JAY-Z » ne font pas deux albums.
      */
-    val sources: List<Pair<String, List<Track>>> = eligible.groupBy { albumIdentity(it) }
+    val sources: List<Pair<String, List<Track>>> = eligible.groupBy { albumIdentity(it, choices.split) }
         .map { (identity, songs) -> identity to songs }
         .flatMap { (id, songs) ->
             val keys = songs.map { track ->

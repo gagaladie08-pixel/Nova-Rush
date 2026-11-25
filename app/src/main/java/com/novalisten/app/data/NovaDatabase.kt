@@ -4,8 +4,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import org.json.JSONObject
 import org.json.JSONArray
+import org.json.JSONObject
 import java.util.UUID
 
 class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpenHelper(context, name, null, 5) {
@@ -95,6 +95,8 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         val kinds = mutableMapOf<String, ReleaseKind>()
         val recordings = mutableMapOf<String, String>()
         val separated = mutableSetOf<String>()
+        var splitProtected: List<String>? = null
+        var splitSeparators: List<String>? = null
         val resolved = mutableMapOf<String, ResolvedArtistCredits>()
         readableDatabase.rawQuery("SELECT kind,id,value FROM catalog_choices", null).use { c ->
             while (c.moveToNext()) {
@@ -110,11 +112,15 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
                     "kind" -> kinds[id] = runCatching { ReleaseKind.valueOf(raw) }.getOrDefault(ReleaseKind.UNKNOWN)
                     "recording" -> recordings[id] = raw
                     "separate" -> separated += id
+                    // Règles de découpage choisies dans les Paramètres : listes JSON, jamais devinées.
+                    "split_protected" -> splitProtected = JSONArray(raw).let { a -> (0 until a.length()).map { a.getString(it) } }
+                    "split_separators" -> splitSeparators = JSONArray(raw).let { a -> (0 until a.length()).map { a.getString(it) } }
                 }
             }
         }
         return LocalData(favorites, hidden, lists, events, lyrics, artists, covers, identities, automaticLyrics,
-            CatalogChoices(artistChoices, families, kinds, recordings, separated, resolved))
+            CatalogChoices(artistChoices, families, kinds, recordings, separated, resolved,
+                SplitRules(splitProtected ?: SplitRules.DEFAULT_PROTECTED, splitSeparators ?: SplitRules.DEFAULT_SEPARATORS)))
     }
 
     fun setFlag(id: String, column: String, value: Boolean) {
@@ -206,6 +212,18 @@ class NovaDatabase(context: Context, name: String = "novalisten.db") : SQLiteOpe
         catalogChoice("family", family.id, JSONObject().put("editions", JSONArray(family.editions.sorted())).put("original", family.original).put("representative", family.representative).toString())
     }
     fun separateEdition(id: String) = catalogChoice("separate", id, "1")
+    /** Remplace les règles de découpage. Changer une règle reconstruit l'index du catalogue. */
+    fun saveSplitRules(rules: SplitRules) {
+        val protectedJson = JSONArray(rules.protectedNames.filter { it.isNotBlank() }.distinct())
+        val separatorsJson = JSONArray(rules.separators.map { it.trim() }.filter { it in SplitRules.AVAILABLE }.distinct())
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            catalogChoice("split_protected", "rules", protectedJson.toString())
+            catalogChoice("split_separators", "rules", separatorsJson.toString())
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
     fun removeAlbumFamily(id: String) = catalogChoice("family", id, null)
     fun saveReleaseKind(edition: String, kind: ReleaseKind?) = catalogChoice("kind", edition, kind?.name)
     fun saveRecordingAssociation(tracks: Set<String>, recording: String?) {
