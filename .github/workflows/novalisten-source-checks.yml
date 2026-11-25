@@ -100,6 +100,10 @@ jobs:
             app/build/test-results/
           retention-days: 14
       - name: Pont limité aux journaux et rapports
+        # Le pont ne sert qu'à rendre les rapports lisibles depuis l'atelier. Une panne de
+        # l'API GitHub (503 constaté) ne doit pas faire échouer une vérification réussie :
+        # les tests ont déjà tranché, et les rapports restent dans l'artefact.
+        continue-on-error: true
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
