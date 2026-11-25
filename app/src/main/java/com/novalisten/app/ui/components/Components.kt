@@ -75,14 +75,11 @@ fun Artwork(uri: String?, title: String, modifier: Modifier = Modifier, round: B
         // Coil de réduire au moment du décodage, jamais après : la mémoire n'est jamais occupée
         // par l'image entière.
         val density = LocalDensity.current
-        val requested = remember(density) {
-            val side = with(density) { 320.dp.roundToPx() }.toFloat()
-            coil.size.Size(side, side)
-        }
+        val side = with(density) { 320.dp.roundToPx() }
+        // Coil réduit pendant le décodage : la pleine résolution n'occupe jamais la mémoire.
         source?.let { model ->
             AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(model)
-                    // Coil réduit pendant le décodage : la pleine résolution n'occupe jamais la mémoire.
-                    .size(requested).crossfade(true).build(),
+                    .size(side, side).crossfade(true).build(),
                 contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
                 onState = { state ->
                     if (state is coil.compose.AsyncImagePainter.State.Error) {
