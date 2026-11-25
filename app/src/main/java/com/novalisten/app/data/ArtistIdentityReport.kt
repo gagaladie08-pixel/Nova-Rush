@@ -69,5 +69,3 @@ fun splitArtistIdentities(
         }
         .sortedBy { it.name.normalized() }
 }
-
-import java.util.Locale
