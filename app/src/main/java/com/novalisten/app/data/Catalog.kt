@@ -222,11 +222,13 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
                 if (compatible && root(a) != root(b)) parent[root(b)] = root(a)
             }
             // Un fichier sans identifiant rejoint le groupe majoritaire, jamais un groupe au hasard.
-            val groups = songs.indices.groupBy(::root).values.toMutableList()
+            var groups: List<List<Int>> = songs.indices.groupBy(::root).values.toList()
             val unkeyed = groups.filter { indices -> indices.all { keys[it].isEmpty() } }
             if (unkeyed.isNotEmpty() && unkeyed.size < groups.size) {
-                val target = groups.filter { it !in unkeyed }.maxBy { it.size }
-                groups.removeAll(unkeyed); target.addAll(unkeyed.flatten())
+                val kept = groups.filterNot { it in unkeyed }
+                val biggest = kept.maxBy { it.size }
+                val merged = kept.map { if (it === biggest) it + unkeyed.flatten() else it }
+                groups = merged
             }
             groups.map { indices ->
                 val key = id + (if (indices.size > 1) ":invites:" + indices.first() else "")
