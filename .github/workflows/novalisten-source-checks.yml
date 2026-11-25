@@ -67,6 +67,28 @@ jobs:
             echo '::error::Un binaire ou une clé inattendus ont été générés en mode sources seules.'
             exit 1
           fi
+      - name: Échecs de test en annotations lisibles
+        # Le stockage des journaux de GitHub est parfois inaccessible depuis l'atelier.
+        # Cette étape publie le nom du test et son message en annotation : le diagnostic
+        # reste disponible même quand le log complet ne l'est pas.
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          found = 0
+          for path in glob.glob('app/build/test-results/testDebugUnitTest/*.xml'):
+              try: root = ET.parse(path).getroot()
+              except Exception: continue
+              for case in root.iter('testcase'):
+                  for failure in case.findall('failure'):
+                      found += 1
+                      name = f"{case.get('classname','')}.{case.get('name','')}"
+                      detail = (failure.get('message') or failure.text or '').strip().splitlines()
+                      message = ' | '.join(line.strip() for line in detail[:4])[:600]
+                      message = message.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+                      print(f"::error title=Test en échec::{name} :: {message}")
+          print(f'{found} test(s) en échec')
+          PY
       - name: Rapports seulement — aucun APK
         if: always()
         uses: actions/upload-artifact@v7
