@@ -51,11 +51,14 @@ class ArtistIdentityReportTest {
             song("id", "Rihanna", credits = listOf(ArtistCredit("Rihanna", mbid))) +
             song("other", "Rihanna", credits = listOf(ArtistCredit("Rihanna", other)))
         val issue = splitArtistIdentities(tracks).single()
-        assertEquals(2, issue.cards.size)
+        // Trois cartes : deux identifiants distincts, et le nom seul qui ne peut être rattaché
+        // à aucun des deux avec certitude. C'est le cas le plus fréquent chez un utilisateur réel.
+        assertEquals(3, issue.cards.size)
         // La carte la plus fournie vient en premier : on reconnaît tout de suite l'ancienne.
         assertEquals(3, issue.cards.first().tracks)
         assertTrue("Au moins une carte doit montrer un titre pour être reconnaissable.", issue.cards.all { it.sample.isNotEmpty() })
-        assertTrue(issue.cards.all { it.origin.startsWith("identifiant MusicBrainz") })
+        assertEquals(2, issue.cards.count { it.origin.startsWith("identifiant MusicBrainz") })
+        assertEquals(1, issue.cards.count { it.origin == "nom seul, aucun identifiant" })
         // Sans appelant fournissant les albums, les compteurs restent honnêtes : zéro, pas deviné.
         assertTrue(issue.cards.all { it.albums == 0 })
     }
