@@ -69,13 +69,14 @@ jobs:
           TAG: novalisten-next-v${{ steps.v.outputs.version }}
         run: |
           notes=$(printf '%s\n' \
-            "**${{ steps.v.outputs.version }} — un seul nom par artiste, et les doublons expliqués.**" \
+            "**${{ steps.v.outputs.version }} — fusion des éditions, retour réparé, démarrage accéléré.**" \
             '' \
-            '- Un album n’hérite plus d’un nom inexistant : `Rihanna/ Drake` donne `Rihanna`, donc ANTI et ANTI (Deluxe) se rejoignent.' \
-            '- La fiche artiste et l’artiste d’album suivent désormais exactement la même règle.' \
-            '- Catalogue Artistes : « N nom(s) en double — Voir pourquoi » montre la clé réelle de chaque carte, son origine, ses compteurs et deux exemples.' \
-            '- Rien n’est fusionné en silence : deux identifiants MusicBrainz distincts restent deux artistes.' \
-            '- Toujours aucun tag ni fichier audio réécrit.' \
+            '- Une édition Deluxe rejoint son album sur le même titre de base et le même artiste.' \
+            '- Live et Remixes restent des disques distincts ; « Séparer les éditions » reste le recours.' \
+            '- Le retour depuis une fiche artiste ouvre à nouveau la liste, quel que soit l’ordre de restauration.' \
+            '- Les tags déjà lus sont mémorisés sur disque : le démarrage ne rouvre plus chaque fichier.' \
+            '- Réglages → Suivi de l’application : journal persistant, arrêts brutaux, rapport copiable.' \
+            '- Réglages → Santé : catalogue, bibliothèque, cache des tags et état du jour.' \
             '- Même clé et même `com.novalisten.app.next` : installation par-dessus la version précédente.')
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "dist/NovaListen-Next-${{ steps.v.outputs.version }}.apk" dist/SHA256SUMS.txt --clobber
