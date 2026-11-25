@@ -146,15 +146,15 @@ internal object AlbumFamilies {
             fragmentSets(versions, choices.separated).forEach { indices ->
                 if (indices.all(::allowed)) indices.drop(1).forEach { join(indices.first(), it) }
             }
-            // An edition suffix is only a hint. Require an actual shared recording identity as well.
-            versions.indices.filter(::allowed).groupBy { baseTitle(versions[it].name) }.filterKeys { it.isNotBlank() }.values.forEach { indices ->
-                indices.forEachIndexed { at, a -> indices.drop(at + 1).forEach { b ->
-                    val one = versions[a]; val two = versions[b]
-                    val marked = baseTitle(one.name) != titleKey(one.name) || baseTitle(two.name) != titleKey(two.name)
-                    val suitable = one.kind !in setOf(ReleaseKind.SINGLE, ReleaseKind.COMPILATION) && two.kind !in setOf(ReleaseKind.SINGLE, ReleaseKind.COMPILATION)
-                    if (marked && suitable && one.tracks.any { first -> two.tracks.any { second -> sameRecording(first, second, choices) } }) join(a, b)
-                } }
-            }
+            // Même titre de base et même artiste = même album, décision de l'utilisateur.
+            // Le suffixe d'édition (Deluxe, Expanded, Remaster, Réédition…) est retiré pour
+            // comparer, puis les versions sont réunies sans exiger en plus une piste commune :
+            // MediaStore n'offre souvent aucune correspondance exploitable, et l'exiger laissait
+            // deux cartes que rien ne distinguait. « Séparer les éditions » reste disponible et
+            // est mémorisé, donc une réunion erronée se défait en un geste.
+            versions.indices.filter(::allowed).groupBy { baseTitle(versions[it].name) }
+                .filterKeys { it.isNotBlank() && it !in setOf("album inconnu", "unknown album") }
+                .values.forEach { indices -> indices.drop(1).forEach { join(indices.first(), it) } }
             versions.indices.groupBy(::root).values.forEach { indices ->
                 val members = indices.map(versions::get)
                 val accepted = indices.mapNotNull { requestedByIndex[it] }.distinctBy { it.key }.singleOrNull()?.takeIf { indices.all(::allowed) }

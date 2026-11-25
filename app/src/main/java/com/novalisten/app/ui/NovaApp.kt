@@ -79,6 +79,14 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     LaunchedEffect(tab, route, artistId) {
         vm.prioritizeArtists(if (tab == 2 && route.isEmpty()) listOfNotNull(artistId) else emptyList())
     }
+    // Un détail dont l'identifiant n'existe plus dans le catalogue afficherait la liste tout en
+    // gardant l'identifiant : le retour semblerait alors ne rien faire. On nettoie plutôt.
+    LaunchedEffect(catalog.ready, artistId) {
+        if (artistId != null && catalog.ready && catalog.artistsById[artistId] == null) artistId = null
+    }
+    LaunchedEffect(catalog.ready, albumId) {
+        if (albumId != null && catalog.ready && catalog.albumsById[albumId] == null) albumId = null
+    }
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(playback.currentId) { presentation = presentation.onPlayback(playback.currentId) }
     LaunchedEffect(playerRequest.token) { presentation = presentation.accept(playerRequest) }
@@ -86,17 +94,23 @@ fun NovaApp(vm: MainViewModel, onRequestAudio: () -> Unit, onRequestNotification
     fun openAlbum(id: String) { tab = 3; albumId = id; route = ""; presentation = presentation.dismiss() }
     fun openPlaylist(id: String) { tab = 4; playlistId = id; route = "" }
     fun goBack() {
+        // Ordre de dépilement : on ferme d'abord ce qui est ouvert, où qu'il soit.
+        // L'ancienne version exigeait que l'onglet et l'identifiant soient d'accord (par exemple
+        // « artistId rempli ET onglet 2 »). Quand les deux se désynchronisaient — l'identifiant est
+        // sauvegardé entre les sessions, l'onglet peut être restauré dans un autre ordre — aucune
+        // branche ne correspondait et le retour ne faisait plus rien. Un détail ouvert se ferme
+        // désormais toujours.
         when {
             route == "custom" -> route = "themes"
             route.isNotEmpty() -> { route = routeParent; routeParent = "" }
-            artistLibrary && tab == 2 -> artistLibrary = false
-            artistId != null && tab == 2 -> artistId = null
-            albumId != null && tab == 3 -> albumId = null
-            playlistId != null && tab == 4 -> playlistId = null
+            artistLibrary -> artistLibrary = false
+            artistId != null -> artistId = null
+            albumId != null -> albumId = null
+            playlistId != null -> playlistId = null
             tab != INITIAL_TAB -> tab = INITIAL_TAB
         }
     }
-    BackHandler(route.isNotEmpty() || tab != INITIAL_TAB || artistId != null || albumId != null || playlistId != null) { goBack() }
+    BackHandler(route.isNotEmpty() || tab != INITIAL_TAB || artistId != null || albumId != null || playlistId != null || artistLibrary) { goBack() }
     val actions = TrackActions(menu = { menuTrack = it }, info = { infoTrack = it }, add = { addTracks = it }, delete = { deleteTracks = it })
     val current = catalog.tracks[playback.currentId]
     NovaTheme(settings.universe, settings.effects) {

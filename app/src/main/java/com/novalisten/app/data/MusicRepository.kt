@@ -34,7 +34,10 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
     val data = _data.asStateFlow()
     private val _localDataReady = MutableStateFlow(false)
     val localDataReady = _localDataReady.asStateFlow()
-    private val tagCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, NativeCatalogTags>>()
+    // Cache des tags internes, conservé sur disque : au démarrage, les fichiers déjà lus ne sont
+    // pas rouverts. Clé = taille + date de modification, seules données qui survivent à un
+    // redémarrage du téléphone (le numéro MediaStore, lui, change).
+    private val tagCache = TagCache(context)
     private var refreshJob: Job? = null
     private var observerRegistered = false
     private val dataMutex = Mutex()
@@ -77,7 +80,9 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
             }
             _library.value = _library.value.copy(permission = true, loading = true, error = null)
             try {
-                val tracks = withContext(Dispatchers.IO) { scan() }
+                val tracks = withContext(Dispatchers.IO) {
+                    try { scan() } finally { tagCache.flush() }
+                }
                 _library.value = LibraryState(permission = true, tracks = decorate(tracks))
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
@@ -101,12 +106,10 @@ class MusicRepository(private val context: Context, private val scope: Coroutine
                 val uri = ContentUris.withAppendedId(collection, c.getLong(0))
                 val id = uri.toString()
                 val revision = "${c.getLong(11)}:${c.getLong(13)}"
-                val tags = tagCache[id]?.takeIf { it.first == revision }?.second ?: runCatching {
+                val cacheKey = "${c.getString(10)}:${c.getLong(11)}"
+                val tags = tagCache[cacheKey]?.takeIf { it.first == revision }?.second ?: runCatching {
                     context.contentResolver.openInputStream(uri)?.use(NativeCatalogTagReader::read) ?: NativeCatalogTags()
-                }.getOrDefault(NativeCatalogTags()).also {
-                    if (tagCache.size >= 5000) tagCache.clear()
-                    tagCache[id] = revision to it
-                }
+                }.getOrDefault(NativeCatalogTags()).also { tagCache.put(cacheKey, revision, it) }
                 result += Track(
                     id,
                     known(text(1), text(10).substringBeforeLast('.')), known(text(2), "Artiste inconnu"),
