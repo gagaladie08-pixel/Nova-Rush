@@ -101,7 +101,11 @@ fun CatalogScreen(artists: Boolean, index: CatalogSnapshot, data: LocalData, vm:
         }
         if (artists) itemsIndexed(artistResults, key = { _, group -> group.id }) { position, group ->
             Box(Modifier.padding(start = if (position % 2 == 0) 20.dp else 0.dp, end = if (position % 2 != 0) 20.dp else 0.dp)) {
-                EntityCard(group.name, "${itemCount(group.tracks.size, "titre")} · ${itemCount(index.albumsByArtist[group.id].orEmpty().size, "sortie")}", artistNote(group, data).portrait, artist = true, selected = group.id in selected,
+                val note = artistNote(group, data)
+                // Sans portrait : la pochette d'un album de cet artiste, pas des initiales ambiguës.
+                val albumArt = note.portrait?.takeIf { it.isNotBlank() }
+                    ?: index.albumsByArtist[group.id].orEmpty().firstNotNullOfOrNull { it.artwork }
+                EntityCard(group.name, "${itemCount(group.tracks.size, "titre")} · ${itemCount(index.albumsByArtist[group.id].orEmpty().size, "sortie")}", albumArt, artist = true, selected = group.id in selected,
                     onClick = { if (selected.isNotEmpty()) select(group.id) else onArtist(group.id) }, onLongClick = { select(group.id) }, onNext = { vm.next(group.tracks) }, onInfo = { info = "${group.name}\n${group.tracks.size} morceaux locaux\n${totalDurationLabel(group.tracks.sumOf { it.durationMs })}" })
             }
         } else itemsIndexed(albumResults, key = { _, group -> group.id }) { position, group ->

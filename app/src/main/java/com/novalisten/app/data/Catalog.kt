@@ -12,20 +12,31 @@ fun String.artistNameKey(): String = CatalogText.key(this)
 object ArtistCredits {
     private val featuring = Regex("(?i)\\s+(?:feat\\.?|ft\\.?|featuring)\\s+")
     private val protected = setOf("ac/dc", "+/-", "earth, wind & fire", "tyler, the creator", "and/or", "simon & garfunkel", "kool & the gang", "florence & the machine", "of monsters and men", "angus & julia stone", "belle & sebastian", "years & years")
-    fun parse(raw: String, knownNames: Set<String> = emptySet()): List<ArtistCredit> {
+    /**
+     * Découpe un champ multi-artistes.
+     *
+     * « feat. » et « ; » sont des séparateurs explicites : ils sont toujours découpés.
+     * « & », « , » et « / » ne le sont que si les participants sont connus ou si l'un d'eux
+     * est déjà un artiste de la bibliothèque — sinon « Rihanna, Drake » resterait une seule
+     * carte au lieu de deux, et « Simon & Garfunkel » serait cassé.
+     */
+    fun parse(raw: String, knownNames: Set<String> = emptySet(), libraryNames: Set<String> = emptySet()): List<ArtistCredit> {
         val value = CatalogText.display(raw).take(1000)
         if (value.isBlank()) return emptyList()
         if (value.artistNameKey() in protected) return listOf(ArtistCredit(value))
+        val evidence = knownNames + libraryNames
+        fun evidenced(names: List<String>) = knownNames.isEmpty() ||
+            names.all { it.artistNameKey() in knownNames } || names.any { it.artistNameKey() in evidence }
         val explicit = value.replace(featuring, ";").split(';', '\u0000').map { it.trim() }.filter { it.isNotBlank() }
         return explicit.flatMap { part ->
             val slash = part.split('/').map(String::trim)
             val splitSlash = slash.size in 2..8 && slash.all { it.length > 1 } &&
-                (part.contains(" / ") || slash.any { it.artistNameKey() in knownNames }) &&
+                (part.contains(" / ") || evidenced(slash)) &&
                 part.artistNameKey() !in protected
             val amp = part.split(Regex("\\s+&\\s+|,\\s+")).map(String::trim)
             when {
                 splitSlash -> slash
-                amp.size in 2..8 && amp.all { it.isNotBlank() && it.artistNameKey() in knownNames } && part.artistNameKey() !in protected -> amp
+                amp.size in 2..8 && amp.all { it.isNotBlank() && it.length > 1 } && evidenced(amp) && part.artistNameKey() !in protected -> amp
                 else -> listOf(part)
             }.map { ArtistCredit(it) }
         }.distinctBy { it.id }.take(16)
@@ -48,8 +59,10 @@ object ArtistCredits {
         return CatalogText.display(raw).replace(featuring, ";").split(Regex(";|\\u0000|\\s+&\\s+|,\\s+|\\s+/\\s+"))
             .map(String::trim).filter(String::isNotBlank).distinct().take(16)
     }
-    fun forTrack(track: Track, choices: CatalogChoices = CatalogChoices(), knownNames: Set<String> = emptySet()): List<ArtistCredit> =
-        choices.artists[track.id] ?: track.credits.takeIf { it.isNotEmpty() } ?: choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits ?: parse(track.artist, knownNames)
+    fun forTrack(track: Track, choices: CatalogChoices = CatalogChoices(), knownNames: Set<String> = emptySet(),
+                 libraryNames: Set<String> = emptySet()): List<ArtistCredit> =
+        choices.artists[track.id] ?: track.credits.takeIf { it.isNotEmpty() }
+        ?: choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits ?: parse(track.artist, knownNames, libraryNames)
 }
 
 enum class ReleaseKind(val label: String) {
@@ -122,7 +135,10 @@ fun artistGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()
             track.catalogAlbumArtist.takeIf { !ArtistCredits.mayBeMultiple(it) }?.let { add(it.artistNameKey()) }
         }
     }
-    val parsed = eligible.associateWith { ArtistCredits.forTrack(it, choices, known) }
+    // Tout artiste principal déjà présent dans la bibliothèque sert de preuve pour découper un
+    // champ « Rihanna, Drake » : sinon la carte composite reste et Rihanna perd ses morceaux.
+    val library = eligible.map { it.artist.artistNameKey() }.filter { it.isNotBlank() }.toSet()
+    val parsed = eligible.associateWith { ArtistCredits.forTrack(it, choices, known, library) }
     val idsByName = parsed.values.flatten().filter { validMusicId(it.mbid) }.groupBy { it.name.artistNameKey() }
         .mapValues { (_, values) -> values.map { it.mbid.lowercase(Locale.ROOT) }.distinct() }
     val credits = linkedMapOf<String, ArtistCredit>()
@@ -173,27 +189,22 @@ fun artistNote(group: ArtistGroup, data: LocalData): ArtistNote {
 /** Edition relationships are local; recording identity remains separate from album title matching. */
 fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()): List<AlbumGroup> {
     val eligible = tracks.filter { it.playable }.distinctBy { it.id }
-    fun nativeAlbumArtists(track: Track): String? = track.albumCredits.map { it.mbid.lowercase(Locale.ROOT) }
-        .takeIf { ids -> ids.isNotEmpty() && ids.all(::validMusicId) }?.sorted()?.joinToString("+")
-    // Réparation A : le featuring ne crée pas un second album. « Katy Perry, Doechii »
-    // et « Katy Perry » désignent le même disque ; les invités restent visibles sur les pistes.
+    // Réparation A : un invité crédité ne crée pas un second album. « Rihanna / JAY-Z » sur
+    // « Talk That Talk » ne doit pas faire de ce disque l'album de JAY-Z : l'identité d'album
+    // est celle de l'artiste principal, et l'invité reste visible sur la piste.
     // L'identité est construite dès le départ plutôt que par remplacement de chaîne : un nom
     // court présent dans un nom long ne peut pas produire une clé erronée.
     fun albumIdentity(track: Track): String {
         val raw = track.albumArtist.ifBlank { track.artist }
         return "${track.albumId}:${ArtistCredits.albumHead(raw).normalized()}"
     }
-    val sources = eligible.groupBy { it.editionKey to albumIdentity(it) }.flatMap { (identity, songs) ->
-        val id = identity.first
-        val identities = songs.mapNotNull(::nativeAlbumArtists).distinct()
-        if (identities.size <= 1) listOf(id to songs)
-        // Sans identifiant MusicBrainz natif (cas MediaStore), deux identifiants Android du même
-        // album ne doivent pas rester séparés : la clé de sous-groupe vaut alors le disque logique.
-        else songs.groupBy { nativeAlbumArtists(it) ?: albumIdentity(it) }.map { (artist, files) -> "$id:album-artists:$artist" to files }
-    }
+    val sources = eligible.groupBy { it.editionKey to albumIdentity(it) }
+        .map { (identity, songs) -> identity.first to songs }
     val editions = sources.map { (id, songs) ->
         val tagged = songs.map { it.releaseKind }.filter { it != ReleaseKind.UNKNOWN }.distinct().singleOrNull() ?: ReleaseKind.UNKNOWN
-        val artist = ArtistCredits.albumHead(songs.first().catalogAlbumArtist)
+        // L'artiste affiché est celui du disque, pas la liste des invités d'une piste.
+        val head = ArtistCredits.albumHead(songs.first().albumArtist.ifBlank { songs.first().artist })
+        val artist = songs.map { it.catalogAlbumArtist }.firstOrNull { it.artistNameKey() == head.artistNameKey() } ?: head
         val nativeCredits = songs.map { it.albumCredits }.filter { it.isNotEmpty() }.distinct().singleOrNull()
         AlbumEdition(id, CatalogText.display(songs.first().album), CatalogText.display(artist),
             songs.sortedWith(compareBy<Track> { it.discNumber }.thenBy { it.number }.thenBy { it.title.normalized() }.thenBy { it.id }),

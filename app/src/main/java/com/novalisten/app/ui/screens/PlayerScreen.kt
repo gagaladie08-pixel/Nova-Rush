@@ -41,6 +41,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 import com.novalisten.app.MainViewModel
 import com.novalisten.app.PlaybackUi
 import com.novalisten.app.data.*
@@ -57,6 +58,7 @@ fun MiniPlayer(track: Track, playback: PlaybackUi, vm: MainViewModel, onOpen: ()
     val t = LocalUniverse.current
     val context = LocalContext.current
     // Verre teinté : la pochette du morceau en cours occupe tout le mini-player, adoucie.
+    var backdropFailed by remember(track.artwork) { mutableStateOf(false) }
     val backdrop = remember(context, track.artwork) {
         coil.request.ImageRequest.Builder(context).data(track.artwork)
             .size(240, 240).allowHardware(false).transformations(ArtworkBlur).build()
@@ -68,10 +70,19 @@ fun MiniPlayer(track: Track, playback: PlaybackUi, vm: MainViewModel, onOpen: ()
             dx = 0f; dy = 0f
         }, onDragCancel = { dx = 0f; dy = 0f }) { change, amount -> change.consume(); dx += amount.x; dy += amount.y }
     }) {
-        AsyncImage(backdrop, null, Modifier.matchParentSize().alpha(if (t.light) .55f else .72f), contentScale = ContentScale.Crop)
-        // Dégradé vers le fond de l'univers : l'image reste visible, le texte reste lisible.
+        // Verre teinté : la pochette occupe tout le mini-player. Sur les captures, ce bloc
+        // restait noir uni — soit l'image ne se chargeait pas, soit le voile l'écrasait.
+        AsyncImage(backdrop, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop,
+            onState = { state -> if (state is AsyncImagePainter.State.Error) backdropFailed = true })
+        // Voile plus clair à gauche (sous la vignette) qu'à droite (sous les commandes),
+        // et jamais assez dense pour effacer l'image.
         Box(Modifier.matchParentSize().background(Brush.horizontalGradient(
-            listOf(t.background.copy(alpha = .30f), t.background.copy(alpha = .70f), t.background.copy(alpha = .94f)))))
+            listOf(t.background.copy(alpha = .55f), t.background.copy(alpha = .35f), t.background.copy(alpha = .72f)),
+            startX = 0f, endX = 1400f)))
+        // Repli assumé : si la pochette est introuvable, on garde un fond propre aux couleurs
+        // de l'univers plutôt qu'un rectangle noir.
+        if (backdropFailed) Box(Modifier.matchParentSize().background(Brush.horizontalGradient(
+            listOf(t.primary.copy(alpha = .32f), t.secondary.copy(alpha = .18f), t.background))))
         Column {
             Row(Modifier.fillMaxWidth().heightIn(min = 74.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f).clickable(onClick = onOpen).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -51,17 +51,31 @@ fun NovaCard(modifier: Modifier = Modifier, selected: Boolean = false, content: 
 }
 
 @Composable
-fun Artwork(uri: String?, title: String, modifier: Modifier = Modifier, round: Boolean = false, artist: Boolean = false) {
+fun Artwork(uri: String?, title: String, modifier: Modifier = Modifier, round: Boolean = false, artist: Boolean = false, fallback: String? = null) {
     val t = LocalUniverse.current
     val shapes = universeShapes(t)
     val shape = if (round) CircleShape else shapes.card
+    // Une image secondaire (pochette d'un album de l'artiste) vaut mieux que des initiales :
+    // deux cartes « R » côte à côte ne se distinguent pas.
+    var source by remember(uri, fallback) { mutableStateOf(uri?.takeIf { it.isNotBlank() } ?: fallback?.takeIf { it.isNotBlank() }) }
+    var initialsOnly by remember(uri, fallback) { mutableStateOf(source == null) }
     Box(modifier.clip(shape).background(Brush.linearGradient(listOf(t.primary.copy(alpha = .30f), t.secondary.copy(alpha = .18f), t.surface))), contentAlignment = Alignment.Center) {
         // Ornement propre à la famille d'icônes : la pochette vide porte l'identité de l'univers.
         if (t.motion.decoratedArtwork) Canvas(Modifier.fillMaxSize()) { drawArtworkOrnament(t) }
-        if (artist) Text(title.split(' ').take(2).mapNotNull { it.firstOrNull() }.joinToString("").uppercase(),
-            style = MaterialTheme.typography.headlineMedium, color = t.text)
-        else NovaIcon(Icons.Outlined.MusicNote, null, Modifier.size(28.dp), tint = t.text.copy(alpha = .62f))
-        if (!uri.isNullOrEmpty()) AsyncImage(model = uri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        if (initialsOnly) {
+            if (artist) Text(title.split(' ').take(2).mapNotNull { it.firstOrNull() }.joinToString("").uppercase(),
+                style = MaterialTheme.typography.headlineMedium, color = t.text)
+            else NovaIcon(Icons.Outlined.MusicNote, null, Modifier.size(28.dp), tint = t.text.copy(alpha = .62f))
+        }
+        source?.let { model ->
+            AsyncImage(model = model, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                onState = { state ->
+                    if (state is coil.compose.AsyncImagePainter.State.Error) {
+                        val next = fallback?.takeIf { it != model }
+                        if (next != null) source = next else initialsOnly = true
+                    }
+                })
+        }
     }
 }
 
@@ -246,17 +260,23 @@ fun TrackRow(track: Track, favorite: Boolean, current: Boolean, onPlay: () -> Un
 }
 
 @Composable
-fun EntityCard(title: String, subtitle: String, art: String?, modifier: Modifier = Modifier, artist: Boolean = false, selected: Boolean = false, onClick: () -> Unit, onLongClick: () -> Unit = {}, onNext: () -> Unit = {}, onInfo: () -> Unit = {}, onPlay: (() -> Unit)? = null, badge: String? = null) {
+fun EntityCard(title: String, subtitle: String, art: String?, modifier: Modifier = Modifier, artist: Boolean = false, selected: Boolean = false, fallbackArt: String? = null, onClick: () -> Unit, onLongClick: () -> Unit = {}, onNext: () -> Unit = {}, onInfo: () -> Unit = {}, onPlay: (() -> Unit)? = null, badge: String? = null) {
     SwipeActions(title, true, onNext, onInfo) {
         NovaCard(modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick), selected) {
             Box(Modifier.padding(if (artist) 12.dp else 8.dp)) {
-                Artwork(art, title, Modifier.fillMaxWidth().aspectRatio(1f), round = artist, artist = artist)
+                Artwork(art, title, Modifier.fillMaxWidth().aspectRatio(1f), round = artist, artist = artist, fallback = fallbackArt)
                 if (badge != null) Surface(Modifier.align(Alignment.TopEnd).padding(6.dp), color = LocalUniverse.current.background.copy(alpha = .9f), shape = MaterialTheme.shapes.small) { Text(badge, Modifier.padding(horizontal = 7.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall) }
                 if (onPlay != null) FilledIconButton(onPlay, Modifier.align(Alignment.BottomEnd).padding(6.dp).size(42.dp)) { NovaIcon(Icons.Outlined.PlayArrow, "Lire $title") }
                 if (selected) NovaIcon(Icons.Outlined.CheckCircle, "Sélectionné", Modifier.align(Alignment.TopStart).padding(6.dp), tint = LocalUniverse.current.accent)
             }
-            Text(title, Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, Modifier.padding(start = 12.dp, end = 12.dp, top = 3.dp, bottom = 14.dp), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // Deux lignes avant troncature : « Recovery (Deluxe Edition) » ne doit pas devenir
+            // « Recovery (Deluxe Edi… », c'est justement l'édition qu'on cherche à distinguer.
+            // La hauteur est réservée pour que deux cartes voisines s'alignent, même quand
+            // l'une tient sur une ligne et l'autre sur deux.
+            Text(title, Modifier.fillMaxWidth().padding(horizontal = 12.dp).heightIn(min = 42.dp),
+                style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 3.dp, bottom = 14.dp).heightIn(min = 44.dp),
+                style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }

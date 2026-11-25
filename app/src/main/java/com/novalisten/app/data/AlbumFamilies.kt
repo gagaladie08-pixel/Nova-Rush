@@ -44,7 +44,10 @@ internal object AlbumFamilies {
         if (one.artist.artistNameKey() != two.artist.artistNameKey()) return false
         fun artistIds(edition: AlbumEdition) = edition.artistCredits.map { it.mbid.lowercase(Locale.ROOT) }.filter(::validMusicId).toSet()
         val artistsOne = artistIds(one); val artistsTwo = artistIds(two)
-        if (artistsOne.isNotEmpty() && artistsTwo.isNotEmpty() && artistsOne != artistsTwo) return false
+        // Un invité ajouté ne fait pas un autre disque : « Rihanna » et « Rihanna + JAY-Z »
+        // désignent le même album. Deux ensembles sans rapport restent bien deux albums.
+        if (artistsOne.isNotEmpty() && artistsTwo.isNotEmpty() &&
+            !artistsOne.containsAll(artistsTwo) && !artistsTwo.containsAll(artistsOne)) return false
         fun releaseIds(edition: AlbumEdition) = edition.tracks.map { it.releaseId.lowercase(Locale.ROOT) }.filter(::validMusicId).toSet()
         val releasesOne = releaseIds(one); val releasesTwo = releaseIds(two)
         if (releasesOne.size > 1 || releasesTwo.size > 1 || (releasesOne.isNotEmpty() && releasesTwo.isNotEmpty() && releasesOne != releasesTwo)) return false
