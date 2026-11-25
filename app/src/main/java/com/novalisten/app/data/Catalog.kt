@@ -20,12 +20,11 @@ object ArtistCredits {
      * est déjà un artiste de la bibliothèque — sinon « Rihanna, Drake » resterait une seule
      * carte au lieu de deux, et « Simon & Garfunkel » serait cassé.
      */
-    fun parse(raw: String, knownNames: Set<String> = emptySet(), libraryNames: Set<String> = emptySet()): List<ArtistCredit> {
+    fun parse(raw: String, knownNames: Set<String> = emptySet()): List<ArtistCredit> {
         val value = CatalogText.display(raw).take(1000)
         if (value.isBlank()) return emptyList()
         if (value.artistNameKey() in protected) return listOf(ArtistCredit(value))
-        val evidence = knownNames + libraryNames
-        fun evidenced(names: List<String>) = names.all { it.artistNameKey() in evidence }
+        fun evidenced(names: List<String>) = names.all { it.artistNameKey() in knownNames }
         val explicit = value.replace(featuring, ";").split(';', '\u0000').map { it.trim() }.filter { it.isNotBlank() }
         return explicit.flatMap { part ->
             val slash = part.split('/').map(String::trim)
@@ -58,10 +57,9 @@ object ArtistCredits {
         return CatalogText.display(raw).replace(featuring, ";").split(Regex(";|\\u0000|\\s+&\\s+|,\\s+|\\s+/\\s+"))
             .map(String::trim).filter(String::isNotBlank).distinct().take(16)
     }
-    fun forTrack(track: Track, choices: CatalogChoices = CatalogChoices(), knownNames: Set<String> = emptySet(),
-                 libraryNames: Set<String> = emptySet()): List<ArtistCredit> =
+    fun forTrack(track: Track, choices: CatalogChoices = CatalogChoices(), knownNames: Set<String> = emptySet()): List<ArtistCredit> =
         choices.artists[track.id] ?: track.credits.takeIf { it.isNotEmpty() }
-        ?: choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits ?: parse(track.artist, knownNames, libraryNames)
+        ?: choices.resolvedArtists[track.id]?.takeIf { it.matches(track) }?.credits ?: parse(track.artist, knownNames)
 }
 
 enum class ReleaseKind(val label: String) {
@@ -134,10 +132,7 @@ fun artistGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices()
             track.catalogAlbumArtist.takeIf { !ArtistCredits.mayBeMultiple(it) }?.let { add(it.artistNameKey()) }
         }
     }
-    // Tout artiste principal déjà présent dans la bibliothèque sert de preuve pour découper un
-    // champ « Rihanna, Drake » : sinon la carte composite reste et Rihanna perd ses morceaux.
-    val library = eligible.map { it.artist.artistNameKey() }.filter { it.isNotBlank() }.toSet()
-    val parsed = eligible.associateWith { ArtistCredits.forTrack(it, choices, known, library) }
+    val parsed = eligible.associateWith { ArtistCredits.forTrack(it, choices, known) }
     val idsByName = parsed.values.flatten().filter { validMusicId(it.mbid) }.groupBy { it.name.artistNameKey() }
         .mapValues { (_, values) -> values.map { it.mbid.lowercase(Locale.ROOT) }.distinct() }
     val credits = linkedMapOf<String, ArtistCredit>()
@@ -216,7 +211,9 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
             fun root(i: Int): Int { var at = i; while (parent[at] != at) at = parent[at]; return at }
             for (a in songs.indices) for (b in a + 1 until songs.size) {
                 val one = keys[a]; val two = keys[b]
-                val compatible = one.isEmpty() || two.isEmpty() || one.containsAll(two) || two.containsAll(one)
+                // Invité ajouté : l'un est strictement inclus dans l'autre ET plus petit.
+                val compatible = one.isEmpty() || two.isEmpty() ||
+                    (one.size != two.size && (one.containsAll(two) || two.containsAll(one)))
                 if (compatible && root(a) != root(b)) parent[root(b)] = root(a)
             }
             songs.indices.groupBy(::root).values.map { indices ->
@@ -226,9 +223,7 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
         }
     val editions = sources.map { (id, songs) ->
         val tagged = songs.map { it.releaseKind }.filter { it != ReleaseKind.UNKNOWN }.distinct().singleOrNull() ?: ReleaseKind.UNKNOWN
-        // L'artiste affiché est celui du disque, pas la liste des invités d'une piste.
-        val head = ArtistCredits.albumHead(songs.first().albumArtist.ifBlank { songs.first().artist })
-        val artist = songs.map { it.catalogAlbumArtist }.firstOrNull { it.artistNameKey() == head.artistNameKey() } ?: head
+        val artist = songs.first().catalogAlbumArtist
         val nativeCredits = songs.map { it.albumCredits }.filter { it.isNotEmpty() }.distinct().singleOrNull()
         AlbumEdition(id, CatalogText.display(songs.first().album), CatalogText.display(artist),
             songs.sortedWith(compareBy<Track> { it.discNumber }.thenBy { it.number }.thenBy { it.title.normalized() }.thenBy { it.id }),
