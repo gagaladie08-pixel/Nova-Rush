@@ -1,0 +1,12 @@
+{
+  "file": "NovaListen-Next-0.5.1.apk",
+  "bytes": 89969406,
+  "sha256": "7ea18b04f4b95c98f03b54a9f501a90676b13d150814d424161b320ea84454fb",
+  "signature_verified": true,
+  "build_run": null,
+  "application_id": "com.novalisten.app.next",
+  "version_code": "12",
+  "version_name": "0.5.1",
+  "certificate_sha256": "c38a837ee566ad95000af71cb13497e3d330ebcde5c6c8fcc4880265a77c68ad",
+  "keystore_sha256": "45fade40c40095b84b58809b44cd2a187ab38a8d641d00a95379c2c4fa206625"
+}
