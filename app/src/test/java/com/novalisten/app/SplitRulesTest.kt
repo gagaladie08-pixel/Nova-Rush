@@ -50,7 +50,8 @@ class SplitRulesTest {
 
     @Test fun userTypedSeparatorIsEscapedInsteadOfInterpretedAsRegex() {
         // Un séparateur libre doit agir sur les vraies occurrences du texte saisi...
-        assertEquals(listOf("A.B", "C"), ArtistSplitter.split("A.B puis C", SplitRules(separators = listOf("puis"))))
+        // « C » fait un caractère : la coupe serait annulée, d'où « C.D » ici.
+        assertEquals(listOf("A.B", "C.D"), ArtistSplitter.split("A.B puis C.D", SplitRules(separators = listOf("puis"))))
         // ...mais « . » ne doit pas devenir « n'importe quel caractère » : « AxB » n'est pas coupé.
         val dot = SplitRules(separators = listOf("."))
         assertEquals(listOf("A.B"), ArtistSplitter.split("A.B", dot))
@@ -75,9 +76,9 @@ class SplitRulesTest {
 
     @Test fun albumArtistFollowsTheSameRulesAsTheTrackArtist() {
         val duet = track("1", "Rihanna").copy(albumArtist = "Rihanna, Drake")
-        val solo = track("2", "Rihanna").copy(album = "Autre album")
+        val solo = track("2", "Rihanna").copy(albumArtist = "Rihanna", album = "Autre album")
         // Découpé, l'album de « Rihanna, Drake » est l'album de Rihanna : un seul disque, pas deux.
-        assertEquals(1, albumGroups(listOf(duet, solo)).map { it.tracks.size }.size)
+        assertEquals(1, albumGroups(listOf(duet, solo)).size)
         // Protégé, il redevient une identité distincte : c'est la même liste qui décide.
         val guarded = CatalogChoices(split = SplitRules(protectedNames = SplitRules.DEFAULT_PROTECTED + "Rihanna, Drake"))
         assertEquals(2, albumGroups(listOf(duet, solo), guarded).size)

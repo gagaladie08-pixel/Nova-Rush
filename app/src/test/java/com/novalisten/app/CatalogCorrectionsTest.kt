@@ -51,7 +51,9 @@ class CatalogCorrectionsTest {
         assertEquals(listOf("Tyler, the Creator"), ArtistCredits.parse("Tyler, the Creator", setOf("tyler")).map { it.name })
     }
     @Test fun verifiedAutomaticCreditsAreContextBoundAndManualChoicesAlwaysWin() {
-        val track = song("duet").copy(artist = "Anitta, Shakira", albumArtist = "Anitta, Shakira")
+        // Texte sans séparateur actif : le seul chemin vers deux artistes est le crédit résolu.
+        // Cela isole bien ce que ce test protège, sans dépendre du réglage des séparateurs.
+        val track = song("duet").copy(artist = "Anitta Shakira", albumArtist = "Anitta Shakira")
         val resolved = ResolvedArtistCredits(track.artist, track.title, track.album, track.durationMs, listOf(ArtistCredit("Anitta"), ArtistCredit("Shakira")))
         val choices = CatalogChoices(resolvedArtists = mapOf(track.id to resolved))
         assertEquals(2, artistGroups(listOf(track), choices).size)
