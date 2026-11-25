@@ -24,7 +24,8 @@ object ArtistCredits {
         val value = CatalogText.display(raw).take(1000)
         if (value.isBlank()) return emptyList()
         if (value.artistNameKey() in protected) return listOf(ArtistCredit(value))
-        fun evidenced(names: List<String>) = names.all { it.artistNameKey() in knownNames }
+        // Sans aucun nom connu, on ne découpe pas : « A & B » reste un nom de groupe possible.
+        fun evidenced(names: List<String>) = knownNames.isNotEmpty() && names.all { it.artistNameKey() in knownNames }
         val explicit = value.replace(featuring, ";").split(';', '\u0000').map { it.trim() }.filter { it.isNotBlank() }
         return explicit.flatMap { part ->
             val slash = part.split('/').map(String::trim)
@@ -190,7 +191,11 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
     // court présent dans un nom long ne peut pas produire une clé erronée.
     fun albumIdentity(track: Track): String {
         val raw = track.albumArtist.ifBlank { track.artist }
-        return "${track.albumId}:${ArtistCredits.albumHead(raw).normalized()}"
+        // Un featuring explicite dans l'artiste d'album est un crédit d'invité, pas une identité :
+        // « Katy Perry feat. Doechii » reste l'album de Katy Perry, sans second disque.
+        val feat = Regex("(?i)\\s+(?:feat\\.?|ft\\.?|featuring)\\s+")
+        val identity = if (feat.containsMatchIn(raw)) ArtistCredits.albumHead(raw) else raw
+        return "${track.albumId}:${identity.normalized()}"
     }
     fun nativeAlbumArtists(track: Track): String? = track.albumCredits.map { it.mbid.lowercase(Locale.ROOT) }
         .takeIf { ids -> ids.isNotEmpty() && ids.all(::validMusicId) }?.sorted()?.joinToString("+")
@@ -216,7 +221,14 @@ fun albumGroups(tracks: List<Track>, choices: CatalogChoices = CatalogChoices())
                     (one.size != two.size && (one.containsAll(two) || two.containsAll(one)))
                 if (compatible && root(a) != root(b)) parent[root(b)] = root(a)
             }
-            songs.indices.groupBy(::root).values.map { indices ->
+            // Un fichier sans identifiant rejoint le groupe majoritaire, jamais un groupe au hasard.
+            val groups = songs.indices.groupBy(::root).values.toMutableList()
+            val unkeyed = groups.filter { indices -> indices.all { keys[it].isEmpty() } }
+            if (unkeyed.isNotEmpty() && unkeyed.size < groups.size) {
+                val target = groups.filter { it !in unkeyed }.maxBy { it.size }
+                groups.removeAll(unkeyed); target.addAll(unkeyed.flatten())
+            }
+            groups.map { indices ->
                 val key = id + (if (indices.size > 1) ":invites:" + indices.first() else "")
                 key to indices.map { songs[it] }
             }
