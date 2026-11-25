@@ -56,8 +56,9 @@ fun splitArtistIdentities(
                         key = group.id,
                         mbid = mbid,
                         origin = when {
+                            mbid.isNotBlank() && cards.size > 1 && cards.count { it.mbid.isNotBlank() } > 1 ->
+                                "identifiant MusicBrainz distinct de l'autre carte"
                             mbid.isNotBlank() -> "identifiant MusicBrainz"
-                            group.id.startsWith("mbid:") -> "identifiant MusicBrainz (casse différente)"
                             else -> "nom seul, aucun identifiant"
                         },
                         tracks = group.tracks.size,

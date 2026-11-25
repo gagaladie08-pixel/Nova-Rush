@@ -19,18 +19,15 @@ class ArtistIdentityReportTest {
         assertTrue(splitArtistIdentities(tracks).isEmpty())
     }
 
-    @Test fun aNameBackedOnlyByTextIsReportedNextToTheSameNameWithAnIdentifier() {
-        // Une carte porte un identifiant MusicBrainz, l'autre seulement le nom.
+    @Test fun aNameWithoutIdentifierIsAlreadyReunitedWithTheSingleIdentifierItMatches() {
+        // Un fichier porte l'identifiant, l'autre seulement le nom : c'est déjà fusionné, donc
+        // ce n'est pas un doublon. Le diagnostic ne doit rien signaler.
         val tracks = listOf(
             song("id", "Beyoncé", credits = listOf(ArtistCredit("Beyoncé", mbid))),
             song("text", "Beyoncé"),
         )
-        val issue = splitArtistIdentities(tracks).single()
-        assertEquals("Beyoncé", issue.name)
-        assertEquals(2, issue.cards.size)
-        assertEquals(setOf("identifiant MusicBrainz", "nom seul, aucun identifiant"), issue.cards.map { it.origin }.toSet())
-        assertTrue("La clé doit être visible, pas devinée.", issue.cards.any { it.key.startsWith("mbid:") })
-        assertTrue(issue.cards.any { it.mbid.isBlank() && it.key.isNotBlank() })
+        assertEquals(1, artistGroups(tracks).size)
+        assertTrue(splitArtistIdentities(tracks).isEmpty())
     }
 
     @Test fun twoDistinctIdentifiersAreNeverSilentlyMerged() {
@@ -47,13 +44,33 @@ class ArtistIdentityReportTest {
     }
 
     @Test fun theReportShowsCountsAndExamplesSoTheUserCanRecogniseEachCard() {
-        val tracks = (1..3).map { song("t$it", "Rihanna") } + song("id", "Rihanna", credits = listOf(ArtistCredit("Rihanna", mbid)))
-        val albums = albumGroups(tracks)
-        val issue = splitArtistIdentities(tracks, albumsByArtist = emptyMap()).single()
+        // Deux identifiants distincts pour un même nom : le seul cas où le catalogue refuse de
+        // fusionner, et donc le seul cas réellement dédoublé.
+        val other = "11111111-2222-3333-4444-555555555555"
+        val tracks = (1..3).map { song("t$it", "Rihanna") } +
+            song("id", "Rihanna", credits = listOf(ArtistCredit("Rihanna", mbid))) +
+            song("other", "Rihanna", credits = listOf(ArtistCredit("Rihanna", other)))
+        val issue = splitArtistIdentities(tracks).single()
         assertEquals(2, issue.cards.size)
-        assertEquals(listOf(3, 1), issue.cards.map { it.tracks }.sortedDescending())
+        // La carte la plus fournie vient en premier : on reconnaît tout de suite l'ancienne.
+        assertEquals(3, issue.cards.first().tracks)
         assertTrue("Au moins une carte doit montrer un titre pour être reconnaissable.", issue.cards.all { it.sample.isNotEmpty() })
-        assertTrue(albums.isNotEmpty())
+        assertTrue(issue.cards.all { it.origin.startsWith("identifiant MusicBrainz") })
+        // Sans appelant fournissant les albums, les compteurs restent honnêtes : zéro, pas deviné.
+        assertTrue(issue.cards.all { it.albums == 0 })
+    }
+
+    @Test fun albumCountsAreReportedWhenTheAlbumIndexIsProvided() {
+        val other = "11111111-2222-3333-4444-555555555555"
+        val tracks = listOf(
+            song("a", "Rihanna", credits = listOf(ArtistCredit("Rihanna", mbid)), albumId = 1),
+            song("b", "Rihanna", credits = listOf(ArtistCredit("Rihanna", other)), albumId = 2),
+        )
+        val groups = artistGroups(tracks)
+        val byArtist = groups.associate { group -> group.id to albumGroups(tracks).filter { album -> album.tracks.any { it.id in group.tracks.map { t -> t.id } } } }
+        val issue = splitArtistIdentities(tracks, albumsByArtist = byArtist).single()
+        assertEquals(2, issue.cards.size)
+        assertTrue("Chaque carte doit annoncer ses sorties.", issue.cards.all { it.albums >= 1 })
     }
 
     @Test fun theSameRulesApplyWhenDecidingWhatCountsAsTheSameName() {
